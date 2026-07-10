@@ -1,0 +1,68 @@
+// Prisma schema with enums and application-managed fields
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url line removed for Prisma 7 configuration – use prisma.config.ts
+}
+
+enum TenderUpdateStatus {
+  OPEN
+  CLOSED
+}
+
+enum NextAction {
+  UPDATE_FROM_AB_LETTER
+  BG_REFUND_LETTER_TO_BE_SENT
+  FOLLOW_UP_FOR_FINANCIAL_STATUS
+  REVERSE_AUCTION_PENDING
+}
+
+model Tender {
+  id                 String   @id @default(uuid())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  slNo               Int
+  docketNo           String
+  tenderFor          String
+  typeOfTender       String
+  tenderNoNitNo      String @unique @map("Tender No / NIT No with Date")
+  nameOfWorkDescription String? @map("Name of Work / Item Description")
+  totalQuantityMeter Float? @map("Total Quantity in Meter")
+  nameOfTheClient    String   @map("Name of the Client")
+  lastDateOfSubmission DateTime? @map("Last Date of Submission")
+  tenderOpeningDate  DateTime? @map("Tender Opening Date")
+  costOfTenderFeeRs  Float? @map("Cost of Tender / Tender Fee (In Rs)")
+  emdAmountRs        Float? @map("EMD Amount (In Rs)")
+  estimatedCostRs    Float? @map("Estimated Cost (In Rs)")
+  bidValidityDays    Int? @map("Bid Validity (in Days)")
+  contractPeriodDays Int? @map("Contract Period in Days")
+  managementDecision String @map("Management Decision")
+  participated       Boolean @map("Participated")
+  tenderPrepareBy    String @map("Tender Prepare By")
+  currentStatus      String @map("Current Status")
+  tenderSubmittedDate DateTime? @map("Tender Submitted Date")
+  reverseAuctionApplicable Boolean? @map("Reverse Auction Applicable")
+  reverseAuctionDate DateTime? @map("Reverse Auction Date")
+  emdPaymentMode     String? @map("EMD Payment Through BG / NEFT")
+  bgNoUtrNo          String? @map("BG No / UTR No")
+  emdValidity        DateTime? @map("EMD Validity")
+  loiPoNoAndDate     String? @map("LOI / PO No & Date")
+  remarks            String? @map("Remarks")
+  bidValidityExpired Boolean @map("Bid Validity Expired")
+  diffPercentFromL1  Float? @map("Diff % from L1")
+  diffPercentFromL2  Float? @map("Diff % from L2")
+  reason             String? @map("Reason")
+  finalRemarks       String? @map("Final Remarks")
+  attachmentUrl      String? @map("attachmentUrl")
+  // Application‑managed fields – defaults applied, never overwritten by sheet sync
+  tenderUpdateStatus    TenderUpdateStatus @default(OPEN)
+  nextAction            NextAction?
+  // Manual-edit flags: when true, import sync will NOT overwrite the corresponding diff field
+  diffL1ManuallyEdited  Boolean @default(false)
+  diffL2ManuallyEdited  Boolean @default(false)
+}
