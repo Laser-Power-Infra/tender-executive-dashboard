@@ -1,5 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { X, AlertTriangle, FolderOpen, Eye, Download } from "lucide-react";
+import { FileIcon } from "@/lib/file-icons";
 import "./SupplyAttachmentModal.css";
 
 interface FileRecord {
@@ -57,15 +59,6 @@ export const SupplyAttachmentModal: React.FC<SupplyAttachmentModalProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const getFileIcon = (ext: string): string => {
-    const n = ext.toLowerCase();
-    if (n === ".pdf") return "\uD83D\uDCD5";
-    if ([".xlsx", ".xls", ".csv"].includes(n)) return "\uD83D\uDCD7";
-    if ([".docx", ".doc"].includes(n)) return "\uD83D\uDCD8";
-    if ([".png", ".jpg", ".jpeg", ".gif"].includes(n)) return "\uD83D\uDDBC\uFE0F";
-    return "\uD83D\uDCC4";
-  };
-
   const handleDownload = (fileId: string) => {
     window.open(`/api/files/download/${fileId}?auth=${encodeURIComponent(authToken)}`, "_blank");
   };
@@ -78,7 +71,7 @@ export const SupplyAttachmentModal: React.FC<SupplyAttachmentModalProps> = ({
       <div className="attachment-modal-container" onClick={(e) => e.stopPropagation()}>
         <header className="attachment-modal-header">
           <h3>Documents for Sale Bill #{saleBillNumber}</h3>
-          <button className="attachment-modal-close-btn" onClick={onClose} aria-label="Close modal">✕</button>
+          <button className="attachment-modal-close-btn" onClick={onClose} aria-label="Close modal" style={{ display: "inline-flex", alignItems: "center" }}><X size={16} /></button>
         </header>
         <div className="attachment-modal-body">
           {loading && (
@@ -98,13 +91,13 @@ export const SupplyAttachmentModal: React.FC<SupplyAttachmentModalProps> = ({
           )}
           {error && (
             <div className="attachment-error-state">
-              <span className="error-icon">⚠️</span>
+              <span className="error-icon" style={{ display: "inline-flex", alignItems: "center" }}><AlertTriangle size={24} /></span>
               <p className="error-message">{error}</p>
             </div>
           )}
           {!loading && !error && files.length === 0 && (
             <div className="attachment-empty-state">
-              <span className="empty-icon">📂</span>
+              <span className="empty-icon" style={{ display: "inline-flex", alignItems: "center" }}><FolderOpen size={24} /></span>
               <p>No documents found for this Sale Bill folder.</p>
             </div>
           )}
@@ -112,16 +105,16 @@ export const SupplyAttachmentModal: React.FC<SupplyAttachmentModalProps> = ({
             <ul className="file-list">
               {files.map(file => (
                 <li key={file.fileId} className="file-item">
-                  <div className="file-icon" title={file.extension}>{getFileIcon(file.extension)}</div>
+                  <div className="file-icon" title={file.extension} style={{ display: "inline-flex", alignItems: "center" }}><FileIcon extension={file.extension} size={18} /></div>
                   <div className="file-info-group">
                     <span className="file-name" title={file.filename}>{file.filename}</span>
                     <span className="file-meta">{formatSize(file.size)} • {new Date(file.lastModified).toLocaleDateString()}</span>
                   </div>
                   <div className="file-actions">
                     {file.extension.toLowerCase() === ".pdf" && (
-                      <button className="file-action-btn view-btn" onClick={() => handlePreview(file.fileId)} title="Preview PDF inline">👁️ Preview</button>
+                      <button className="file-action-btn view-btn" onClick={() => handlePreview(file.fileId)} title="Preview PDF inline" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Eye size={14} /> Preview</button>
                     )}
-                    <button className="file-action-btn download-btn" onClick={() => handleDownload(file.fileId)} title="Download file">📥 Download</button>
+                    <button className="file-action-btn download-btn" onClick={() => handleDownload(file.fileId)} title="Download file" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Download size={14} /> Download</button>
                   </div>
                 </li>
               ))}

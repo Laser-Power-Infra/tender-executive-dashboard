@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { EpcTenderRecord, ManagementDecision, EMDExchangeMode } from "@/types/tender";
 import { AttachmentModal } from "./AttachmentModal";
+import { Search, X, ChevronUp, ChevronDown, ArrowUpDown, ChevronRight, BarChart3, FileSpreadsheet, Download, Paperclip, FileText, Pencil, Check, Circle, AlertTriangle } from "lucide-react";
 import "./TenderTable.css";
 
 const filesCache = new Map<string, any[]>();
@@ -86,8 +87,9 @@ const FilesCell: React.FC<{
       className="table-attachment-btn" 
       onClick={() => onOpenModal(docketNo)}
       title="View files in folder"
+      style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
     >
-      📎 {files.length} {files.length === 1 ? "File" : "Files"}
+      <Paperclip size={14} /> {files.length} {files.length === 1 ? "File" : "Files"}
     </button>
   );
 };
@@ -132,8 +134,9 @@ const BOQChartCell: React.FC<{
       className="table-boq-btn" 
       onClick={handleDownload}
       title={`Download ${boqFile.filename}`}
+      style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
     >
-      📊 Comparative Chart
+      <BarChart3 size={14} /> Comparative Chart
     </button>
   );
 };
@@ -1078,7 +1081,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           <h2 className="table-title">Master Tender Participation Tracker</h2>
           <span className="record-count-badge">{totalRecords} Records Total</span>
           <div className="global-search-container">
-            <span className="search-icon">🔍</span>
+            <span className="search-icon" style={{ display: "inline-flex", alignItems: "center" }}><Search size={16} /></span>
             <input
               type="text"
               className="global-search-input"
@@ -1089,11 +1092,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           </div>
         </div>
         <div className="toolbar-right">
-          <button className="export-btn" onClick={handleExportCSV}>
-            📥 Export CSV
+          <button className="export-btn" onClick={handleExportCSV} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <Download size={14} /> Export CSV
           </button>
-          <button className="export-btn" onClick={handleExportExcel}>
-            📊 Export Excel
+          <button className="export-btn" onClick={handleExportExcel} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <FileSpreadsheet size={14} /> Export Excel
           </button>
         </div>
       </div>
@@ -1115,8 +1118,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                   <div className="header-content" onClick={() => handleSort(col.accessor)}>
                     <span>{col.header}</span>
                     {sortColumn === col.accessor && (
-                      <span className="sort-indicator">
-                        {sortDirection === "asc" ? "▲" : "▼"}
+                      <span className="sort-indicator" style={{ display: "inline-flex", alignItems: "center" }}>
+                        {sortDirection === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </span>
                     )}
                   </div>
@@ -1150,7 +1153,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           }}
                           title="Clear date filter"
                         >
-                          ✕
+                          <X size={14} />
                         </button>
                       )}
                     </div>
@@ -1561,15 +1564,16 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
 
                 return (
-                  <React.Fragment key={record.slNo}>
+                  <React.Fragment key={record.id ?? record.slNo}>
                     {/* Collapsed Primary Row */}
                     <tr className={`tender-row ${isExpanded ? "expanded-row" : ""}`}>
                       <td className="col-center">
                         <button 
                           className="details-link"
                           onClick={() => toggleRowExpansion(record.slNo)}
+                          style={{ display: "inline-flex", alignItems: "center" }}
                         >
-                          {isExpanded ? "▼" : "▶"}
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                       </td>
                       
@@ -1699,7 +1703,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 }}
                               >
                                 <span className="diff-value-text">{isSaving ? "…" : displayVal}</span>
-                                {!isSaving && record.id && <span className="diff-edit-pencil" aria-hidden="true">✏</span>}
+                                {!isSaving && record.id && <span className="diff-edit-pencil" aria-hidden="true"><Pencil size={12} /></span>}
                               </div>
                             );
                           }
@@ -1771,12 +1775,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 rel="noopener noreferrer" 
                                 className="table-attachment-link"
                                 title="Click to view costing attachment"
+                                style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
                               >
-                                📄 Costing
+                                <FileText size={14} /> Costing
                               </a>
-                            ) : "-";
-                            cellClass = "col-center";
-                          } else if (col.accessor === "priceBasis") {
+                          ) : "-";
+                          cellClass = "col-center";
+                        } else if (col.accessor === "priceBasis") {
                             const basis = (cellVal as string) || "Firm";
                             cellContent = (
                               <span className={`price-basis-badge ${basis.toLowerCase().includes("variable") ? "variable" : "firm"}`}>
@@ -1829,7 +1834,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 <span className="ra-icon not-applicable">-</span>
                               ) : (
                                 <span className={`ra-icon ${isApp ? "applicable" : "not-applicable"}`}>
-                                  {isApp ? "✔" : "○"}
+                                  {isApp ? <Check size={14} /> : <Circle size={14} />}
                                 </span>
                               );
                               cellClass = "col-center";
@@ -1969,8 +1974,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                       target="_blank" 
                                       rel="noopener noreferrer"
                                       className="costing-attachment-link"
+                                      style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
                                     >
-                                      📄 View Costing Attachment
+                                      <FileText size={14} /> View Costing Attachment
                                     </a>
                                   </span>
                                 </div>
@@ -2090,13 +2096,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       <div className="premium-toast-container">
         {toasts.map(t => (
           <div key={t.id} className={`premium-toast ${t.type}`}>
-            <span className="premium-toast-icon">
-              {t.type === "success" ? "✓" : "⚠️"}
+            <span className="premium-toast-icon" style={{ display: "inline-flex", alignItems: "center" }}>
+              {t.type === "success" ? <Check size={16} /> : <AlertTriangle size={16} />}
             </span>
             <div className="premium-toast-content">{t.message}</div>
-            <button className="premium-toast-close" onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>
-              ✕
-            </button>
+                            <button className="premium-toast-close" onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))} style={{ display: "inline-flex", alignItems: "center" }}>
+                              <X size={14} />
+                            </button>
           </div>
         ))}
       </div>

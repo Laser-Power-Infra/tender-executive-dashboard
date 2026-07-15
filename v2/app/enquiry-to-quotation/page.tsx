@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useSmartsheetTenders } from "@/hooks/useSmartsheetTenders";
 import { SmartsheetTender } from "@/types/smartsheetTender";
+import { ClipboardList, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, Paperclip } from "lucide-react";
 import "@/app/TenderDashboard.css";
 
 type SortField = keyof SmartsheetTender;
@@ -591,7 +592,7 @@ export const TenderDashboardPage: React.FC = () => {
     <div className="tender-layout-container">
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
       <aside className="tender-sidebar">
-        <div className="tender-sidebar-header">📋 Tender Dashboard</div>
+        <div className="tender-sidebar-header" style={{ display: "flex", alignItems: "center", gap: "8px" }}><ClipboardList size={18} /> Tender Dashboard</div>
         <div className="tender-sidebar-body">
 
           {/* Stats */}
@@ -643,7 +644,7 @@ export const TenderDashboardPage: React.FC = () => {
             onClick={handleRefresh}
             disabled={loading}
           >
-            {loading ? "🔄 Loading..." : "🔄 Refresh Data"}
+            {loading ? <><RefreshCw size={14} /> Loading...</> : <><RefreshCw size={14} /> Refresh Data</>}
           </button>
         </div>
       </aside>
@@ -658,11 +659,11 @@ export const TenderDashboardPage: React.FC = () => {
             <span className="tender-header-subtitle">Smartsheet Dashboard</span>
           </div>
           <div className="tender-header-actions">
-            <button className="clear-filters-btn" onClick={handleClearAllFilters}>
-              🧹 Clear Filters
+            <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <Eraser size={14} /> Clear Filters
             </button>
-            <button className="export-excel-btn" onClick={handleExportExcel}>
-              📊 Export Excel
+            <button className="export-excel-btn" onClick={handleExportExcel} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <FileSpreadsheet size={14} /> Export Excel
             </button>
             {/* <a
               href="http://192.168.0.230:2026/"
@@ -670,7 +671,7 @@ export const TenderDashboardPage: React.FC = () => {
               rel="noopener noreferrer"
               className="ai-dashboard-btn"
             >
-              🤖 AI Dashboard
+              <Bot size={14} /> AI Dashboard
             </a> */}
           </div>
         </header>
@@ -692,7 +693,7 @@ export const TenderDashboardPage: React.FC = () => {
           {!loading && error && (
             <div className="smartsheet-table-container">
               <div className="smartsheet-state-wrapper">
-                <span className="smartsheet-state-icon">⚠️</span>
+                <span className="smartsheet-state-icon" style={{ display: "inline-flex", alignItems: "center" }}><AlertTriangle size={24} /></span>
                 <h3 className="smartsheet-error-title">Failed to Load Tender Data</h3>
                 <p className="smartsheet-state-sub">{error.message}</p>
                 <div className="smartsheet-error-code">{error.message}</div>
@@ -714,7 +715,7 @@ export const TenderDashboardPage: React.FC = () => {
                     {filtered.length.toLocaleString()} of {data.length.toLocaleString()} Records
                   </span>
                   <div className="smartsheet-search-container">
-                    <span className="smartsheet-search-icon">🔍</span>
+                    <span className="smartsheet-search-icon" style={{ display: "inline-flex", alignItems: "center" }}><Search size={16} /></span>
                     <input
                       id="smartsheet-global-search"
                       type="text"
@@ -746,8 +747,8 @@ export const TenderDashboardPage: React.FC = () => {
                                 {col.label}
                                 <span className="smartsheet-sort-icon">
                                   {sortField === col.key
-                                    ? sortDir === "asc" ? "▲" : "▼"
-                                    : "⇅"}
+                                    ? sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                    : <ArrowUpDown size={12} />}
                                 </span>
                               </div>
                               <div className="column-filter-container" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
@@ -767,7 +768,7 @@ export const TenderDashboardPage: React.FC = () => {
                                       onClick={() => setShowUtilityDropdown(!showUtilityDropdown)}
                                       style={{ marginBottom: "4px" }}
                                     >
-                                      {selectedUtilities.length === 0 ? "All Utilities" : `${selectedUtilities.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                      {selectedUtilities.length === 0 ? "All Utilities" : `${selectedUtilities.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                     </button>
                                     {showUtilityDropdown && (
                                       <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -825,7 +826,7 @@ export const TenderDashboardPage: React.FC = () => {
                                       className="multiselect-trigger-btn"
                                       onClick={() => setShowQuotationDropdown(!showQuotationDropdown)}
                                     >
-                                      {selectedQuotations.length === 0 ? "All Quotations" : `${selectedQuotations.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                      {selectedQuotations.length === 0 ? "All Quotations" : `${selectedQuotations.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                     </button>
                                     {showQuotationDropdown && (
                                       <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -862,7 +863,7 @@ export const TenderDashboardPage: React.FC = () => {
                                       className="multiselect-trigger-btn"
                                       onClick={() => setShowPartyDropdown(!showPartyDropdown)}
                                     >
-                                      {selectedParties.length === 0 ? "All Parties" : `${selectedParties.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                      {selectedParties.length === 0 ? "All Parties" : `${selectedParties.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                     </button>
                                     {showPartyDropdown && (
                                       <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -899,7 +900,7 @@ export const TenderDashboardPage: React.FC = () => {
                                       className="multiselect-trigger-btn"
                                       onClick={() => setShowItemDropdown(!showItemDropdown)}
                                     >
-                                      {selectedItems.length === 0 ? "All Items" : `${selectedItems.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                      {selectedItems.length === 0 ? "All Items" : `${selectedItems.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                     </button>
                                     {showItemDropdown && (
                                       <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -957,7 +958,7 @@ export const TenderDashboardPage: React.FC = () => {
                                         }}
                                         title="Clear date filter"
                                       >
-                                        ✕
+                                        <X size={14} />
                                       </button>
                                     )}
                                   </div>
@@ -989,7 +990,7 @@ export const TenderDashboardPage: React.FC = () => {
                                         }}
                                         title="Clear date filter"
                                       >
-                                        ✕
+                                        <X size={14} />
                                       </button>
                                     )}
                                   </div>
@@ -1099,7 +1100,7 @@ export const TenderDashboardPage: React.FC = () => {
                                 fontWeight: 500,
                               }}
                             >
-                              📭&nbsp; No matching records found. Try adjusting your filters.
+                              <Inbox size={16} style={{ verticalAlign: "middle", marginRight: "6px" }} /> No matching records found. Try adjusting your filters.
                             </td>
                           </tr>
                         ) : paginated.map((row, idx) => (
@@ -1189,9 +1190,9 @@ export const TenderDashboardPage: React.FC = () => {
                                     window.open(row.attachmentUrl!, "_blank");
                                   }}
                                   title="View Costing Sheet"
-                                  style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}
+                                  style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
                                 >
-                                  📎 Costing
+                                  <Paperclip size={14} /> Costing
                                 </button>
                               ) : (
                                 <span className="smartsheet-null-cell">—</span>

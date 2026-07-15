@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import { RefreshCw } from "lucide-react";
 
 export default function AdminPage() {
   const [syncing, setSyncing] = useState(false);
@@ -28,7 +29,7 @@ export default function AdminPage() {
           Trigger a full refresh from all data sources (Google Sheets, Smartsheet, Supply History).
           This will pull the latest data and update the database.
         </p>
-        <button
+          <button
           onClick={handleRefreshAll}
           disabled={syncing}
           style={{
@@ -40,9 +41,12 @@ export default function AdminPage() {
             cursor: syncing ? "not-allowed" : "pointer",
             fontSize: "14px",
             fontWeight: 600,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
           }}
         >
-          {syncing ? "🔄 Syncing All Sources..." : "🔄 Refresh All Data"}
+          {syncing ? <><RefreshCw size={14} /> Syncing All Sources...</> : <><RefreshCw size={14} /> Refresh All Data</>}
         </button>
         {syncResult && (
           <div style={{ marginTop: "16px", padding: "12px", background: syncResult.startsWith("Sync completed") ? "#e6f4ea" : "#fce8e6", borderRadius: "4px", fontSize: "14px" }}>

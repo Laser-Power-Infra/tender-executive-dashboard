@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef, useCallback, useEffect } from "react"
 import { useSupplyHistory } from "@/hooks/useSupplyHistory";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
+import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
 import "@/app/SupplyHistory.css";
 
 type SortField = keyof SupplyHistoryRecord;
@@ -402,7 +403,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
   return (
     <div className="supply-layout-container">
       <aside className="supply-sidebar">
-        <div className="supply-sidebar-header">📦 Supply History</div>
+        <div className="supply-sidebar-header" style={{ display: "flex", alignItems: "center", gap: "8px" }}><Package size={18} /> Supply History</div>
         <div className="supply-sidebar-body">
           <div className="supply-stat-card">
             <div className="supply-stat-label">Total Records</div>
@@ -446,7 +447,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
             onClick={handleRefresh}
             disabled={loading}
           >
-            {loading ? "🔄 Loading..." : "🔄 Refresh Data"}
+            {loading ? <><RefreshCw size={14} /> Loading...</> : <><RefreshCw size={14} /> Refresh Data</>}
           </button>
         </div>
       </aside>
@@ -459,11 +460,11 @@ export const SupplyHistoryDashboard: React.FC = () => {
             <span className="supply-header-subtitle">Supply History Dashboard</span>
           </div>
           <div className="supply-header-actions">
-            <button className="clear-filters-btn" onClick={handleClearAllFilters}>
-              🧹 Clear Filters
+            <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <Eraser size={14} /> Clear Filters
             </button>
-            <button className="export-excel-btn" onClick={handleExportExcel}>
-              📊 Export Excel
+            <button className="export-excel-btn" onClick={handleExportExcel} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <FileSpreadsheet size={14} /> Export Excel
             </button>
           </div>
         </header>
@@ -482,7 +483,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
           {!loading && error && (
             <div className="supply-table-container">
               <div className="supply-state-wrapper">
-                <span className="supply-state-icon">⚠️</span>
+                <span className="supply-state-icon" style={{ display: "inline-flex", alignItems: "center" }}><AlertTriangle size={24} /></span>
                 <h3 className="supply-error-title">Failed to Load Supply Data</h3>
                 <p className="supply-state-sub">{error.message}</p>
                 <div className="supply-error-code">{error.message}</div>
@@ -502,7 +503,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                     {filtered.length.toLocaleString()} of {data.length.toLocaleString()} Records
                   </span>
                   <div className="supply-search-container">
-                    <span className="supply-search-icon">🔍</span>
+                    <span className="supply-search-icon" style={{ display: "inline-flex", alignItems: "center" }}><Search size={16} /></span>
                     <input
                       id="supply-global-search"
                       type="text"
@@ -528,8 +529,8 @@ export const SupplyHistoryDashboard: React.FC = () => {
                             {col.label}
                             <span className="supply-sort-icon">
                               {sortField === col.key
-                                ? sortDir === "asc" ? "▲" : "▼"
-                                : "⇅"}
+                                ? sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                : <ArrowUpDown size={12} />}
                             </span>
                           </div>
                           <div className="column-filter-container" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
@@ -556,7 +557,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                     onClick={() => { setSaleBillDateStart(""); setSaleBillDateEnd(""); setPage(1); }}
                                     title="Clear date filter"
                                   >
-                                    ✕
+                                    <X size={14} />
                                   </button>
                                 )}
                               </div>
@@ -584,7 +585,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                     onClick={() => { setPartyRefDateStart(""); setPartyRefDateEnd(""); setPage(1); }}
                                     title="Clear date filter"
                                   >
-                                    ✕
+                                    <X size={14} />
                                   </button>
                                 )}
                               </div>
@@ -659,7 +660,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                     onClick={() => setShowPartyDropdown(!showPartyDropdown)}
                                     style={{ marginBottom: "4px" }}
                                   >
-                                    {selectedParties.length === 0 ? "All Parties" : `${selectedParties.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                    {selectedParties.length === 0 ? "All Parties" : `${selectedParties.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                   </button>
                                   {showPartyDropdown && (
                                     <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -697,7 +698,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                     onClick={() => setShowItemDropdown(!showItemDropdown)}
                                     style={{ marginBottom: "4px" }}
                                   >
-                                    {selectedItems.length === 0 ? "All Items" : `${selectedItems.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                    {selectedItems.length === 0 ? "All Items" : `${selectedItems.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                   </button>
                                   {showItemDropdown && (
                                     <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -735,7 +736,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                     onClick={() => setShowPartyRefDropdown(!showPartyRefDropdown)}
                                     style={{ marginBottom: "4px" }}
                                   >
-                                    {selectedPartyRefs.length === 0 ? "All Party Refs" : `${selectedPartyRefs.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                    {selectedPartyRefs.length === 0 ? "All Party Refs" : `${selectedPartyRefs.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                   </button>
                                   {showPartyRefDropdown && (
                                     <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -773,7 +774,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                     onClick={() => setShowContractDropdown(!showContractDropdown)}
                                     style={{ marginBottom: "4px" }}
                                   >
-                                    {selectedContracts.length === 0 ? "All Contracts" : `${selectedContracts.length} Selected`} <span className="dropdown-arrow">▼</span>
+                                    {selectedContracts.length === 0 ? "All Contracts" : `${selectedContracts.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
                                   </button>
                                   {showContractDropdown && (
                                     <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
@@ -838,7 +839,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                             fontWeight: 500,
                           }}
                         >
-                          📭&nbsp; No matching records found. Try adjusting your filters.
+                          <Inbox size={16} style={{ verticalAlign: "middle", marginRight: "6px" }} /> No matching records found. Try adjusting your filters.
                         </td>
                       </tr>
                     ) : paginated.map((row, idx) => (
@@ -896,8 +897,9 @@ export const SupplyHistoryDashboard: React.FC = () => {
                               className="view-docs-btn"
                               onClick={() => setSelectedBillNo(row.saleBillNumber)}
                               title="View Documents"
+                              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
                             >
-                              📂 View Files
+                              <FolderOpen size={14} /> View Files
                             </button>
                           ) : (
                             <span className="supply-null-cell">—</span>

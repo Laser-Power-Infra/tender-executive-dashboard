@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { Check, AlertTriangle } from "lucide-react";
 import "./AlertPanel.css";
 
 interface AlertsData {
@@ -31,7 +32,7 @@ export const AlertPanel: React.FC<AlertPanelProps> = ({ alerts }) => {
     return (
       <div className="alert-panel-container">
         <span className="alert-action-badge" style={{ backgroundColor: "#137333", animation: "none" }}>
-          ✓ No Actions
+          <Check size={14} /> No Actions
         </span>
         <span className="alert-pill" style={{ fontSize: "11px", opacity: 0.8 }}>
           All tender metrics and deadlines are currently up to date.
@@ -42,7 +43,7 @@ export const AlertPanel: React.FC<AlertPanelProps> = ({ alerts }) => {
 
   return (
     <div className="alert-panel-container">
-      <span className="alert-action-badge">⚠ Action Required</span>
+      <span className="alert-action-badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><AlertTriangle size={14} /> Action Required</span>
       {alerts.reverseAuctionIn7DCount > 0 && (
         <div className="alert-pill ra" title="Active reverse auctions scheduled within the next 7 days">
           <span className="alert-dot" />

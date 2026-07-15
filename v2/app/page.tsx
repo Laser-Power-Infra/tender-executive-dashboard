@@ -5,6 +5,7 @@ import { TenderTable } from "@/components/TenderTable";
 import { AlertPanel } from "@/components/AlertPanel";
 import { useTenderData } from "@/hooks/useTenderData";
 import { TenderCalculations } from "@/services/tenderCalculations";
+import { Eraser, RefreshCw, AlertTriangle } from "lucide-react";
 import "./Dashboard.css";
 
 export default function Home() {
@@ -119,9 +120,9 @@ export default function Home() {
             <span className="brand-title">Executive Tender Dashboard</span>
           </div>
           <div className="header-actions">
-            <button className="clear-filters-btn" onClick={handleClearAllFilters}>🧹 Clear Filters</button>
-            <button className="erp-sync-btn" onClick={handleRefresh} disabled={liveLoading}>
-              {liveLoading ? "🔄 Syncing..." : "🔄 Sync Sheet Data"}
+            <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Eraser size={14} /> Clear Filters</button>
+            <button className="erp-sync-btn" onClick={handleRefresh} disabled={liveLoading} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              {liveLoading ? <><RefreshCw size={14} /> Syncing...</> : <><RefreshCw size={14} /> Sync Sheet Data</>}
             </button>
             <div className="user-profile-badge" title="Logged in as John Doe">JD</div>
           </div>
@@ -135,7 +136,7 @@ export default function Home() {
             </div>
           ) : liveError && rawRecords.length === 0 ? (
             <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", minHeight: "400px", color: "#c5221f", fontWeight: 700, flexDirection: "column", gap: "15px", padding: "40px", textAlign: "center", backgroundColor: "#fdf6f6", border: "1px solid #fcdcdc", borderRadius: "8px", margin: "20px" }}>
-              <span style={{ fontSize: "40px" }}>⚠️</span>
+              <span style={{ fontSize: "40px", display: "inline-flex", alignItems: "center" }}><AlertTriangle size={40} /></span>
               <h3 style={{ margin: 0, fontSize: "20px" }}>Database Connection Failed</h3>
               <p style={{ color: "#5f6368", fontWeight: 500, maxWidth: "500px", margin: 0, fontSize: "14px", lineHeight: "1.5" }}>
                 Could not connect to the live Google Sheet. Ensure your server proxy is running on port 3001, your credentials in the <code>.env</code> file are correct, and the spreadsheet is shared with your Service Account email.

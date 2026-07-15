@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { ShieldCheck, AlertTriangle, CheckCircle } from "lucide-react";
 import "./FolderMonitorWidget.css";
 
 interface UnmatchedRecord {
@@ -31,7 +32,7 @@ export const FolderMonitorWidget: React.FC = () => {
     <div className="monitor-widget-card">
       <header className="monitor-widget-header">
         <div className="title-group">
-          <span className="monitor-icon">🕵️‍♂️</span>
+          <span className="monitor-icon" style={{ display: "inline-flex", alignItems: "center" }}><ShieldCheck size={18} /></span>
           <h4>Folder Audit Discrepancies</h4>
         </div>
         {!loading && unmatched.length > 0 && <span className="discrepancy-badge">{unmatched.length} Gaps</span>}
@@ -45,13 +46,13 @@ export const FolderMonitorWidget: React.FC = () => {
         )}
         {error && (
           <div className="monitor-error">
-            <span className="error-icon">⚠️</span>
+            <span className="error-icon" style={{ display: "inline-flex", alignItems: "center" }}><AlertTriangle size={24} /></span>
             <p>{error}</p>
           </div>
         )}
         {!loading && !error && unmatched.length === 0 && (
           <div className="monitor-success">
-            <span className="success-icon">✅</span>
+            <span className="success-icon" style={{ display: "inline-flex", alignItems: "center" }}><CheckCircle size={24} /></span>
             <p>All Google Sheet dockets successfully matched with server directories.</p>
           </div>
         )}
