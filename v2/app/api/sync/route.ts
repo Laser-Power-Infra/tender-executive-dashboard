@@ -1,0 +1,16 @@
+import { NextRequest, NextResponse } from "next/server";
+import { executeSyncPipeline } from "@/services/syncPipeline";
+
+export const runtime = "nodejs";
+
+export async function POST(req: NextRequest) {
+  try {
+    const result = await executeSyncPipeline("MANUAL");
+    if (result.success) {
+      return NextResponse.json({ success: true, message: "Sync pipeline completed.", log: result.logEntry });
+    }
+    return NextResponse.json({ success: false, message: "Pipeline skipped or failed.", details: result.reason || result.error }, { status: 503 });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

@@ -1,0 +1,57 @@
+import { getAccessToken, getCleanCredentials } from "@/lib/googleDrive";
+import type { SupplyHistoryRecord } from "@/types/supplyHistory";
+
+const SUPPLY_SPREADSHEET_ID = "1tXiJC9AZNiAAoL8mM_KxKuzrFqzuk-n3n16abJbaam0";
+
+export async function fetchSupplyHistoryFromGoogleSheet(): Promise<SupplyHistoryRecord[]> {
+  const creds = getCleanCredentials();
+  if (!creds) throw new Error("Google Service Account credentials are not configured.");
+
+  const accessToken = await getAccessToken(creds.email, creds.key);
+
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SUPPLY_SPREADSHEET_ID}`;
+  const metaResponse = await fetch(metaUrl, {
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+  });
+  if (!metaResponse.ok) {
+    const text = await metaResponse.text();
+    throw new Error(`Failed to fetch spreadsheet metadata: ${text}`);
+  }
+  const meta = (await metaResponse.json()) as { sheets?: { properties?: { title?: string } }[] };
+  const sheetTitle = meta.sheets?.[0]?.properties?.title;
+  if (!sheetTitle) throw new Error("No sheets found in the spreadsheet");
+
+  const range = `${sheetTitle}!A1:ZZ`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SUPPLY_SPREADSHEET_ID}/values/${encodeURIComponent(range)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Google Sheets API returned status ${response.status}: ${text}`);
+  }
+
+  const data = (await response.json()) as { values?: string[][] };
+  const rows = data.values || [];
+  if (rows.length < 2) return [];
+
+  return rows.slice(1).map((row) => ({
+    fy: row[0] || null,
+    saleBillNumber: row[1] || null,
+    saleBillDate: row[2] || null,
+    itemCode: row[3] || null,
+    itemName: row[4] || null,
+    lrNo: row[5] || null,
+    truckNo: row[6] || null,
+    partyRefNo: row[7] || null,
+    partyRefDate: row[8] || null,
+    contractVrNo: row[9] || null,
+    rate: row[11] !== undefined && row[11] !== "" ? parseFloat(row[11]) : null,
+    invoiceQty: row[14] !== undefined && row[14] !== "" ? parseFloat(row[14]) : null,
+    invoiceAmt: row[15] !== undefined && row[15] !== "" ? parseFloat(row[15]) : null,
+    partyName: row[16] || null,
+  }));
+}

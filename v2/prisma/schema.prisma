@@ -1,0 +1,125 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum TenderUpdateStatus {
+  OPEN
+  CLOSED
+}
+
+enum NextAction {
+  UPDATE_FROM_AB_LETTER
+  BG_REFUND_LETTER_TO_BE_SENT
+  FOLLOW_UP_FOR_FINANCIAL_STATUS
+  REVERSE_AUCTION_PENDING
+}
+
+model Tender {
+  id                 String   @id @default(uuid())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  slNo               Int
+  docketNo           String
+  tenderFor          String
+  typeOfTender       String
+  tenderNoNitNo      String @unique @map("Tender No / NIT No with Date")
+  nameOfWorkDescription String? @map("Name of Work / Item Description")
+  totalQuantityMeter Float? @map("Total Quantity in Meter")
+  nameOfTheClient    String   @map("Name of the Client")
+  lastDateOfSubmission DateTime? @map("Last Date of Submission")
+  tenderOpeningDate  DateTime? @map("Tender Opening Date")
+  costOfTenderFeeRs  Float? @map("Cost of Tender / Tender Fee (In Rs)")
+  emdAmountRs        Float? @map("EMD Amount (In Rs)")
+  estimatedCostRs    Float? @map("Estimated Cost (In Rs)")
+  bidValidityDays    Int? @map("Bid Validity (in Days)")
+  contractPeriodDays Int? @map("Contract Period in Days")
+  managementDecision String @map("Management Decision")
+  participated       Boolean @map("Participated")
+  tenderPrepareBy    String @map("Tender Prepare By")
+  currentStatus      String @map("Current Status")
+  tenderSubmittedDate DateTime? @map("Tender Submitted Date")
+  reverseAuctionApplicable Boolean? @map("Reverse Auction Applicable")
+  reverseAuctionDate DateTime? @map("Reverse Auction Date")
+  emdPaymentMode     String? @map("EMD Payment Through BG / NEFT")
+  bgNoUtrNo          String? @map("BG No / UTR No")
+  emdValidity        DateTime? @map("EMD Validity")
+  loiPoNoAndDate     String? @map("LOI / PO No & Date")
+  remarks            String? @map("Remarks")
+  bidValidityExpired Boolean @map("Bid Validity Expired")
+  diffPercentFromL1  Float? @map("Diff % from L1")
+  diffPercentFromL2  Float? @map("Diff % from L2")
+  reason             String? @map("Reason")
+  finalRemarks       String? @map("Final Remarks")
+  attachmentUrl      String? @map("attachmentUrl")
+  tenderUpdateStatus    TenderUpdateStatus @default(OPEN)
+  nextAction            NextAction?
+  diffL1ManuallyEdited  Boolean @default(false)
+  diffL2ManuallyEdited  Boolean @default(false)
+}
+
+model SmartsheetTender {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  enquiryDate     String?
+  partyName       String?
+  docketNumber    String?  @unique
+  utility         String?
+  quotationNumber String?
+  quotationDate   String?
+  accountHolder   String?
+  tenderPurchase  String?
+
+  attachmentUrl   String?
+  proposedErpItemName String?
+  proposedQty     String?
+  priceBasis      String?
+  aluminiumPrice  Float?
+  aluminiumAlloyPrice Float?
+  copperTapePrice Float?
+  extrudedSemiconductivePrice Float?
+  htXlpePrice     Float?
+  pvcTypeSt2Price Float?
+  galvanisedSteelFlatStripPrice Float?
+  fillerPrice     Float?
+
+  lastSyncedAt    DateTime @default(now())
+}
+
+model SupplyHistory {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  fy              String?
+  saleBillNumber  String?
+  saleBillDate    String?
+  partyName       String?
+  itemCode        String?
+  itemName        String?
+  lrNo            String?
+  truckNo         String?
+  partyRefNo      String?
+  partyRefDate    String?
+  contractVrNo    String?
+  rate            Float?
+  invoiceQty      Float?
+  invoiceAmt      Float?
+
+  lastSyncedAt    DateTime @default(now())
+
+  @@unique([saleBillNumber, itemCode])
+}
+
