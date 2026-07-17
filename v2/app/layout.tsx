@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "@/components/NavBar";
+import StoreProvider from "@/lib/store-provider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Tender Executive Dashboard",
-  description: "Executive dashboard for monitoring tender participation and supply history",
+  description:
+    "Executive dashboard for monitoring tender participation and supply history",
 };
 
 export default function RootLayout({
@@ -24,11 +27,42 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <head>
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href="/apple-touch-icon.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/favicon-32x32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/favicon-16x16.png"
+        />
+        <link rel="manifest" href="/site.webmanifest"></link>
+      </head>
       <body className="min-h-full flex flex-col">
         <NavBar />
-        <div style={{ paddingTop: "42px", height: "100vh", display: "flex", flexDirection: "column" }}>
-          {children}
+        <div
+          style={{
+            paddingTop: "42px",
+            height: "100vh",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <StoreProvider>{children}</StoreProvider>
+          <Toaster richColors />
         </div>
       </body>
     </html>

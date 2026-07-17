@@ -118,8 +118,391 @@ model SupplyHistory {
   invoiceQty      Float?
   invoiceAmt      Float?
 
+  documentUrls  String?
+  attachmentUrl String?
+
   lastSyncedAt    DateTime @default(now())
 
   @@unique([saleBillNumber, itemCode])
 }
+
+enum Decision {
+  YES
+  NO
+  NOT_DECIDED
+
+  @@map("decision")
+}
+
+// ---------- FILES ----------
+model File {
+  id        Int      @id @default(autoincrement())
+  fileName  String
+  filePath  String?
+  fileType  String?
+  fileSize  Int?
+  uploadedBy String?
+  status    String?
+
+  totalCount Int? @default(0)
+  excludedCount Int? @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gemTenders    GemTender[]
+  nonGemTenders NonGemTender[]
+
+  @@map("files")
+}
+
+// ---------- GEM TENDER ----------
+model GemTender {
+  id Int @id @default(autoincrement())
+
+  fileId Int
+  file   File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  referenceNo String @unique
+  tenderBrief String?
+
+  value String?
+  deadline DateTime?
+  location String?
+  organization String?
+  documentFees String?
+  emd String?
+  msmeExemption String?
+  startupExemption String?
+  quantity String?
+  bidOpeningDateTime String?
+  bidOfferValidity String?
+
+  ministryStateName String?
+  departmentName String?
+  officeName String?
+
+  minimumAverageAnnualTurnover String?
+  yearsOfPastExperience String?
+  oemAverageTurnover String?
+  contractPeriod String?
+
+  financialDocumentPriceBreakupRequired String?
+  similarCategory String?
+  pastExperienceSimilarServicesRequired String?
+
+  documentRequiredFromSeller String?
+  pastPerformance String?
+  bidToRaEnabled String?
+  raQualificationRule String?
+
+  boqTitle String?
+  bidDetails String?
+
+  comprehensiveMaintenanceChargesRequired String?
+  typeOfBid String?
+
+  technicalClarificationTimeAllowed String?
+  inspectionRequired String?
+
+  estimatedBidValue String?
+  evaluationMethod String?
+  advisoryBank String?
+
+  ePbgPercentage String?
+  ePbgDurationMonths String?
+
+  msePurchasePreference String?
+  miiPurchasePreference String?
+
+  consigneesReportingOfficer String?
+  mediationClause String?
+  arbitrationClause String?
+
+  checklist String?
+
+  t247Id String?
+  scrapedDate String?
+  source String?
+  assignedTo String?
+  markedStatus String?
+  sheetStatus String?
+  ready String?
+  searchKey String?
+  downloadLink String?
+  currency String?
+
+  excludedCategory String?
+
+  aiRelevanceValid   Boolean?
+  aiRelevanceReason  String?
+
+  tenderFileUrl String?
+
+  parseStatus String? @map("parse_status")
+  parseError  String? @map("parse_error")
+
+  itemCategory  String?
+  totalQuantity String?
+
+  bidStatus           String?
+  differenceBetweenRank1 String?
+
+  docketNo      String?
+  attachmentUrl String?
+  remarks       String?
+
+  app  Decision @default(NOT_DECIDED)
+  aps  Decision @default(NOT_DECIDED)
+  apm  Decision @default(NOT_DECIDED)
+
+  tenderStatusId Int?
+  tenderStatus   TenderStatusTable? @relation("GemTenderStatus", fields: [tenderStatusId], references: [id], onDelete: SetNull)
+  state          String?
+  website        String?
+  locationCount  Int?
+
+  utilityMappingId Int?
+  utilityMapping   UtilityMapping? @relation(fields: [utilityMappingId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  extraFields TenderExtraField[]
+  tenderAssociations TenderAssociation[]
+  reportings  Reporting[]
+  evaluations Evaluation[]
+
+  @@index([fileId])
+  @@index([utilityMappingId])
+  @@map("gem_tenders")
+}
+
+// ---------- NON GEM ----------
+model NonGemTender {
+  id Int @id @default(autoincrement())
+
+  fileId Int
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  referenceNo String @unique
+  tenderBrief String?
+
+  estimatedBidValue String?
+  deadline DateTime?
+  location String?
+  organization String?
+
+  documentFees String?
+  emd String?
+
+  msmeExemption String?
+  startupExemption String?
+
+  quantity String?
+
+  checklist String?
+
+  t247Id String?
+  scrapedDate String?
+  source String?
+  assignedTo String?
+  markedStatus String?
+  sheetStatus String?
+  ready String?
+  searchKey String?
+  downloadLink String?
+  currency String?
+
+  excludedCategory String?
+
+  aiRelevanceValid   Boolean?
+  aiRelevanceReason  String?
+
+  tenderFileUrl String?
+
+  docketNo      String?
+  attachmentUrl String?
+  remarks       String?
+
+  app  Decision @default(NOT_DECIDED)
+  aps  Decision @default(NOT_DECIDED)
+  apm  Decision @default(NOT_DECIDED)
+
+  tenderStatusId Int?
+  tenderStatus   TenderStatusTable? @relation("NonGemTenderStatus", fields: [tenderStatusId], references: [id], onDelete: SetNull)
+  state          String?
+  website        String?
+  locationCount  Int?
+
+  utilityMappingId Int?
+  utilityMapping   UtilityMapping? @relation(fields: [utilityMappingId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  extraFields TenderExtraField[]
+  tenderAssociations TenderAssociation[]
+
+  @@index([fileId])
+  @@index([utilityMappingId])
+  @@map("non_gem_tenders")
+}
+
+model TenderExtraField {
+  id Int @id @default(autoincrement())
+
+  gemTenderId Int?
+  gemTender GemTender? @relation(fields: [gemTenderId], references: [id], onDelete: Cascade)
+
+  nonGemTenderId Int?
+  nonGemTender NonGemTender? @relation(fields: [nonGemTenderId], references: [id], onDelete: Cascade)
+
+  fieldName  String
+  fieldValue String? 
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([gemTenderId])
+  @@index([nonGemTenderId])
+
+  @@map("tender_extra_fields")
+}
+
+model ExlusionKeywords{
+  id Int @id @default(autoincrement())
+
+  category String @unique
+  keywords String? @default("cable")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- ASSOCIATION ----------
+model Association {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenderAssociations TenderAssociation[]
+
+  @@map("associations")
+}
+
+model TenderAssociation {
+  id           Int      @id @default(autoincrement())
+
+  gemTenderId Int?
+  gemTender   GemTender? @relation(fields: [gemTenderId], references: [id], onDelete: Cascade)
+
+  nonGemTenderId Int?
+  nonGemTender   NonGemTender? @relation(fields: [nonGemTenderId], references: [id], onDelete: Cascade)
+
+  associationId Int
+  association   Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([gemTenderId, associationId])
+  @@unique([nonGemTenderId, associationId])
+  @@index([gemTenderId])
+  @@index([nonGemTenderId])
+  @@index([associationId])
+  @@map("tender_associations")
+}
+
+// ---------- REPORTING ----------
+model Reporting {
+  id          Int      @id @default(autoincrement())
+  gemTenderId Int
+  gemTender   GemTender @relation(fields: [gemTenderId], references: [id], onDelete: Cascade)
+
+  officer  String
+  address  String?
+  quantity String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([gemTenderId])
+  @@map("reportings")
+}
+
+// ---------- TENDER STATUS TABLE ----------
+model TenderStatusTable {
+  id              Int      @id @default(autoincrement())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  state           String?
+  website         String?
+  type            String   @default("GEM")
+  userId          String?
+  password        String?
+  mobileNo        String?
+  profilePassword String?
+  dscName         String?
+  dscPassword     String?
+
+  gemTenders      GemTender[]       @relation("GemTenderStatus")
+  nonGemTenders   NonGemTender[]    @relation("NonGemTenderStatus")
+
+  @@map("tender_status_table")
+}
+
+// ---------- EVALUATION ----------
+model Evaluation {
+  id          Int      @id @default(autoincrement())
+  gemTenderId Int
+  gemTender   GemTender @relation(fields: [gemTenderId], references: [id], onDelete: Cascade)
+
+  sellerName  String
+  offeredItem String?
+  totalPrice  String?
+  rank        String?
+  status      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([gemTenderId])
+  @@map("evaluations")
+}
+
+// ---------- AI FEEDBACK ----------
+model AiFeedback {
+  id             String   @id @default(uuid())
+  tenderId       Int
+  tenderType     String
+  briefText      String
+  originalAi     String
+  correctedAi    String
+  feedbackReason String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenderId, tenderType])
+  @@map("ai_feedback")
+}
+
+// ---------- UTILITY MAPPING ----------
+model UtilityMapping {
+  id           Int      @id @default(autoincrement())
+  organization String
+  website      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  gemTenders    GemTender[]
+  nonGemTenders NonGemTender[]
+
+  @@map("utility_mappings")
+}
+
+
+
 

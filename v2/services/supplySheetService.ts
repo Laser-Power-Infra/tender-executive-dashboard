@@ -18,13 +18,15 @@ export async function fetchSupplyHistoryFromGoogleSheet(): Promise<SupplyHistory
     throw new Error(`Failed to fetch spreadsheet metadata: ${text}`);
   }
   const meta = (await metaResponse.json()) as { sheets?: { properties?: { title?: string } }[] };
-  const sheetTitle = meta.sheets?.[0]?.properties?.title;
-  if (!sheetTitle) throw new Error("No sheets found in the spreadsheet");
+  const sheetTitles = (meta.sheets || [])
+    .map(s => s.properties?.title)
+    .filter((t): t is string => !!t);
+  if (sheetTitles.length === 0) throw new Error("No sheets found in the spreadsheet");
 
-  const range = `${sheetTitle}!A1:ZZ`;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SUPPLY_SPREADSHEET_ID}/values/${encodeURIComponent(range)}`;
+  const ranges = sheetTitles.map(t => `${t}!A1:ZZ`);
+  const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SUPPLY_SPREADSHEET_ID}/values:batchGet?${ranges.map(r => `ranges=${encodeURIComponent(r)}`).join("&")}`;
 
-  const response = await fetch(url, {
+  const response = await fetch(batchUrl, {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
   });
@@ -34,11 +36,15 @@ export async function fetchSupplyHistoryFromGoogleSheet(): Promise<SupplyHistory
     throw new Error(`Google Sheets API returned status ${response.status}: ${text}`);
   }
 
-  const data = (await response.json()) as { values?: string[][] };
-  const rows = data.values || [];
-  if (rows.length < 2) return [];
+  const data = (await response.json()) as { valueRanges?: { values?: string[][] }[] };
+  if (!data.valueRanges || data.valueRanges.length === 0) return [];
 
-  return rows.slice(1).map((row) => ({
+  const records: SupplyHistoryRecord[] = [];
+  for (const valueRange of data.valueRanges) {
+    const rows = valueRange.values || [];
+    if (rows.length < 2) continue;
+    for (const row of rows.slice(1)) {
+      records.push({
     fy: row[0] || null,
     saleBillNumber: row[1] || null,
     saleBillDate: row[2] || null,
@@ -52,6 +58,10 @@ export async function fetchSupplyHistoryFromGoogleSheet(): Promise<SupplyHistory
     rate: row[11] !== undefined && row[11] !== "" ? parseFloat(row[11]) : null,
     invoiceQty: row[14] !== undefined && row[14] !== "" ? parseFloat(row[14]) : null,
     invoiceAmt: row[15] !== undefined && row[15] !== "" ? parseFloat(row[15]) : null,
-    partyName: row[16] || null,
-  }));
+      partyName: row[16] || null,
+      });
+    }
+  }
+
+  return records;
 }

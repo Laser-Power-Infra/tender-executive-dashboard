@@ -14,8 +14,13 @@ export const useSupplyHistory = (): UseSupplyHistoryResult => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
   const hasData = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     if (forceRefresh || !hasData.current) {
       setLoading(true);
     }
@@ -23,7 +28,7 @@ export const useSupplyHistory = (): UseSupplyHistoryResult => {
 
     try {
       const query = forceRefresh ? "?fresh=true" : "";
-      const response = await fetch(`/api/supply-history${query}`);
+      const response = await fetch(`/api/supply-history${query}`, { signal: controller.signal });
       const json = await response.json();
 
       if (!response.ok || !json.success) {
@@ -35,6 +40,7 @@ export const useSupplyHistory = (): UseSupplyHistoryResult => {
       hasData.current = true;
       setData(records);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err : new Error("Unexpected error fetching supply history data"));
     } finally {
       setLoading(false);

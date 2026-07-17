@@ -4,6 +4,7 @@ import { useSupplyHistory } from "@/hooks/useSupplyHistory";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
 import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
+import { toast } from "sonner";
 import "@/app/SupplyHistory.css";
 
 type SortField = keyof SupplyHistoryRecord;
@@ -101,6 +102,8 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [amtMin, setAmtMin] = useState("");
   const [amtMax, setAmtMax] = useState("");
   const [selectedBillNo, setSelectedBillNo] = useState<string | null>(null);
+  const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
+  const [indexing, setIndexing] = useState(false);
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
@@ -191,30 +194,6 @@ export const SupplyHistoryDashboard: React.FC = () => {
     setPage(1);
   };
 
-  const partyNamesList = useMemo(() => {
-    const set = new Set<string>();
-    data.forEach(r => { if (r.partyName) set.add(r.partyName.trim()); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data]);
-
-  const itemNamesList = useMemo(() => {
-    const set = new Set<string>();
-    data.forEach(r => { if (r.itemName) set.add(r.itemName.trim()); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data]);
-
-  const partyRefsList = useMemo(() => {
-    const set = new Set<string>();
-    data.forEach(r => { if (r.partyRefNo) set.add(r.partyRefNo.trim()); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data]);
-
-  const contractsList = useMemo(() => {
-    const set = new Set<string>();
-    data.forEach(r => { if (r.contractVrNo) set.add(r.contractVrNo.trim()); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data]);
-
   const filtered = useMemo<SupplyHistoryRecord[]>(() => {
     let rows = data;
 
@@ -238,22 +217,18 @@ export const SupplyHistoryDashboard: React.FC = () => {
       }
     });
 
-    // Specialized: Party Name Multi-select Filter
     if (selectedParties.length > 0) {
       rows = rows.filter(row => row.partyName && selectedParties.includes(row.partyName.trim()));
     }
 
-    // Specialized: Item Name Multi-select Filter
     if (selectedItems.length > 0) {
       rows = rows.filter(row => row.itemName && selectedItems.includes(row.itemName.trim()));
     }
 
-    // Specialized: Party Ref No Multi-select Filter
     if (selectedPartyRefs.length > 0) {
       rows = rows.filter(row => row.partyRefNo && selectedPartyRefs.includes(row.partyRefNo.trim()));
     }
 
-    // Specialized: Contract VR No Multi-select Filter
     if (selectedContracts.length > 0) {
       rows = rows.filter(row => row.contractVrNo && selectedContracts.includes(row.contractVrNo.trim()));
     }
@@ -320,6 +295,30 @@ export const SupplyHistoryDashboard: React.FC = () => {
     selectedContracts,
   ]);
 
+  const partyNamesList = useMemo(() => {
+    const set = new Set<string>();
+    filtered.forEach(r => { if (r.partyName) set.add(r.partyName.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [filtered]);
+
+  const itemNamesList = useMemo(() => {
+    const set = new Set<string>();
+    filtered.forEach(r => { if (r.itemName) set.add(r.itemName.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [filtered]);
+
+  const partyRefsList = useMemo(() => {
+    const set = new Set<string>();
+    filtered.forEach(r => { if (r.partyRefNo) set.add(r.partyRefNo.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [filtered]);
+
+  const contractsList = useMemo(() => {
+    const set = new Set<string>();
+    filtered.forEach(r => { if (r.contractVrNo) set.add(r.contractVrNo.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [filtered]);
+
   const sorted = useMemo<SupplyHistoryRecord[]>(() => {
     return [...filtered].sort((a, b) => cmp(a[sortField], b[sortField], sortDir));
   }, [filtered, sortField, sortDir]);
@@ -335,6 +334,22 @@ export const SupplyHistoryDashboard: React.FC = () => {
   };
 
   const handleRefresh = async () => { setPage(1); await refresh(); };
+
+  const handleScanDocuments = async () => {
+    setIndexing(true);
+    try {
+      const res = await fetch("/api/supply-indexer", { method: "POST" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      await refresh();
+      toast.success("Documents scanned successfully");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Scan failed");
+      console.error("Index scan failed:", err);
+    } finally {
+      setIndexing(false);
+    }
+  };
 
   const handleExportExcel = () => {
     const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
@@ -448,6 +463,14 @@ export const SupplyHistoryDashboard: React.FC = () => {
             disabled={loading}
           >
             {loading ? <><RefreshCw size={14} /> Loading...</> : <><RefreshCw size={14} /> Refresh Data</>}
+          </button>
+          <button
+            className="supply-refresh-sidebar-btn"
+            onClick={handleScanDocuments}
+            disabled={indexing}
+            style={{ marginTop: "8px" }}
+          >
+            {indexing ? <><RefreshCw size={14} /> Scanning...</> : <><FolderOpen size={14} /> Scan Documents</>}
           </button>
         </div>
       </aside>
@@ -892,10 +915,13 @@ export const SupplyHistoryDashboard: React.FC = () => {
                             : <span className="supply-null-cell">—</span>}
                         </td>
                         <td className="col-center">
-                          {row.hasDocuments ? (
+                          {row.hasDocuments || row.attachmentUrl ? (
                             <button
                               className="view-docs-btn"
-                              onClick={() => setSelectedBillNo(row.saleBillNumber)}
+                              onClick={() => {
+                                setSelectedBillNo(row.saleBillNumber);
+                                setSelectedAttachmentUrl(row.attachmentUrl ?? null);
+                              }}
                               title="View Documents"
                               style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
                             >
@@ -961,8 +987,9 @@ export const SupplyHistoryDashboard: React.FC = () => {
 
       <SupplyAttachmentModal
         isOpen={!!selectedBillNo}
-        onClose={() => setSelectedBillNo(null)}
+        onClose={() => { setSelectedBillNo(null); setSelectedAttachmentUrl(null); }}
         saleBillNumber={selectedBillNo || ""}
+        attachmentUrl={selectedAttachmentUrl}
       />
     </div>
   );

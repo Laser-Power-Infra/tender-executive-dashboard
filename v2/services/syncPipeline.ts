@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { runIndexer } from "./documentIndexer";
+import { startScheduling as startSupplyIndexerScheduling } from "./supplyDocumentIndexer";
 import { matchTendersWithFolders } from "./tenderFolderMatcher";
 import { indexFolderFiles } from "./fileIndexer";
 import type { FolderMatch } from "@/types/indexer";
@@ -193,6 +194,7 @@ export async function executeSyncPipeline(
 export function startPipelineScheduler(): void {
   if (pipelineTimer) return;
 
+  startSupplyIndexerScheduling();
   executeSyncPipeline("SYSTEM");
 
   pipelineTimer = setInterval(() => {
@@ -201,6 +203,8 @@ export function startPipelineScheduler(): void {
 
   console.log(`[SyncPipeline] Scheduler active. Running every ${CONFIG.syncIntervalMs / 60000} minutes.`);
 }
+
+startPipelineScheduler();
 
 export function stopPipelineScheduler(): void {
   if (pipelineTimer) {

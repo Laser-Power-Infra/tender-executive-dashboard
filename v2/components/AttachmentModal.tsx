@@ -24,7 +24,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   isOpen,
   onClose,
   docketNo,
-  authToken = "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE"
+  authToken = "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE",
 }) => {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -39,9 +39,12 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
       setFiles([]);
 
       try {
-        const response = await fetch(`/api/tenders/${docketNo}/files`, {
-          headers: { Authorization: authToken }
-        });
+        const response = await fetch(
+          `/api/executive-tenders/${docketNo}/files`,
+          {
+            headers: { Authorization: authToken },
+          },
+        );
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -54,7 +57,9 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
         const data = await response.json();
         setFiles(data.files || []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+        setError(
+          err instanceof Error ? err.message : "An unexpected error occurred.",
+        );
       } finally {
         setLoading(false);
       }
@@ -74,19 +79,33 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   };
 
   const handleDownload = (fileId: string) => {
-    window.open(`/api/files/download/${fileId}?auth=${encodeURIComponent(authToken)}`, "_blank");
+    window.open(
+      `/api/executive-files/download/${fileId}?auth=${encodeURIComponent(authToken)}`,
+      "_blank",
+    );
   };
 
   const handlePreview = (fileId: string) => {
-    window.open(`/api/files/view/${fileId}?auth=${encodeURIComponent(authToken)}`, "_blank");
+    window.open(
+      `/api/executive-files/view/${fileId}?auth=${encodeURIComponent(authToken)}`,
+      "_blank",
+    );
   };
 
   return (
     <div className="attachment-modal-overlay" onClick={onClose}>
-      <div className="attachment-modal-container" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="attachment-modal-container"
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="attachment-modal-header">
           <h3>Tender Files: Docket #{docketNo}</h3>
-          <button className="attachment-modal-close-btn" onClick={onClose} aria-label="Close modal" style={{ display: "inline-flex", alignItems: "center" }}>
+          <button
+            className="attachment-modal-close-btn"
+            onClick={onClose}
+            aria-label="Close modal"
+            style={{ display: "inline-flex", alignItems: "center" }}
+          >
             <X size={16} />
           </button>
         </header>
@@ -108,13 +127,23 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
           )}
           {error && (
             <div className="attachment-error-state">
-              <span className="error-icon" style={{ display: "inline-flex", alignItems: "center" }}><AlertTriangle size={24} /></span>
+              <span
+                className="error-icon"
+                style={{ display: "inline-flex", alignItems: "center" }}
+              >
+                <AlertTriangle size={24} />
+              </span>
               <p className="error-message">{error}</p>
             </div>
           )}
           {!loading && !error && files.length === 0 && (
             <div className="attachment-empty-state">
-              <span className="empty-icon" style={{ display: "inline-flex", alignItems: "center" }}><FolderOpen size={24} /></span>
+              <span
+                className="empty-icon"
+                style={{ display: "inline-flex", alignItems: "center" }}
+              >
+                <FolderOpen size={24} />
+              </span>
               <p>No documents found in this tender folder.</p>
             </div>
           )}
@@ -122,22 +151,47 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
             <ul className="file-list">
               {files.map((file) => (
                 <li key={file.fileId} className="file-item">
-                  <div className="file-icon" title={file.extension} style={{ display: "inline-flex", alignItems: "center" }}>
+                  <div
+                    className="file-icon"
+                    title={file.extension}
+                    style={{ display: "inline-flex", alignItems: "center" }}
+                  >
                     <FileIcon extension={file.extension} size={18} />
                   </div>
                   <div className="file-info-group">
-                    <span className="file-name" title={file.filename}>{file.filename}</span>
+                    <span className="file-name" title={file.filename}>
+                      {file.filename}
+                    </span>
                     <span className="file-meta">
-                      {formatSize(file.size)} • {new Date(file.lastModified).toLocaleDateString()}
+                      {formatSize(file.size)} •{" "}
+                      {new Date(file.lastModified).toLocaleDateString()}
                     </span>
                   </div>
                   <div className="file-actions">
                     {file.extension.toLowerCase() === ".pdf" && (
-                      <button className="file-action-btn view-btn" onClick={() => handlePreview(file.fileId)} title="Preview PDF inline" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <button
+                        className="file-action-btn view-btn"
+                        onClick={() => handlePreview(file.fileId)}
+                        title="Preview PDF inline"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
                         <Eye size={14} /> Preview
                       </button>
                     )}
-                    <button className="file-action-btn download-btn" onClick={() => handleDownload(file.fileId)} title="Download file" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    <button
+                      className="file-action-btn download-btn"
+                      onClick={() => handleDownload(file.fileId)}
+                      title="Download file"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
                       <Download size={14} /> Download
                     </button>
                   </div>
@@ -147,7 +201,9 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
           )}
         </div>
         <footer className="attachment-modal-footer">
-          <button className="footer-close-btn" onClick={onClose}>Close</button>
+          <button className="footer-close-btn" onClick={onClose}>
+            Close
+          </button>
         </footer>
       </div>
     </div>

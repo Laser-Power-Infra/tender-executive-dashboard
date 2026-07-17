@@ -3,7 +3,7 @@ import path from "path";
 import type { SupplyIndex, SupplyIndexEntry } from "@/types/indexer";
 
 const CONFIG = {
-  networkPath: "W:\\",
+  networkPath: "X:\\", //{asmita:w, bidyut:x}
   dbFilePath: path.resolve(process.cwd(), "data", "supply_document_index.json"),
   scanIntervalMs: 12 * 60 * 60 * 1000
 };

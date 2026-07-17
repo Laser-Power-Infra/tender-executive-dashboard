@@ -98,7 +98,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(255,255,255,0.5);
+  color: white;
   margin-bottom: 4px;
 }
 
@@ -162,6 +162,10 @@
   cursor: pointer;
   transition: background 0.15s ease;
   font-family: inherit;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
 }
 
 .supply-refresh-sidebar-btn:hover:not(:disabled) {

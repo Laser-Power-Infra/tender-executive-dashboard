@@ -13,7 +13,7 @@ import {
 const links = [
   { href: "/", label: "Executive Dashboard" },
   { href: "/supply-history", label: "Supply History Dashboard" },
-  // { href: "/admin", label: "Admin", mlAuto: true },
+  { href: "/tenders", label: "Tenders" },
 ];
 
 export function NavBar() {
