@@ -182,18 +182,36 @@ export const analyzeTender = createAsyncThunk(
 
 export const downloadTenderPdf = createAsyncThunk(
   "tenders/downloadTenderPdf",
-  async (params: { id: number; gemId: string }) => {
+  async (params: {
+    id: number;
+    type: "Gem" | "Non-Gem";
+    gemId?: string;
+    referenceNo?: string;
+    tenderStatusId?: number | null;
+  }) => {
     const res = await fetch("/api/download-pdfs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        tenders: [{ id: params.id, gemId: params.gemId }],
+        tenders: [
+          {
+            id: params.id,
+            type: params.type,
+            gemId: params.gemId,
+            referenceNo: params.referenceNo,
+            tenderStatusId: params.tenderStatusId,
+          },
+        ],
       }),
     });
     const data = await res.json();
     const detail = data.results?.[0];
     if (!detail?.success) throw new Error(detail?.error || "Download failed");
-    return { id: params.id, tenderFileUrl: detail.pdfPath };
+    return {
+      id: params.id,
+      tenderFileUrl: detail.pdfPath ?? "",
+      captchaDetected: detail.captchaDetected,
+    };
   },
 );
 
@@ -491,7 +509,7 @@ export const tendersSlice = createSlice({
     builder.addCase(downloadTenderPdf.fulfilled, (state, action) => {
       const { id, tenderFileUrl } = action.payload;
       state.pdfDownloading[String(id)] = false;
-      if (state.data) {
+      if (state.data && tenderFileUrl) {
         const row = state.data.rows.find((r) => Number(r.id) === id);
         if (row) {
           row.tenderFileUrl = tenderFileUrl;

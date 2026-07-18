@@ -61,22 +61,40 @@ export default function ConfirmAnalysisDialog({
           brief,
         })).unwrap();
 
-        if (result.valid === "true" && row.type === "Gem") {
-          const gemId = row.referenceNo as string | undefined;
-          if (gemId) {
-            try {
-              const dlResult = await dispatch(downloadTenderPdf({
-                id: Number(row.id),
-                gemId,
-              })).unwrap();
-
-              if (dlResult.tenderFileUrl) {
-                await dispatch(parseTenderPdf({
+        if (result.valid === "true") {
+          if (row.type === "Gem") {
+            const gemId = row.referenceNo as string | undefined;
+            if (gemId) {
+              try {
+                const dlResult = await dispatch(downloadTenderPdf({
                   id: Number(row.id),
+                  type: "Gem",
+                  gemId,
                 })).unwrap();
+
+                if (dlResult.tenderFileUrl) {
+                  await dispatch(parseTenderPdf({
+                    id: Number(row.id),
+                  })).unwrap();
+                }
+              } catch {
+                console.error("Download or parse failed");
               }
-            } catch {
-              console.error("Download or parse failed");
+            }
+          } else if (row.type === "Non-Gem") {
+            const referenceNo = row.referenceNo as string | undefined;
+            const tenderStatusId = row.tenderStatusId ? Number(row.tenderStatusId) : null;
+            if (referenceNo) {
+              try {
+                await dispatch(downloadTenderPdf({
+                  id: Number(row.id),
+                  type: "Non-Gem",
+                  referenceNo,
+                  tenderStatusId,
+                })).unwrap();
+              } catch {
+                console.error("Non-GEM search failed");
+              }
             }
           }
         }

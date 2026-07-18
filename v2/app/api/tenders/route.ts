@@ -49,6 +49,7 @@ const ALL_KNOWN_FIELDS = (() => {
   const fields = [...new Set([
     ...GEM_DISPLAY_FIELDS,
     ...NON_GEM_DISPLAY_FIELDS,
+    "tenderStatusId",
     "aiRelevanceValid",
     "aiRelevanceReason",
     "excludedCategory",

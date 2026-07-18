@@ -708,21 +708,44 @@ export default function TenderTable({
             console.error(`Failed to save AI relevance for row ${i}`);
           }
 
-          if (result.data.valid && currentRow.type === "Gem") {
-            const gemId = currentRow.referenceNo as string | undefined;
-            if (gemId) {
-              const dlRes = await fetch("/api/download-pdfs", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tenders: [{ id: Number(currentRow.id), gemId }] }),
-              });
-              const dlData = await dlRes.json();
-              if (dlData.success > 0) {
-                await fetch("/api/parse-pdfs", {
+          if (result.data.valid) {
+            if (currentRow.type === "Gem") {
+              const gemId = currentRow.referenceNo as string | undefined;
+              if (gemId) {
+                const dlRes = await fetch("/api/download-pdfs", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ tenders: [{ id: Number(currentRow.id) }] }),
+                  body: JSON.stringify({ tenders: [{ id: Number(currentRow.id), type: "Gem", gemId }] }),
                 });
+                const dlData = await dlRes.json();
+                if (dlData.success > 0) {
+                  await fetch("/api/parse-pdfs", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ tenders: [{ id: Number(currentRow.id) }] }),
+                  });
+                }
+              }
+            } else if (currentRow.type === "Non-Gem") {
+              const referenceNo = currentRow.referenceNo as string | undefined;
+              const tenderStatusId = currentRow.tenderStatusId ? Number(currentRow.tenderStatusId) : null;
+              console.log(`[Non-GEM] Trying search for row ${i}: ref="${referenceNo}" statusId=${tenderStatusId}`);
+              if (referenceNo) {
+                try {
+                  const res = await fetch("/api/download-pdfs", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      tenders: [{ id: Number(currentRow.id), type: "Non-Gem", referenceNo, tenderStatusId }],
+                    }),
+                  });
+                  const data = await res.json();
+                  console.log(`[Non-GEM] Result for ${referenceNo}:`, data);
+                } catch (e) {
+                  console.error(`[Non-GEM] Fetch failed for ${referenceNo}:`, e);
+                }
+              } else {
+                console.warn(`[Non-GEM] Skipping row ${i} — no referenceNo`);
               }
             }
           }

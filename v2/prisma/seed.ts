@@ -46,6 +46,10 @@ async function main() {
         name: "Pritha",
         email: "sales@laserpowerinfra.com",
       },
+      {
+        name: "Test User",
+        email: "bidyutdas.laserpowerinfra@gmail.com"
+      }
     ],
     skipDuplicates: true,
   });
