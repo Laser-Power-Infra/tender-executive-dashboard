@@ -27,6 +27,7 @@ import DashboardSkeleton from "@/components/tender-viewer/dashboard-skeleton";
 import WebsiteEditDialog from "@/components/tender-viewer/website-edit-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, MessageSquare, Pencil, Check } from "lucide-react";
+import { getDisplayNameMap } from "@/lib/tender-columns";
 import {
   OptimizedTenderTable,
   ColumnDef,
@@ -53,6 +54,7 @@ export default function Dashboard() {
   const updatingCells = useAppSelector((s) => s.tenders.updatingCells);
   const uploadResults = useAppSelector((s) => s.upload.results);
 
+  const [displayNameMap, setDisplayNameMap] = useState<Record<string, string>>({});
   const [feedbackRow, setFeedbackRow] = useState<Record<
     string,
     unknown
@@ -109,6 +111,17 @@ export default function Dashboard() {
       dispatch(appendTenders(fileIds));
     }
   }, [uploadResults, dispatch]);
+
+  useEffect(() => {
+    fetch("/api/column-mappings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.mappings) {
+          setDisplayNameMap(getDisplayNameMap(data.mappings));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleAssignmentChange = useCallback(
     (rowIndex: number, type: string, id: string, associationIds: string[]) => {
@@ -877,7 +890,7 @@ export default function Dashboard() {
 
       const options = selectFilterOptions[col];
       return {
-        header: formatColumnName(col),
+        header: displayNameMap[col] ?? formatColumnName(col),
         accessor: col as keyof Record<string, unknown>,
         defaultWidth:
           col === "id"
@@ -912,6 +925,7 @@ export default function Dashboard() {
     updatingCells,
     handleDecisionClick,
     handleAssignmentChange,
+    displayNameMap,
   ]);
 
   return (

@@ -88,18 +88,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (nonGemRequests.length > 0) {
-      const resolved = await Promise.all(
-        nonGemRequests.map(resolveNonGemTenderInfo),
-      );
+    // if (nonGemRequests.length > 0) {
+    //   const resolved = await Promise.all(
+    //     nonGemRequests.map(resolveNonGemTenderInfo),
+    //   );
 
-      nonGemResults = await searchNonGemTenders(
-        resolved,
-        (current, total) => {
-          console.log(`Non-GEM progress: ${current}/${total}`);
-        },
-      );
-    }
+    //   nonGemResults = await searchNonGemTenders(
+    //     resolved,
+    //     (current, total) => {
+    //       console.log(`Non-GEM progress: ${current}/${total}`);
+    //     },
+    //   );
+    // }
 
     const allResults = [...gemResults, ...nonGemResults];
     const successCount = allResults.filter((r) => r.success).length;

@@ -728,24 +728,22 @@ export default function TenderTable({
               }
             } else if (currentRow.type === "Non-Gem") {
               const referenceNo = currentRow.referenceNo as string | undefined;
-              const tenderStatusId = currentRow.tenderStatusId ? Number(currentRow.tenderStatusId) : null;
-              console.log(`[Non-GEM] Trying search for row ${i}: ref="${referenceNo}" statusId=${tenderStatusId}`);
-              if (referenceNo) {
+              const website = currentRow.website as string | undefined;
+              console.log(`[Non-GEM] Trying search for row ${i}: ref="${referenceNo}" website="${website}"`);
+              if (referenceNo && website) {
                 try {
-                  const res = await fetch("/api/download-pdfs", {
+                  const res = await fetch("http://localhost:8000/api/search-tender/", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      tenders: [{ id: Number(currentRow.id), type: "Non-Gem", referenceNo, tenderStatusId }],
-                    }),
+                    body: JSON.stringify({ website, reference_no: referenceNo }),
                   });
                   const data = await res.json();
-                  console.log(`[Non-GEM] Result for ${referenceNo}:`, data);
+                  console.log(`[Non-GEM] Django API result for ${referenceNo}:`, data);
                 } catch (e) {
-                  console.error(`[Non-GEM] Fetch failed for ${referenceNo}:`, e);
+                  console.error(`[Non-GEM] Django API call failed for ${referenceNo}:`, e);
                 }
               } else {
-                console.warn(`[Non-GEM] Skipping row ${i} — no referenceNo`);
+                console.warn(`[Non-GEM] Skipping row ${i} — missing referenceNo or website`);
               }
             }
           }

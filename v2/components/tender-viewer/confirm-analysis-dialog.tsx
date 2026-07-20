@@ -83,18 +83,22 @@ export default function ConfirmAnalysisDialog({
             }
           } else if (row.type === "Non-Gem") {
             const referenceNo = row.referenceNo as string | undefined;
-            const tenderStatusId = row.tenderStatusId ? Number(row.tenderStatusId) : null;
-            if (referenceNo) {
+            const website = row.website as string | undefined;
+            if (referenceNo && website) {
               try {
-                await dispatch(downloadTenderPdf({
-                  id: Number(row.id),
-                  type: "Non-Gem",
-                  referenceNo,
-                  tenderStatusId,
-                })).unwrap();
-              } catch {
-                console.error("Non-GEM search failed");
+                console.log(process.env.DJANGO_API_KEY)
+                const res = await fetch(`${process.env.DJANGO_API_KEY}/api/search-tender/`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ website, reference_no: referenceNo }),
+                });
+                const data = await res.json();
+                console.log(`[Non-GEM] Django API result for ${referenceNo}:`, data);
+              } catch (e) {
+                console.error(`[Non-GEM] Django API call failed for ${referenceNo}:`, e);
               }
+            } else {
+              console.warn(`[Non-GEM] Skipping — missing referenceNo or website`);
             }
           }
         }

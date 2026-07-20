@@ -31,7 +31,7 @@ const NON_GEM_FIELDS = new Set([
 
 type ColumnMap = Record<string, string>;
 
-const COLUMN_MAP: ColumnMap = {
+export const COLUMN_MAP: ColumnMap = {
   referenceNo: "referenceNo",
   referenceNumber: "referenceNo",
   tenderReference: "referenceNo",
@@ -41,6 +41,7 @@ const COLUMN_MAP: ColumnMap = {
   deptTenderNumber: "referenceNo",
   deptTender: "referenceNo",
   tenderId: "referenceNo",
+  portalId: "referenceNo",
 
   tenderBrief: "tenderBrief",
   brief: "tenderBrief",
@@ -237,6 +238,29 @@ function normalizeHeader(header: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
+export function buildMergedColumnMap(
+  dbMappings: { excelHeader: string; dbField: string }[],
+  staticMap: ColumnMap = NORMALIZED_COLUMN_MAP,
+): ColumnMap {
+  const dbMap: ColumnMap = {};
+  for (const m of dbMappings) {
+    dbMap[normalizeHeader(m.excelHeader)] = m.dbField;
+  }
+  return { ...staticMap, ...dbMap };
+}
+
+export function getDisplayNameMap(
+  dbMappings: { dbField: string; displayName: string | null }[],
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const m of dbMappings) {
+    if (m.displayName && !(m.dbField in map)) {
+      map[m.dbField] = m.displayName;
+    }
+  }
+  return map;
+}
+
 function isIgnoredHeader(header: string): boolean {
   const trimmed = header.trim();
   if (!trimmed) return true;
@@ -289,8 +313,10 @@ function parseDate(rawValue: unknown): Date | null {
 
 export function mapRowToTender(
   row: Record<string, unknown>,
-  knownFieldSet: Set<string>
+  knownFieldSet: Set<string>,
+  customColumnMap?: ColumnMap,
 ): ParsedRow {
+  const columnMap = customColumnMap ?? NORMALIZED_COLUMN_MAP;
   const knownFields: Record<string, unknown> = {};
   const extraFields: { fieldName: string; fieldValue: string }[] = [];
 
@@ -298,7 +324,7 @@ export function mapRowToTender(
     if (isIgnoredHeader(header)) continue;
 
     const normalized = normalizeHeader(header);
-    const mappedField = NORMALIZED_COLUMN_MAP[normalized]
+    const mappedField = columnMap[normalized]
       ?? (/quantity|qty/.test(normalized) && /size/.test(normalized) ? "quantity" : undefined);
 
     if (mappedField && knownFieldSet.has(mappedField)) {
@@ -319,8 +345,10 @@ export function mapRowToTender(
 }
 
 function findReferenceNoColumn(
-  headers: string[]
+  headers: string[],
+  customColumnMap?: ColumnMap,
 ): string | undefined {
+  const columnMap = customColumnMap ?? NORMALIZED_COLUMN_MAP;
   for (const h of headers) {
     if (isIgnoredHeader(h)) continue;
     if (/^ref(erence)?\.?\s*no(\.|mber)?$/i.test(h) || /^ref(erence)?\.?\s*no(\.|mber)?$/i.test(h.replace(/[\s_-]+/g, " "))) {
@@ -329,20 +357,21 @@ function findReferenceNoColumn(
     const n = normalizeHeader(h);
     if (n.includes("ref") && n.includes("no")) return h;
     if (n === "tenderid" || n === "tid") return h;
-    if (NORMALIZED_COLUMN_MAP[n] === "referenceNo") return h;
+    if (columnMap[n] === "referenceNo") return h;
   }
   return undefined;
 }
 
-export function hasReferenceNoColumn(headers: string[]): boolean {
-  return !!findReferenceNoColumn(headers);
+export function hasReferenceNoColumn(headers: string[], customColumnMap?: ColumnMap): boolean {
+  return !!findReferenceNoColumn(headers, customColumnMap);
 }
 
 export function getReferenceNo(
   row: Record<string, unknown>,
-  headers: string[]
+  headers: string[],
+  customColumnMap?: ColumnMap,
 ): string | null {
-  const col = findReferenceNoColumn(headers);
+  const col = findReferenceNoColumn(headers, customColumnMap);
   if (!col) return null;
   const val = row[col];
   return val == null ? null : String(val).trim();
@@ -358,12 +387,14 @@ export function filterHeaders(headers: string[]): string[] {
 
 export function findColumnByFieldName(
   headers: string[],
-  fieldName: string
+  fieldName: string,
+  customColumnMap?: ColumnMap,
 ): string | undefined {
+  const columnMap = customColumnMap ?? NORMALIZED_COLUMN_MAP;
   for (const h of headers) {
     if (isIgnoredHeader(h)) continue;
     const n = normalizeHeader(h);
-    if (NORMALIZED_COLUMN_MAP[n] === fieldName) return h;
+    if (columnMap[n] === fieldName) return h;
   }
   return undefined;
 }
@@ -371,9 +402,10 @@ export function findColumnByFieldName(
 export function getFieldValue(
   row: Record<string, unknown>,
   headers: string[],
-  fieldName: string
+  fieldName: string,
+  customColumnMap?: ColumnMap,
 ): unknown {
-  const col = findColumnByFieldName(headers, fieldName);
+  const col = findColumnByFieldName(headers, fieldName, customColumnMap);
   if (!col) return null;
   return row[col] ?? null;
 }

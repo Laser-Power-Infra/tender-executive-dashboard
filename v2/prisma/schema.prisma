@@ -370,6 +370,20 @@ model TenderExtraField {
   @@map("tender_extra_fields")
 }
 
+model ColumnMapping {
+  id          Int      @id @default(autoincrement())
+  excelHeader String
+  dbField     String
+  displayName String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([excelHeader, dbField])
+  @@index([dbField])
+  @@map("column_mappings")
+}
+
 model ExlusionKeywords{
   id Int @id @default(autoincrement())
 
