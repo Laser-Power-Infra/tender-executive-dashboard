@@ -13,6 +13,7 @@ import {
   getFieldValue,
   buildMergedColumnMap,
 } from "@/lib/tender-columns";
+import { sendTenderWebhook } from "@/lib/webhook";
 
 const SHEET_CONCURRENCY = 3;
 const INSERT_BATCH_SIZE = 50;
@@ -66,6 +67,7 @@ function buildCreateData(
   knownFieldSet: Set<string>,
   excludedCategory: string | null,
   customColumnMap?: Record<string, string>,
+  associations?: { id: number; name: string; email: string }[],
 ): { refNo: string; createData: Record<string, unknown> } {
   const refNo = (getReferenceNo(row, headers, customColumnMap) || "").toUpperCase();
   const { knownFields, extraFields } = mapRowToTender(row, knownFieldSet, customColumnMap);
@@ -80,6 +82,27 @@ function buildCreateData(
     if (key !== "referenceNo") {
       createData[key] = value;
     }
+  }
+
+  const assignedValue = knownFields.assignedTo as string | undefined;
+  if (assignedValue && associations) {
+    const lowerValue = assignedValue.toLowerCase().trim();
+    const matched = associations.find(
+      (a) => a.name.toLowerCase() === lowerValue || a.email.toLowerCase() === lowerValue,
+    );
+    if (matched) {
+      createData.tenderAssociations = {
+        create: [{ associationId: matched.id }],
+      };
+    } else {
+      const testUser = associations.find((a) => a.name.toLowerCase() === "test_user");
+      if (testUser) {
+        createData.tenderAssociations = {
+          create: [{ associationId: testUser.id }],
+        };
+      }
+    }
+    delete createData.assignedTo;
   }
 
   if (extraFields.length) {
@@ -98,6 +121,7 @@ function parseSheetData(
   conductorsKeywords: string[],
   today: Date,
   customColumnMap?: Record<string, string>,
+  associations?: { id: number; name: string; email: string }[],
 ): ParsedSheet {
   const sheet = workbook.Sheets[sheetName];
   const jsonData: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
@@ -169,6 +193,7 @@ function parseSheetData(
         GEM_FIELDS,
         excludedCategory,
         customColumnMap,
+        associations,
       );
       gemPrepared.push({ refNo: r, createData });
     } else {
@@ -179,6 +204,7 @@ function parseSheetData(
         NON_GEM_FIELDS,
         excludedCategory,
         customColumnMap,
+        associations,
       );
       nonGemPrepared.push({ refNo: r, createData });
     }
@@ -204,24 +230,66 @@ async function insertGemPrepared(
 
   const existingRecords = await prisma.gemTender.findMany({
     where: { referenceNo: { in: refNos } },
+    include: { tenderAssociations: { include: { association: true } } },
   });
 
   const existingMap = new Map(existingRecords.map((r) => [r.referenceNo, r]));
 
   const toCreate: Record<string, unknown>[] = [];
+  const webhookQueue: string[] = [];
 
   for (const p of prepared) {
     const old = existingMap.get(p.refNo);
     if (old) {
+      const updateData: Record<string, unknown> = {
+        fileId,
+      };
+
       const newDeadline = p.createData.deadline as Date | undefined;
-      if (newDeadline && (!old.deadline || newDeadline.getTime() > old.deadline.getTime())) {
+      if (newDeadline && (!old.deadline || newDeadline.getTime() >= old.deadline.getTime())) {
+        updateData.deadline = newDeadline;
+      }
+
+      if (p.createData.app && p.createData.app !== "NOT_DECIDED" && old.app === "NOT_DECIDED") {
+        updateData.app = p.createData.app;
+      }
+      if (p.createData.aps && p.createData.aps !== "NOT_DECIDED" && old.aps === "NOT_DECIDED") {
+        updateData.aps = p.createData.aps;
+      }
+      if (p.createData.apm && p.createData.apm !== "NOT_DECIDED" && old.apm === "NOT_DECIDED") {
+        updateData.apm = p.createData.apm;
+      }
+
+      if (Object.keys(updateData).length > 0) {
         await prisma.gemTender.update({
           where: { id: old.id },
-          data: { deadline: newDeadline },
+          data: updateData as any,
         });
+      }
+
+      const addedAssociations = p.createData.tenderAssociations && old.tenderAssociations.length === 0;
+      if (addedAssociations) {
+        const assocData = p.createData.tenderAssociations as { create: { associationId: number }[] };
+        await prisma.tenderAssociation.createMany({
+          data: assocData.create.map((a) => ({
+            gemTenderId: old.id,
+            associationId: a.associationId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      const wasAlready = old.apm === "YES" && old.tenderAssociations.length > 0;
+      const afterApm = (updateData.apm as string | undefined) ?? old.apm;
+      const afterHasAssociations = addedAssociations || old.tenderAssociations.length > 0;
+      if (!wasAlready && afterApm === "YES" && afterHasAssociations) {
+        webhookQueue.push(old.referenceNo);
       }
     } else {
       toCreate.push({ ...p.createData, fileId });
+      if (p.createData.apm === "YES" && p.createData.tenderAssociations) {
+        webhookQueue.push(p.refNo);
+      }
     }
   }
 
@@ -249,6 +317,28 @@ async function insertGemPrepared(
       }
     }
   }
+
+  if (webhookQueue.length > 0) {
+    const tenders = await prisma.gemTender.findMany({
+      where: { referenceNo: { in: webhookQueue } },
+      include: { tenderAssociations: { include: { association: true } } },
+    });
+    for (const t of tenders) {
+      if (t.apm === "YES" && t.tenderAssociations.length > 0) {
+        sendTenderWebhook(
+          {
+            referenceNo: t.referenceNo,
+            itemCategory: t.itemCategory,
+            organization: t.organization,
+            deadline: t.deadline,
+            tenderFileUrl: t.tenderFileUrl ?? "",
+          },
+          "Gem",
+          t.tenderAssociations,
+        );
+      }
+    }
+  }
 }
 
 async function insertNonGemPrepared(
@@ -262,24 +352,66 @@ async function insertNonGemPrepared(
 
   const existingRecords = await prisma.nonGemTender.findMany({
     where: { referenceNo: { in: refNos } },
+    include: { tenderAssociations: { include: { association: true } } },
   });
 
   const existingMap = new Map(existingRecords.map((r) => [r.referenceNo, r]));
 
   const toCreate: Record<string, unknown>[] = [];
+  const webhookQueue: string[] = [];
 
   for (const p of prepared) {
     const old = existingMap.get(p.refNo);
     if (old) {
+      const updateData: Record<string, unknown> = {
+        fileId,
+      };
+
       const newDeadline = p.createData.deadline as Date | undefined;
-      if (newDeadline && (!old.deadline || newDeadline.getTime() > old.deadline.getTime())) {
+      if (newDeadline && (!old.deadline || newDeadline.getTime() >= old.deadline.getTime())) {
+        updateData.deadline = newDeadline;
+      }
+
+      if (p.createData.app && p.createData.app !== "NOT_DECIDED" && old.app === "NOT_DECIDED") {
+        updateData.app = p.createData.app;
+      }
+      if (p.createData.aps && p.createData.aps !== "NOT_DECIDED" && old.aps === "NOT_DECIDED") {
+        updateData.aps = p.createData.aps;
+      }
+      if (p.createData.apm && p.createData.apm !== "NOT_DECIDED" && old.apm === "NOT_DECIDED") {
+        updateData.apm = p.createData.apm;
+      }
+
+      if (Object.keys(updateData).length > 0) {
         await prisma.nonGemTender.update({
           where: { id: old.id },
-          data: { deadline: newDeadline },
+          data: updateData as any,
         });
+      }
+
+      const addedAssociations = p.createData.tenderAssociations && old.tenderAssociations.length === 0;
+      if (addedAssociations) {
+        const assocData = p.createData.tenderAssociations as { create: { associationId: number }[] };
+        await prisma.tenderAssociation.createMany({
+          data: assocData.create.map((a) => ({
+            nonGemTenderId: old.id,
+            associationId: a.associationId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      const wasAlready = old.apm === "YES" && old.tenderAssociations.length > 0;
+      const afterApm = (updateData.apm as string | undefined) ?? old.apm;
+      const afterHasAssociations = addedAssociations || old.tenderAssociations.length > 0;
+      if (!wasAlready && afterApm === "YES" && afterHasAssociations) {
+        webhookQueue.push(old.referenceNo);
       }
     } else {
       toCreate.push({ ...p.createData, fileId });
+      if (p.createData.apm === "YES" && p.createData.tenderAssociations) {
+        webhookQueue.push(p.refNo);
+      }
     }
   }
 
@@ -303,6 +435,36 @@ async function insertNonGemPrepared(
             `Non-gem row ${(data as any).referenceNo || "unknown"}: ${err instanceof Error ? err.message : "Unknown error"}`,
           );
         }
+      }
+    }
+  }
+
+  if (webhookQueue.length > 0) {
+    const tenders: {
+      referenceNo: string;
+      itemCategory: string | null;
+      organization: string | null;
+      deadline: Date | null;
+      tenderFileUrl: string | null;
+      apm: string;
+      tenderAssociations: { association: { name: string; email: string } }[];
+    }[] = (await prisma.nonGemTender.findMany({
+      where: { referenceNo: { in: webhookQueue } },
+      include: { tenderAssociations: { include: { association: true } } },
+    })) as any;
+    for (const t of tenders) {
+      if (t.apm === "YES" && t.tenderAssociations.length > 0) {
+        sendTenderWebhook(
+          {
+            referenceNo: t.referenceNo,
+            itemCategory: t.itemCategory,
+            organization: t.organization,
+            deadline: t.deadline,
+            tenderFileUrl: t.tenderFileUrl ?? "",
+          },
+          "Non-Gem",
+          t.tenderAssociations,
+        );
       }
     }
   }
@@ -374,6 +536,8 @@ async function processFile(file: File): Promise<FileResult> {
   const dbMappingRows = await prisma.columnMapping.findMany();
   const mergedColumnMap = buildMergedColumnMap(dbMappingRows);
 
+  const associations = await prisma.association.findMany();
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -402,6 +566,7 @@ async function processFile(file: File): Promise<FileResult> {
         conductorsKeywords,
         today,
         mergedColumnMap,
+        associations,
       );
 
       const sheetResult: SheetResult = {

@@ -55,6 +55,11 @@ export default function Dashboard() {
   const uploadResults = useAppSelector((s) => s.upload.results);
 
   const [displayNameMap, setDisplayNameMap] = useState<Record<string, string>>({});
+  const [mergedGroups, setMergedGroups] = useState<{
+    label: string;
+    separator: string;
+    fields: string[];
+  }[]>([]);
   const [feedbackRow, setFeedbackRow] = useState<Record<
     string,
     unknown
@@ -113,11 +118,22 @@ export default function Dashboard() {
   }, [uploadResults, dispatch]);
 
   useEffect(() => {
-    fetch("/api/column-mappings")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.mappings) {
-          setDisplayNameMap(getDisplayNameMap(data.mappings));
+    Promise.all([
+      fetch("/api/column-mappings").then((r) => r.json()),
+      fetch("/api/column-groups").then((r) => r.json()),
+    ])
+      .then(([mappingData, groupsData]) => {
+        if (mappingData.mappings) {
+          setDisplayNameMap(getDisplayNameMap(mappingData.mappings));
+        }
+        if (groupsData.groups) {
+          setMergedGroups(
+            groupsData.groups.map((g: { label: string; separator: string; fields: string }) => ({
+              label: g.label,
+              separator: g.separator,
+              fields: JSON.parse(g.fields),
+            })),
+          );
         }
       })
       .catch(() => {});
@@ -377,7 +393,23 @@ export default function Dashboard() {
 
   const columnDefs = useMemo(() => {
     if (!tenderData) return [];
-    return orderedColumns.map((col): ColumnDef<Record<string, unknown>> => {
+
+    const mergedFieldSet = new Set<string>();
+    const mergedDefList: {
+      label: string;
+      separator: string;
+      fields: string[];
+      firstField: string;
+    }[] = [];
+    for (const g of mergedGroups) {
+      if (g.fields.length >= 2) {
+        for (const f of g.fields) mergedFieldSet.add(f);
+        mergedDefList.push({ ...g, firstField: g.fields[0] });
+      }
+    }
+
+    const filteredCols = orderedColumns.filter((c) => !mergedFieldSet.has(c));
+    const individualDefs = filteredCols.map((col): ColumnDef<Record<string, unknown>> => {
       const colLower = col.toLowerCase();
 
       if (col === "app" || col === "aps" || col === "apm") {
@@ -918,6 +950,75 @@ export default function Dashboard() {
               : undefined,
       };
     });
+
+    const processedGroups = new Set<string>();
+    const mergedDefs = mergedDefList
+      .filter((g) => {
+        const idx = orderedColumns.indexOf(g.firstField);
+        const alreadyIn = processedGroups.has(g.label);
+        processedGroups.add(g.label);
+        return idx >= 0 && !alreadyIn;
+      })
+      .sort(
+        (a, b) =>
+          orderedColumns.indexOf(a.firstField) -
+          orderedColumns.indexOf(b.firstField),
+      )
+      .map((g) => {
+        const firstField = g.fields[0];
+        const isConcatenated = g.separator.trim().length > 0;
+        return {
+          header: isConcatenated
+            ? (displayNameMap[g.label] ?? g.label)
+            : (displayNameMap[firstField] ?? firstField),
+          accessor: g.label as keyof Record<string, unknown>,
+          defaultWidth: 250,
+          sortValue: (_: unknown, row: Record<string, unknown>) => {
+            if (isConcatenated) {
+              const parts = g.fields
+                .map((f) => String(row[f as keyof typeof row] ?? ""))
+                .filter(Boolean);
+              return parts.join(g.separator);
+            }
+            return String(row[firstField as keyof typeof row] ?? "");
+          },
+          renderCell: (_: unknown, row: Record<string, unknown>) => {
+            if (isConcatenated) {
+              const parts = g.fields
+                .map((f) => String(row[f as keyof typeof row] ?? ""))
+                .filter(Boolean);
+              return parts.length > 0 ? parts.join(g.separator) : "-";
+            }
+            const val = row[firstField as keyof typeof row];
+            return val != null && val !== "" ? String(val) : "-";
+          },
+        } as ColumnDef<Record<string, unknown>>;
+      });
+
+    const result: ColumnDef<Record<string, unknown>>[] = [];
+    let mergedIdx = 0;
+    let indivIdx = 0;
+    const mergedByPos = mergedDefs.map((d) => {
+      const firstField = mergedDefList[mergedDefs.indexOf(d)]!.firstField;
+      return { def: d, pos: orderedColumns.indexOf(firstField) };
+    });
+
+    for (let i = 0; i < orderedColumns.length; i++) {
+      while (mergedIdx < mergedByPos.length && mergedByPos[mergedIdx].pos === i) {
+        result.push(mergedByPos[mergedIdx].def);
+        mergedIdx++;
+      }
+      if (!mergedFieldSet.has(orderedColumns[i])) {
+        result.push(individualDefs[indivIdx]);
+        indivIdx++;
+      }
+    }
+    while (mergedIdx < mergedByPos.length) {
+      result.push(mergedByPos[mergedIdx].def);
+      mergedIdx++;
+    }
+
+    return result;
   }, [
     orderedColumns,
     selectFilterOptions,
@@ -926,6 +1027,7 @@ export default function Dashboard() {
     handleDecisionClick,
     handleAssignmentChange,
     displayNameMap,
+    mergedGroups,
   ]);
 
   return (

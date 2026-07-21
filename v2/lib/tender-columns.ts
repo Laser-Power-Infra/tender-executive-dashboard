@@ -197,7 +197,16 @@ export const COLUMN_MAP: ColumnMap = {
   source: "source",
   originalSource: "source",
 
+  app: "app",
+  aps: "aps",
+  apm: "apm",
+
   assignedTo: "assignedTo",
+  assignee: "assignedTo",
+  assignedPerson: "assignedTo",
+  assignedToName: "assignedTo",
+  assigned: "assignedTo",
+  "Assigned To": "assignedTo",
 
   markedStatus: "markedStatus",
 
@@ -331,6 +340,10 @@ export function mapRowToTender(
       if (mappedField === "deadline") {
         const parsed = parseDate(rawValue);
         if (parsed) knownFields[mappedField] = parsed;
+      } else if (mappedField === "app" || mappedField === "aps" || mappedField === "apm") {
+        const raw = rawValue == null ? "" : String(rawValue);
+        const val = raw.trim().toLowerCase();
+        knownFields[mappedField] = val === "yes" ? "YES" : val === "no" ? "NO" : "NOT_DECIDED";
       } else {
         const val = rawValue == null ? "" : String(rawValue).trim();
         if (val) knownFields[mappedField] = val;

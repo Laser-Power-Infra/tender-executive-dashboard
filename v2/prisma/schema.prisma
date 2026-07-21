@@ -384,6 +384,18 @@ model ColumnMapping {
   @@map("column_mappings")
 }
 
+model ColumnGroup {
+  id        Int      @id @default(autoincrement())
+  label     String
+  separator String   @default(" @ ")
+  fields    String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("column_groups")
+}
+
 model ExlusionKeywords{
   id Int @id @default(autoincrement())
 

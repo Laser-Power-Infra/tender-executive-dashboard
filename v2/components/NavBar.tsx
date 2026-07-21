@@ -19,6 +19,7 @@ const links = [
 
 const adminLinks = [
   { href: "/admin/mappings", label: "Column Mappings" },
+  { href: "/admin/merging", label: "Column Merging" },
 ];
 
 export function NavBar() {

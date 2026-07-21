@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, X, Loader2 } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import MappingDialog from "@/components/admin/MappingDialog";
 import { GEM_FIELDS } from "@/lib/tender-columns";
@@ -18,12 +18,11 @@ interface Group {
   headers: { id: number; excelHeader: string }[];
 }
 
-const dbFieldOptions = [...GEM_FIELDS].sort();
-
 export default function ColumnMappingsPage() {
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const dbFieldOptions = useMemo(() => [...GEM_FIELDS].sort(), []);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editData, setEditData] = useState<Mapping | null>(null);
@@ -146,7 +145,7 @@ export default function ColumnMappingsPage() {
   }
 
   return (
-    <div style={{ padding: "24px", maxWidth: "1000px", margin: "0 auto" }}>
+    <div className="w-full" style={{ padding: "24px", margin: "0 auto" }}>
       <div
         style={{
           display: "flex",
