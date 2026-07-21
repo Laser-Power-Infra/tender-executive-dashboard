@@ -91,7 +91,7 @@ async function buildCostingMap(accessToken: string): Promise<Map<string, Costing
   return costingMap;
 }
 
-async function getCostingDetails(
+export async function getCostingDetails(
   attachmentUrl: string,
   docketNo: string,
   driveAccessToken: string | null

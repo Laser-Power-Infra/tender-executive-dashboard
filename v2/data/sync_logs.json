@@ -1,27 +1,5 @@
 [
   {
-    "id": "ebabb045-4346-41e8-b24f-c6d2ec72c3ed",
-    "startTime": 1784460135692,
-    "endTime": 1784460135891,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
-    "id": "804a7fc1-5588-47c1-846a-49f1717757d9",
-    "startTime": 1784461935704,
-    "endTime": 1784461935837,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
     "id": "ab620f74-7cdd-45f8-a035-db539467009b",
     "startTime": 1784463735706,
     "endTime": 1784463735796,
@@ -1149,6 +1127,28 @@
     "endTime": 1784615993139,
     "status": "SUCCESS",
     "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "b38189bf-f98d-461f-8bdf-1ab6d90a0490",
+    "startTime": 1784632905055,
+    "endTime": 1784632905157,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "833272c6-35e1-486c-8758-e2cc7d8cc771",
+    "startTime": 1784633640819,
+    "endTime": 1784634377882,
+    "status": "SUCCESS",
+    "recordsProcessed": 2988,
     "matchedFolders": 0,
     "filesIndexedCount": 0,
     "triggeredBy": "SYSTEM",

@@ -81,6 +81,7 @@ export interface EpcTenderRecord {
   competitors?: string | null;
   fileCount?: number;
   hasBoqChart?: boolean;
+  boqFileId?: string;
   bgStatus?: string | null;
   tenderUpdateStatus?: TenderUpdateStatus;
   nextAction?: NextAction | null;

@@ -84,7 +84,20 @@ export default function Home() {
 
   const alertData = useMemo(() => calculations.generateAlerts(activeDataset), [calculations, activeDataset]);
 
-  const handleRefresh = async () => { await liveRefresh(); };
+  const handleRefresh = async () => {
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json();
+        if (body?.details !== "Already running") {
+          console.warn("[Refresh] Sync pipeline returned:", body);
+        }
+      }
+    } catch (err) {
+      console.warn("[Refresh] Sync pipeline failed, continuing with data refresh:", err);
+    }
+    await liveRefresh();
+  };
   const handleClearAllFilters = () => {
     setClientSearch("");
     setSelectedStatuses([]);
