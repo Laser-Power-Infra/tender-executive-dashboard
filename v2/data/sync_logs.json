@@ -1,60 +1,5 @@
 [
   {
-    "id": "1cb0daf4-2ad8-4008-9e3e-ee87be0cb2af",
-    "startTime": 1784361023322,
-    "endTime": 1784361023513,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
-    "id": "8728a1d5-8023-463b-8b6b-f9a6ca87e6d5",
-    "startTime": 1784361030958,
-    "endTime": 1784361031030,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
-    "id": "d56f4f73-4b8b-419f-a43b-02fb99ddf793",
-    "startTime": 1784361763048,
-    "endTime": 1784361763131,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
-    "id": "1f79f632-f596-4b05-a3cb-b2f0ad502079",
-    "startTime": 1784361765737,
-    "endTime": 1784361765905,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
-    "id": "3e20085f-dbfe-4542-8c02-0693ce5b56f7",
-    "startTime": 1784361820026,
-    "endTime": 1784361820103,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
     "id": "5a5b032b-6dac-4f03-9dd9-a75e5d986626",
     "startTime": 1784363620047,
     "endTime": 1784363620230,
@@ -1092,6 +1037,61 @@
     "id": "8c12887a-13ec-4a79-bc3c-2dff31d845fc",
     "startTime": 1784527408264,
     "endTime": 1784527408351,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "55e590c8-0827-4c2b-a820-6f2b4e885926",
+    "startTime": 1784551008577,
+    "endTime": 1784551009104,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "b8d68f4c-5885-4c33-995e-822b9f5e06a6",
+    "startTime": 1784551591014,
+    "endTime": 1784551591132,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "b47f0992-0dbb-4151-a0d9-21aadf50e39f",
+    "startTime": 1784551591969,
+    "endTime": 1784551592511,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "f8da7e0c-fdb8-4b3d-a671-def8e8469506",
+    "startTime": 1784553597926,
+    "endTime": 1784553598028,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "74ef1a91-adf5-4c36-8604-d5993664c349",
+    "startTime": 1784553599632,
+    "endTime": 1784553600074,
     "status": "SUCCESS",
     "recordsProcessed": 0,
     "matchedFolders": 0,

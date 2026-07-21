@@ -1,6 +1,7 @@
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { syncMasterWebsites } from "../lib/google-sheets";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg(process.env.DATABASE_URL!),
@@ -59,6 +60,19 @@ async function main() {
     console.error("❌ Errors syncing tender status records:", result.errors);
   }
   console.log(`✅ Synced ${result.total} tender status records from Google Sheets.`);
+
+  const adminPassword = await bcrypt.hash("admin123", 10);
+  await prisma.user.upsert({
+    where: { email: "admin@laserpower.in" },
+    update: {},
+    create: {
+      name: "Admin",
+      email: "admin@laserpower.in",
+      passwordHash: adminPassword,
+      role: "admin",
+    },
+  });
+  console.log("✅ Admin user seeded (admin@laserpower.in / admin123).");
 
   console.log("✅ Seed completed.");
 }

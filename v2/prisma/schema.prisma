@@ -25,6 +25,18 @@ enum NextAction {
   REVERSE_AUCTION_PENDING
 }
 
+model User {
+  id            String   @id @default(uuid())
+  name          String?
+  email         String   @unique
+  passwordHash  String?
+  role          String   @default("user")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("users")
+}
+
 model Tender {
   id                 String   @id @default(uuid())
   createdAt          DateTime @default(now())
