@@ -836,7 +836,12 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
         const totalQty = row.totalQuantity as string | null | undefined;
         const qty = value as string | null | undefined;
 
-        if (totalQty && totalQty !== "0" && totalQty !== "" && (!qty || qty === "")) {
+        if (
+          totalQty &&
+          totalQty !== "0" &&
+          totalQty !== "" &&
+          (!qty || qty === "")
+        ) {
           return totalQty;
         }
       }
@@ -1047,7 +1052,11 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
                       <span>{col.header}</span>
                       {sortColumn === String(col.accessor) && (
                         <span className="sort-indicator">
-                          {sortDirection === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                          {sortDirection === "asc" ? (
+                            <ChevronUp size={10} />
+                          ) : (
+                            <ChevronDown size={10} />
+                          )}
                         </span>
                       )}
                     </div>
@@ -1135,7 +1144,11 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
                             className="details-link"
                             onClick={() => toggleRowExpansion(rowKeyValue)}
                           >
-                            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            {isExpanded ? (
+                              <ChevronDown size={12} />
+                            ) : (
+                              <ChevronRight size={12} />
+                            )}
                           </button>
                         )}
                       </td>
@@ -1224,6 +1237,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
             <option value={25}>25</option>
             <option value={50}>50</option>
             <option value={100}>100</option>
+            <option value={500}>500</option>
           </select>
         </div>
 

@@ -17,6 +17,10 @@ const links = [
   { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/tenders", label: "Tenders" },
 ]
+const adminLinks = [
+  { href: "/admin/mappings", label: "Column Mappings" },
+  { href: "/admin/merging", label: "Column Merging" },
+];
 
 function UserAvatar({ name, email }: { name?: string | null; email?: string | null }) {
   const initials = (name || email || "U")
