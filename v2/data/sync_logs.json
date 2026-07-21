@@ -1,38 +1,5 @@
 [
   {
-    "id": "5346729f-2c8d-4983-a11c-b4e38e11818f",
-    "startTime": 1784454735677,
-    "endTime": 1784454735746,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
-    "id": "d13b6315-c2f2-4f43-b7d8-76858b37945b",
-    "startTime": 1784456535685,
-    "endTime": 1784456535912,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
-    "id": "070572c1-91df-4fa9-9b5e-b08220e5a67e",
-    "startTime": 1784458335693,
-    "endTime": 1784458335927,
-    "status": "SUCCESS",
-    "recordsProcessed": 0,
-    "matchedFolders": 0,
-    "filesIndexedCount": 0,
-    "triggeredBy": "SYSTEM",
-    "errors": null
-  },
-  {
     "id": "ebabb045-4346-41e8-b24f-c6d2ec72c3ed",
     "startTime": 1784460135692,
     "endTime": 1784460135891,
@@ -1147,6 +1114,39 @@
     "id": "74ef1a91-adf5-4c36-8604-d5993664c349",
     "startTime": 1784553599632,
     "endTime": 1784553600074,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "145a7ed1-3686-4ff0-92c2-c7e4ed2e059c",
+    "startTime": 1784615940893,
+    "endTime": 1784615941082,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "03c17b78-cadb-4346-b38d-68df923bda30",
+    "startTime": 1784615941542,
+    "endTime": 1784615942004,
+    "status": "SUCCESS",
+    "recordsProcessed": 0,
+    "matchedFolders": 0,
+    "filesIndexedCount": 0,
+    "triggeredBy": "SYSTEM",
+    "errors": null
+  },
+  {
+    "id": "80adfee4-7350-4bee-a1ac-90e6dff559b8",
+    "startTime": 1784615993055,
+    "endTime": 1784615993139,
     "status": "SUCCESS",
     "recordsProcessed": 0,
     "matchedFolders": 0,

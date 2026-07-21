@@ -16,12 +16,8 @@ const links = [
   { href: "/", label: "Executive Dashboard" },
   { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/tenders", label: "Tenders" },
+  { href: "/activity", label: "Activity" },
 ]
-const adminLinks = [
-  { href: "/admin/mappings", label: "Column Mappings" },
-  { href: "/admin/merging", label: "Column Merging" },
-];
-
 function UserAvatar({ name, email }: { name?: string | null; email?: string | null }) {
   const initials = (name || email || "U")
     .split(" ")
@@ -64,21 +60,6 @@ export function NavBar() {
               </NavigationMenuItem>
             )
           })}
-          {isAuthenticated && (
-            <NavigationMenuItem>
-              <NavigationMenuLink
-                render={<Link href="/admin" />}
-                className={cn(
-                  "px-3 py-1.5 rounded text-sm font-semibold transition-colors hover:bg-[#0a2540] hover:text-white",
-                  pathname === "/admin"
-                    ? "bg-[#0a2540] text-white data-active:bg-[#0a2540] data-active:text-white"
-                    : "text-gray-500 data-active:bg-transparent data-active:text-gray-500",
-                )}
-              >
-                Admin
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-          )}
         </NavigationMenuList>
 
         <div className="flex items-center gap-2 px-3 ml-auto">
@@ -100,15 +81,6 @@ export function NavBar() {
                     </p>
                     <p className="truncate text-xs text-gray-500">{session?.user?.email}</p>
                   </div>
-                  {session?.user?.role === "admin" && (
-                    <Link
-                      href="/admin"
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                    >
-                      <User size={14} />
-                      Admin Panel
-                    </Link>
-                  )}
                   <button
                     onClick={() => signOut()}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"

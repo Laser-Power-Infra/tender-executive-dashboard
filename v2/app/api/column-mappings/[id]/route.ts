@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function PATCH(
   request: NextRequest,
@@ -25,6 +26,14 @@ export async function PATCH(
     const mapping = await prisma.columnMapping.update({
       where: { id: parseInt(id, 10) },
       data,
+    });
+
+    const changedFields = Object.keys(data).join(", ");
+    logActivity({
+      action: "UPDATE",
+      tableName: "ColumnMapping",
+      recordId: String(mapping.id),
+      details: `Updated column mapping #${mapping.id}: ${changedFields}`,
     });
 
     return NextResponse.json({ mapping });
@@ -54,9 +63,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const before = await prisma.columnMapping.findUnique({
+      where: { id: parseInt(id, 10) },
+    });
     await prisma.columnMapping.update({
       where: { id: parseInt(id, 10) },
       data: { status: "deleted" },
+    });
+    logActivity({
+      action: "DELETE",
+      tableName: "ColumnMapping",
+      recordId: String(id),
+      details: before
+        ? `Deleted column mapping #${id} ("${before.excelHeader}" → "${before.dbField}")`
+        : `Deleted column mapping #${id}`,
     });
     return NextResponse.json({ success: true });
   } catch (error) {

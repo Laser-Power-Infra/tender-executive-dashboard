@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function GET() {
   try {
@@ -41,6 +42,13 @@ export async function POST(request: NextRequest) {
         separator: separator || " @ ",
         fields: JSON.stringify(fields),
       },
+    });
+
+    logActivity({
+      action: "CREATE",
+      tableName: "ColumnGroup",
+      recordId: String(group.id),
+      details: `Created column group "${label}" with ${fields.length} fields`,
     });
 
     return NextResponse.json({ group }, { status: 201 });

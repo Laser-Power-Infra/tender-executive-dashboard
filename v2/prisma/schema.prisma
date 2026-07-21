@@ -33,8 +33,26 @@ model User {
   role          String   @default("user")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  activityLogs  ActivityLog[]
 
   @@map("users")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  userName  String?
+  userEmail String?
+  referenceNo String?
+  action    String   // "CREATE" | "UPDATE" | "DELETE"
+  tableName String   // e.g. "Tender", "GemTender", "ColumnMapping"
+  recordId  String?  // ID of the affected record
+  details   String?  // JSON — what changed / description
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+  @@index([createdAt])
+  @@map("activity_logs")
 }
 
 model Tender {

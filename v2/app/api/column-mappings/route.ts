@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function GET() {
   try {
@@ -30,6 +31,13 @@ export async function POST(request: NextRequest) {
 
     const mapping = await prisma.columnMapping.create({
       data: { excelHeader, dbField, displayName: displayName || null },
+    });
+
+    logActivity({
+      action: "CREATE",
+      tableName: "ColumnMapping",
+      recordId: String(mapping.id),
+      details: `Created column mapping "${excelHeader}" → "${dbField}"`,
     });
 
     return NextResponse.json({ mapping }, { status: 201 });
