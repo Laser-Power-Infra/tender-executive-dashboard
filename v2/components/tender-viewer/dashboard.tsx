@@ -33,6 +33,8 @@ import {
   ColumnDef,
 } from "@/components/tender-viewer/optimized-tender-table/OptimizedTenderTable";
 
+const normalizeKey = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
+
 function formatColumnName(name: string): string {
   if (name === "t247Id") return "Portal ID";
   return name
@@ -55,6 +57,14 @@ export default function Dashboard() {
   const uploadResults = useAppSelector((s) => s.upload.results);
 
   const [displayNameMap, setDisplayNameMap] = useState<Record<string, string>>({});
+  const [columnIndices, setColumnIndices] = useState<{
+    columnName: string;
+    displayOrder: number;
+    visible: boolean;
+    width: number | null;
+    frozen: boolean;
+    createdAt: string;
+  }[]>([]);
   const [mergedGroups, setMergedGroups] = useState<{
     label: string;
     separator: string;
@@ -121,8 +131,9 @@ export default function Dashboard() {
     Promise.all([
       fetch("/api/column-mappings").then((r) => r.json()),
       fetch("/api/column-groups").then((r) => r.json()),
+      fetch("/api/column-indices").then((r) => r.json()),
     ])
-      .then(([mappingData, groupsData]) => {
+      .then(([mappingData, groupsData, indicesData]) => {
         if (mappingData.mappings) {
           setDisplayNameMap(getDisplayNameMap(mappingData.mappings));
         }
@@ -134,6 +145,9 @@ export default function Dashboard() {
               fields: JSON.parse(g.fields),
             })),
           );
+        }
+        if (indicesData.indices) {
+          setColumnIndices(indicesData.indices);
         }
       })
       .catch(() => {});
@@ -299,7 +313,6 @@ export default function Dashboard() {
 
   const orderedColumns = useMemo(() => {
     if (!tenderData) return [];
-    // console.table(tenderData.columns);
     const skipCols = new Set([
       "sr. no.",
       "sr no",
@@ -319,46 +332,34 @@ export default function Dashboard() {
       "ready",
     ]);
     const seen = new Set<string>();
-    const cols = [...tenderData.columns].filter((col) => {
+    let cols = [...tenderData.columns].filter((col) => {
       const normalized = col.toLowerCase().trim().replace(/\s+/g, " ");
       if (skipCols.has(normalized)) return false;
       if (seen.has(normalized)) return false;
       seen.add(normalized);
       return true;
     });
-    const validIdx = cols.indexOf("aiRelevanceValid");
-    if (validIdx >= 0) {
-      cols.splice(validIdx, 1);
-      cols.splice(2, 0, "aiRelevanceValid");
-    }
-    const reasonIdx = cols.indexOf("aiRelevanceReason");
-    if (reasonIdx >= 0) {
-      cols.splice(reasonIdx, 1);
-      cols.splice(3, 0, "aiRelevanceReason");
-    }
-    const normalizeMatch = (s: string) =>
-      s.toLowerCase().trim().replace(/\s+/g, " ");
-    const qtySizeIdx = cols.findIndex(
-      (c) => normalizeMatch(c) === "quantity / size",
-    );
-    if (qtySizeIdx >= 0) {
-      const rawName = cols[qtySizeIdx];
-      cols.splice(qtySizeIdx, 1);
-      const valueIdx = cols.indexOf("value");
-      cols.splice(valueIdx >= 0 ? valueIdx + 1 : cols.length, 0, rawName);
-    }
-    // console.log("[orderedColumns raw names]", JSON.stringify(cols.slice(-10)));
+
+    const indexMap = new Map(columnIndices.map((idx) => [normalizeKey(idx.columnName), idx]));
+    cols.sort((a, b) => {
+      const ia = indexMap.get(normalizeKey(a));
+      const ib = indexMap.get(normalizeKey(b));
+      if (ia && ib) {
+        const orderDiff = ia.displayOrder - ib.displayOrder;
+        if (orderDiff !== 0) return orderDiff;
+        return new Date(ia.createdAt).getTime() - new Date(ib.createdAt).getTime();
+      }
+      if (ia) return -1;
+      if (ib) return 1;
+      return 0;
+    });
+
     const prev = prevOrderedColsRef.current;
     if (prev.length !== cols.length || prev.some((c, i) => c !== cols[i])) {
-      // console.log(
-      //   `[orderedColumns changed] was=${prev.length} now=${cols.length}`,
-      //   `added=${cols.filter((c) => !prev.includes(c)).length > 0 ? JSON.stringify(cols.filter((c: string) => !prev.includes(c))) : "none"}`,
-      //   `removed=${prev.filter((c: string) => !cols.includes(c)).length > 0 ? JSON.stringify(prev.filter((c: string) => !cols.includes(c))) : "none"}`,
-      // );
       prevOrderedColsRef.current = cols;
     }
     return cols;
-  }, [tenderData]);
+  }, [tenderData, columnIndices]);
 
   const [filteredRows, setFilteredRows] = useState<Record<string, unknown>[]>(
     [],
@@ -408,9 +409,11 @@ export default function Dashboard() {
       }
     }
 
+    const indexMap = new Map(columnIndices.map((idx) => [normalizeKey(idx.columnName), idx]));
     const filteredCols = orderedColumns.filter((c) => !mergedFieldSet.has(c));
     const individualDefs = filteredCols.map((col): ColumnDef<Record<string, unknown>> => {
       const colLower = col.toLowerCase();
+      const colIndex = indexMap.get(normalizeKey(col));
 
       if (col === "app" || col === "aps" || col === "apm") {
         return {
@@ -924,17 +927,18 @@ export default function Dashboard() {
       return {
         header: displayNameMap[col] ?? formatColumnName(col),
         accessor: col as keyof Record<string, unknown>,
-        defaultWidth:
+        defaultWidth: colIndex?.width ?? (
           col === "id"
             ? 80
             : col === "deadline" || col === "reportings"
               ? 300
-              : 200,
+              : 200
+        ),
         searchable:
           col === "deadline" || col === "organization" || col === "type"
             ? false
             : undefined,
-        hidden: col === "id" ? true : undefined,
+        hidden: colIndex !== undefined ? !colIndex.visible : col === "id" ? true : undefined,
         type: filterType === "dateRange" ? "date" : undefined,
         filter:
           options && filterType === "select"
@@ -1018,6 +1022,21 @@ export default function Dashboard() {
       mergedIdx++;
     }
 
+    result.sort((a, b) => {
+      const keyA = normalizeKey(String(a.accessor));
+      const keyB = normalizeKey(String(b.accessor));
+      const idxA = indexMap.get(keyA);
+      const idxB = indexMap.get(keyB);
+      if (idxA && idxB) {
+        const orderDiff = idxA.displayOrder - idxB.displayOrder;
+        if (orderDiff !== 0) return orderDiff;
+        return new Date(idxA.createdAt).getTime() - new Date(idxB.createdAt).getTime();
+      }
+      if (idxA) return -1;
+      if (idxB) return 1;
+      return 0;
+    });
+
     return result;
   }, [
     orderedColumns,
@@ -1028,6 +1047,7 @@ export default function Dashboard() {
     handleAssignmentChange,
     displayNameMap,
     mergedGroups,
+    columnIndices,
   ]);
 
   return (

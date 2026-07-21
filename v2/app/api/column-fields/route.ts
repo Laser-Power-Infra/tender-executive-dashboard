@@ -14,6 +14,20 @@ const SKIP_COLS = new Set([
   "utility_mapping_id",
 ]);
 
+const TENDER_FIELDS = [
+  "nameOfWorkDescription",
+  "tenderSubmittedDate",
+  "estimatedCostRs",
+  "reason",
+  "managementDecision",
+  "tenderPrepareBy",
+  "reverseAuctionApplicable",
+  "emdPaymentMode",
+  "bgNoUtrNo",
+  "emdValidity",
+  "bidValidityExpired",
+];
+
 export async function GET() {
   try {
     const columnRows = await prisma.$queryRawUnsafe<{ column_name: string }[]>(
@@ -37,8 +51,27 @@ export async function GET() {
       allFields.add(row.fieldName);
     }
 
+    for (const field of TENDER_FIELDS) {
+      allFields.add(field);
+    }
+
+    const groupRows = await prisma.columnGroup.findMany({
+      select: { label: true },
+      where: { status: "active" },
+    });
+    for (const row of groupRows) {
+      allFields.add(row.label);
+    }
+
+    const columnIndices = await prisma.columnIndex.findMany({
+      where: { status: "active" },
+      orderBy: { displayOrder: "asc" },
+      select: { columnName: true, displayName: true, displayOrder: true, visible: true, width: true, frozen: true },
+    });
+
     return NextResponse.json({
       fields: Array.from(allFields).sort((a, b) => a.localeCompare(b)),
+      columnIndices,
     });
   } catch (error) {
     return NextResponse.json(

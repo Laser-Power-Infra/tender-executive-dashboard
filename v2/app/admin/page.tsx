@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { RefreshCw, Columns, ListOrdered, GitMerge } from "lucide-react";
 
 export default function AdminPage() {
   const [syncing, setSyncing] = useState(false);
@@ -21,8 +22,74 @@ export default function AdminPage() {
   };
 
   return (
-    <div style={{ padding: "24px", maxWidth: "800px", margin: "0 auto" }}>
+    <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto" }}>
       <h1 style={{ color: "#0a2540", marginBottom: "24px" }}>Admin Panel</h1>
+
+      <div style={{ display: "flex", gap: "16px", marginBottom: "24px", flexWrap: "wrap" }}>
+        <Link href="/admin/mappings" style={{ textDecoration: "none", flex: "1", minWidth: "200px" }}>
+          <div style={{
+            background: "#fff",
+            border: "1px solid #e0e0e0",
+            borderRadius: "8px",
+            padding: "20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            transition: "box-shadow 0.15s",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
+          >
+            <Columns size={24} style={{ color: "#0a2540" }} />
+            <div>
+              <div style={{ fontWeight: 600, color: "#0a2540", fontSize: "14px" }}>Column Mappings</div>
+              <div style={{ color: "#888", fontSize: "12px" }}>Map Excel headers to DB fields</div>
+            </div>
+          </div>
+        </Link>
+        <Link href="/admin/indices" style={{ textDecoration: "none", flex: "1", minWidth: "200px" }}>
+          <div style={{
+            background: "#fff",
+            border: "1px solid #e0e0e0",
+            borderRadius: "8px",
+            padding: "20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            transition: "box-shadow 0.15s",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
+          >
+            <ListOrdered size={24} style={{ color: "#0a2540" }} />
+            <div>
+              <div style={{ fontWeight: 600, color: "#0a2540", fontSize: "14px" }}>Column Order</div>
+              <div style={{ color: "#888", fontSize: "12px" }}>Reorder & configure columns</div>
+            </div>
+          </div>
+        </Link>
+        <Link href="/admin/merging" style={{ textDecoration: "none", flex: "1", minWidth: "200px" }}>
+          <div style={{
+            background: "#fff",
+            border: "1px solid #e0e0e0",
+            borderRadius: "8px",
+            padding: "20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            transition: "box-shadow 0.15s",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
+          >
+            <GitMerge size={24} style={{ color: "#0a2540" }} />
+            <div>
+              <div style={{ fontWeight: 600, color: "#0a2540", fontSize: "14px" }}>Column Merging</div>
+              <div style={{ color: "#888", fontSize: "12px" }}>Merge multiple fields into one</div>
+            </div>
+          </div>
+        </Link>
+      </div>
       <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "24px" }}>
         <h2 style={{ margin: "0 0 16px", fontSize: "18px", color: "#333" }}>Data Synchronization</h2>
         <p style={{ color: "#666", fontSize: "14px", marginBottom: "16px" }}>

@@ -242,11 +242,22 @@ model GemTender {
   parseStatus String? @map("parse_status")
   parseError  String? @map("parse_error")
 
+  resultAutomationStatus String? @map("result_automation_status")
+  resultAutomationError String? @map("result_automation_error")
+
   itemCategory  String?
   totalQuantity String?
 
   bidStatus           String?
   differenceBetweenRank1 String?
+  nameOfRank1 String?
+  valueOfRank1 String?
+
+  differenceBetweenRank2 String?
+  nameOfRank2 String?
+  valueOfRank2 String?
+
+  evaluationTableData String?
 
   docketNo      String?
   attachmentUrl String?
@@ -275,6 +286,7 @@ model GemTender {
 
   @@index([fileId])
   @@index([utilityMappingId])
+ 
   @@map("gem_tenders")
 }
 
@@ -346,6 +358,7 @@ model NonGemTender {
 
   @@index([fileId])
   @@index([utilityMappingId])
+ 
   @@map("non_gem_tenders")
 }
 
@@ -394,6 +407,23 @@ model ColumnGroup {
   updatedAt DateTime @updatedAt
 
   @@map("column_groups")
+}
+
+// ---------- COLUMN INDEX ----------
+model ColumnIndex {
+  id           Int      @id @default(autoincrement())
+  columnName   String
+  displayOrder Int
+  displayName  String?
+  visible      Boolean  @default(true)
+  width        Int?
+  frozen       Boolean  @default(false)
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([columnName])
+  @@map("column_indices")
 }
 
 model ExlusionKeywords{

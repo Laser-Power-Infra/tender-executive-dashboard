@@ -19,6 +19,7 @@ const links = [
 
 const adminLinks = [
   { href: "/admin/mappings", label: "Column Mappings" },
+  { href: "/admin/indices", label: "Column Index" },
   { href: "/admin/merging", label: "Column Merging" },
 ];
 
