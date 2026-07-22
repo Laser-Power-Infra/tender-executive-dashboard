@@ -124,7 +124,6 @@ export default function Home() {
             <button className="erp-sync-btn" onClick={handleRefresh} disabled={liveLoading} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
               {liveLoading ? <><RefreshCw size={14} /> Syncing...</> : <><RefreshCw size={14} /> Sync Sheet Data</>}
             </button>
-            <div className="user-profile-badge" title="Logged in as John Doe">JD</div>
           </div>
         </header>
         <main className="dashboard-body">

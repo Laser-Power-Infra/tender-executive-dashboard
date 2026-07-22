@@ -57,6 +57,11 @@ export default function Dashboard() {
   const uploadResults = useAppSelector((s) => s.upload.results);
 
   const [displayNameMap, setDisplayNameMap] = useState<Record<string, string>>({});
+  // const [mergedGroups, setMergedGroups] = useState<{
+  //   label: string;
+  //   separator: string;
+  //   fields: string[];
+  // }[]>([]);
   const [columnIndices, setColumnIndices] = useState<{
     columnName: string;
     displayOrder: number;

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "@/components/NavBar";
 import StoreProvider from "@/lib/store-provider";
+import SessionProviderWrapper from "@/components/SessionProviderWrapper";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -52,18 +53,20 @@ export default function RootLayout({
         <link rel="manifest" href="/site.webmanifest"></link>
       </head>
       <body className="min-h-full flex flex-col">
-        <NavBar />
-        <div
-          style={{
-            paddingTop: "42px",
-            height: "100vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <StoreProvider>{children}</StoreProvider>
-          <Toaster richColors />
-        </div>
+        <SessionProviderWrapper>
+          <NavBar />
+          <div
+            style={{
+              paddingTop: "42px",
+              height: "100vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <StoreProvider>{children}</StoreProvider>
+            <Toaster richColors />
+          </div>
+        </SessionProviderWrapper>
       </body>
     </html>
   );

@@ -146,19 +146,11 @@ export class DatabaseTenderService {
 
     console.log(`[DatabaseTenderService] Database sync triggered (Count mismatch: ${countMismatch}, Has today's date: ${hasTodayDate}). Comparing ${validRecords.length} records...`);
 
-    const existingList = await prisma.tender.findMany();
-    const existingMap = new Map<string, DbRecord>();
-    existingList.forEach((item: DbRecord) => {
-      existingMap.set(item.tenderNoNitNo, item);
-    });
-
     let insertedCount = 0;
     let updatedCount = 0;
     let skippedCount = 0;
 
     for (const record of validRecords) {
-      const dbRecord = existingMap.get(record.tenderNoNitNo);
-
       const data: Record<string, unknown> = {
         slNo: cleanInt(record.slNo) || 0,
         docketNo: record.docketNo || "",
@@ -188,36 +180,42 @@ export class DatabaseTenderService {
         loiPoNoAndDate: record.loiPoNoAndDate || null,
         remarks: record.remarks || null,
         bidValidityExpired: Boolean(record.bidValidityExpired),
-        diffPercentFromL1: (dbRecord && dbRecord.diffL1ManuallyEdited)
-          ? dbRecord.diffPercentFromL1
-          : cleanFloat(record.diffPercentFromL1),
-        diffPercentFromL2: (dbRecord && dbRecord.diffL2ManuallyEdited)
-          ? dbRecord.diffPercentFromL2
-          : cleanFloat(record.diffPercentFromL2),
         reason: record.reason || null,
         finalRemarks: record.finalRemarks || null,
         attachmentUrl: record.attachmentUrl || null,
       };
 
-      if (!dbRecord) {
-        try {
-          await prisma.tender.create({ data: data as any });
-          insertedCount++;
-        } catch (err) {
-          console.error(`CREATE FAILURE for new tender: ${record.tenderNoNitNo}`, err);
+      try {
+        const existing = await prisma.tender.findUnique({
+          where: { tenderNoNitNo: record.tenderNoNitNo },
+        })
+
+        if (existing && existing.diffL1ManuallyEdited) {
+          data.diffPercentFromL1 = existing.diffPercentFromL1
+        } else {
+          data.diffPercentFromL1 = cleanFloat(record.diffPercentFromL1)
         }
-      } else if (isRecordModified(record as unknown as Record<string, unknown>, dbRecord)) {
-        try {
-          await prisma.tender.update({
-            where: { id: dbRecord.id },
-            data: data as any,
-          });
-          updatedCount++;
-        } catch (err) {
-          console.error(`UPDATE FAILURE for modified tender: ${record.tenderNoNitNo}`, err);
+        if (existing && existing.diffL2ManuallyEdited) {
+          data.diffPercentFromL2 = existing.diffPercentFromL2
+        } else {
+          data.diffPercentFromL2 = cleanFloat(record.diffPercentFromL2)
         }
-      } else {
-        skippedCount++;
+
+        await prisma.tender.upsert({
+          where: { tenderNoNitNo: record.tenderNoNitNo },
+          create: data as any,
+          update: data as any,
+        })
+
+        if (!existing) {
+          insertedCount++
+        } else if (isRecordModified(record as unknown as Record<string, unknown>, existing)) {
+          updatedCount++
+        } else {
+          skippedCount++
+        }
+      } catch (err) {
+        console.error(`UPSERT FAILURE for tender: ${record.tenderNoNitNo}`, err)
       }
     }
 

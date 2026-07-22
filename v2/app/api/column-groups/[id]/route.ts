@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function PATCH(
   request: NextRequest,
@@ -35,6 +36,14 @@ export async function PATCH(
       data,
     });
 
+    const changedFields = Object.keys(data).join(", ");
+    logActivity({
+      action: "UPDATE",
+      tableName: "ColumnGroup",
+      recordId: String(group.id),
+      details: `Updated column group #${group.id}: ${changedFields}`,
+    });
+
     return NextResponse.json({ group });
   } catch (error) {
     if ((error as any)?.code === "P2025") {
@@ -56,9 +65,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const before = await prisma.columnGroup.findUnique({
+      where: { id: parseInt(id, 10) },
+    });
     await prisma.columnGroup.update({
       where: { id: parseInt(id, 10) },
       data: { status: "deleted" },
+    });
+    logActivity({
+      action: "DELETE",
+      tableName: "ColumnGroup",
+      recordId: String(id),
+      details: before
+        ? `Deleted column group #${id} ("${before.label}")`
+        : `Deleted column group #${id}`,
     });
     return NextResponse.json({ success: true });
   } catch (error) {

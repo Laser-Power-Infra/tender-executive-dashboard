@@ -5,6 +5,7 @@ import { generateText, APICallError, Output } from "ai";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAiFeedbackContext } from "@/lib/ai-feedback";
+import { logActivity } from "@/lib/activity-logger";
 
 const model = openai("gpt-4o-mini");
 
@@ -124,4 +125,14 @@ export async function saveAiRelevance(params: {
   } else {
     await prisma.nonGemTender.update({ where: { id: params.id }, data });
   }
+  const referenceNo = params.type === "Gem"
+    ? (await prisma.gemTender.findUnique({ where: { id: params.id }, select: { referenceNo: true } }))?.referenceNo
+    : (await prisma.nonGemTender.findUnique({ where: { id: params.id }, select: { referenceNo: true } }))?.referenceNo;
+  logActivity({
+    action: "UPDATE",
+    tableName: params.type === "Gem" ? "GemTender" : "NonGemTender",
+    recordId: String(params.id),
+    referenceNo: referenceNo ?? undefined,
+    details: `Set AI relevance valid=${params.valid} on ${params.type} tender #${params.id}`,
+  });
 }

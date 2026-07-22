@@ -71,47 +71,47 @@ export async function POST(request: NextRequest) {
           referenceNo: t.referenceNo,
           timestamp: Date.now(),
         }).catch((e) => {
-          console.error()
+          console.error(e)
         });
       }
 
-      // gemResults = await downloadGemPdfs(
-      //   gemTenders.map((t) => ({ id: t.id, gemId: t.gemId! })),
+      gemResults = await downloadGemPdfs(
+        gemTenders.map((t) => ({ id: t.id, gemId: t.gemId! })),
+        (current, total) => {
+          console.log(`GEM progress: ${current}/${total}`);
+        },
+      );
+
+      for (const result of gemResults) {
+        if (result.success && result.pdfPath) {
+          try {
+            await prisma.gemTender.update({
+              where: { id: result.id },
+              data: { tenderFileUrl: result.pdfPath } as any,
+            });
+          } catch (dbErr) {
+            try {
+              console.error(
+                `Failed to update DB for GEM tender ${result.gemId}:`,
+                dbErr,
+              );
+            } catch {}
+          }
+        }
+      }
+    }
+
+    if (nonGemRequests.length > 0) {
+      const resolved = await Promise.all(
+        nonGemRequests.map(resolveNonGemTenderInfo),
+      );
+
+      // nonGemResults = await searchNonGemTenders(
+      //   resolved,
       //   (current, total) => {
-      //     console.log(`GEM progress: ${current}/${total}`);
+      //     console.log(`Non-GEM progress: ${current}/${total}`);
       //   },
       // );
-
-    //   for (const result of gemResults) {
-    //     if (result.success && result.pdfPath) {
-    //       try {
-    //         await prisma.gemTender.update({
-    //           where: { id: result.id },
-    //           data: { tenderFileUrl: result.pdfPath } as any,
-    //         });
-    //       } catch (dbErr) {
-    //         try {
-    //           console.error(
-    //             `Failed to update DB for GEM tender ${result.gemId}:`,
-    //             dbErr,
-    //           );
-    //         } catch {}
-    //       }
-    //     }
-    //   }
-    // }
-
-    // if (nonGemRequests.length > 0) {
-    //   const resolved = await Promise.all(
-    //     nonGemRequests.map(resolveNonGemTenderInfo),
-    //   );
-
-    //   nonGemResults = await searchNonGemTenders(
-    //     resolved,
-    //     (current, total) => {
-    //       console.log(`Non-GEM progress: ${current}/${total}`);
-    //     },
-    //   );
     }
 
     const allResults = [...gemResults, ...nonGemResults];

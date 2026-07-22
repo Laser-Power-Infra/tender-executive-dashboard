@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { sendTenderWebhook } from "@/lib/webhook";
+import { logActivity } from "@/lib/activity-logger";
 
 export async function updateTenderAssignmentsAction(params: {
   gemTenderId?: number;
@@ -23,6 +24,13 @@ export async function updateTenderAssignmentsAction(params: {
       const { referenceNo, itemCategory, organization, deadline, tenderFileUrl } = gemTender as any;
       sendTenderWebhook({ referenceNo, itemCategory, organization, deadline, tenderFileUrl }, "Gem", gemTender.tenderAssociations);
     }
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderAssociation",
+      recordId: String(params.gemTenderId),
+      referenceNo: gemTender?.referenceNo ?? undefined,
+      details: `Updated assignees for Gem tender #${params.gemTenderId}: ${params.associationIds.length} association(s)`,
+    });
   } else if (params.nonGemTenderId) {
     await prisma.tenderAssociation.deleteMany({ where: { nonGemTenderId: params.nonGemTenderId } });
     if (params.associationIds.length > 0) {
@@ -38,6 +46,13 @@ export async function updateTenderAssignmentsAction(params: {
       const { referenceNo, itemCategory, organization, deadline, tenderFileUrl } = nonGemTender as any;
       sendTenderWebhook({ referenceNo, itemCategory, organization, deadline, tenderFileUrl }, "Non-Gem", nonGemTender.tenderAssociations);
     }
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderAssociation",
+      recordId: String(params.nonGemTenderId),
+      referenceNo: nonGemTender?.referenceNo ?? undefined,
+      details: `Updated assignees for Non-Gem tender #${params.nonGemTenderId}: ${params.associationIds.length} association(s)`,
+    });
   }
 }
 
@@ -50,20 +65,23 @@ export async function updateTenderUtilityMapping(params: {
   try {
     let organization: string | null = null;
 
+    let referenceNo: string | null = null;
     if (params.type === "Gem") {
       const tender = await prisma.gemTender.update({
         where: { id: params.id },
         data: { website },
-        select: { id: true, organization: true },
+        select: { id: true, organization: true, referenceNo: true },
       });
       organization = tender.organization;
+      referenceNo = tender.referenceNo;
     } else {
       const tender = await prisma.nonGemTender.update({
         where: { id: params.id },
         data: { website },
-        select: { id: true, organization: true },
+        select: { id: true, organization: true, referenceNo: true },
       });
       organization = tender.organization;
+      referenceNo = tender.referenceNo;
     }
 
     if (!organization) throw new Error("Tender has no organization");
@@ -72,6 +90,7 @@ export async function updateTenderUtilityMapping(params: {
       where: { organization, website },
     });
 
+    const isNewMapping = !mapping;
     if (!mapping) {
       mapping = await prisma.utilityMapping.create({
         data: { organization, website },
@@ -89,6 +108,22 @@ export async function updateTenderUtilityMapping(params: {
         data: { utilityMappingId: mapping.id },
       });
     }
+
+    if (isNewMapping) {
+      logActivity({
+        action: "CREATE",
+        tableName: "UtilityMapping",
+        recordId: String(mapping.id),
+        details: `Created utility mapping: "${organization}" → "${website}"`,
+      });
+    }
+    logActivity({
+      action: "UPDATE",
+      tableName: params.type === "Gem" ? "GemTender" : "NonGemTender",
+      recordId: String(params.id),
+      referenceNo: referenceNo ?? undefined,
+      details: `Updated website/utility mapping for ${params.type} tender #${params.id}: "${website}"`,
+    });
 
     return { utilityMappingId: mapping.id, organization };
   } catch (error: any) {
@@ -142,9 +177,16 @@ export async function bulkAssignUtilityMappingAction(params: {
       }),
     ]);
 
+    const gemIdsArr = gemIds.map((g) => g.id);
+    const nonGemIdsArr = nonGemIds.map((g) => g.id);
+    logActivity({
+      action: "UPDATE",
+      tableName: "UtilityMapping",
+      details: `Bulk assigned website "${website}" to organization "${params.organization}": ${gemIdsArr.length} Gem + ${nonGemIdsArr.length} Non-Gem tenders`,
+    });
     return {
-      updatedGem: gemIds.map((g) => g.id),
-      updatedNonGem: nonGemIds.map((g) => g.id),
+      updatedGem: gemIdsArr,
+      updatedNonGem: nonGemIdsArr,
     };
   } catch (error: any) {
     console.error(error);
@@ -189,6 +231,16 @@ export async function updateTenderDecision(params: {
         }
       }
     }
+    const referenceNo = params.type === "Gem"
+      ? (await prisma.gemTender.findUnique({ where: { id: params.id }, select: { referenceNo: true } }))?.referenceNo
+      : (await prisma.nonGemTender.findUnique({ where: { id: params.id }, select: { referenceNo: true } }))?.referenceNo;
+    logActivity({
+      action: "UPDATE",
+      tableName: params.type === "Gem" ? "GemTender" : "NonGemTender",
+      recordId: String(params.id),
+      referenceNo: referenceNo ?? undefined,
+      details: `Updated ${params.field} to "${params.value}" on ${params.type} tender #${params.id}`,
+    });
   } catch (error: any) {
     console.error(error);
   }

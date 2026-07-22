@@ -7,8 +7,9 @@ const nextConfig: NextConfig = {
     "pg",
     "smartsheet",
   ],
-};
-module.exports = {
+  experimental: {
+    authInterrupts: true,
+  },
   allowedDevOrigins: ["192.168.1.200", "192.168.1.229"],
 };
 
