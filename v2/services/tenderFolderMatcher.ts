@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import type { FolderMatch, FolderMatchResult, UnmatchedTender } from "@/types/indexer";
 
 const CONFIG = {
@@ -86,7 +87,8 @@ export async function matchTendersWithFolders(
       continue;
     }
 
-    const folderInfo = foldersMap[docketNo] as FolderInfo | FolderInfo[] | undefined;
+    const lookupKey = extractNumericDocket(docketNo) || docketNo;
+    const folderInfo = foldersMap[lookupKey] as FolderInfo | FolderInfo[] | undefined;
 
     if (folderInfo) {
       if (Array.isArray(folderInfo)) {

@@ -126,13 +126,9 @@ export async function indexFolderFiles(rootFolderPath: string): Promise<FolderSc
   const { fileList, filenameMap } = await scanDirectoryRecursive(normalizedRoot, normalizedRoot);
 
   let duplicateCount = 0;
-  for (const [filename, paths] of filenameMap.entries()) {
+  for (const [, paths] of filenameMap.entries()) {
     if (paths.length > 1) {
       duplicateCount++;
-      console.warn(
-        `[DuplicateFile] Warning: Duplicate file name "${filename}" detected in subfolders:\n` +
-        paths.map(p => `  - "${p}"`).join("\n")
-      );
     }
   }
 

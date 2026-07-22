@@ -251,7 +251,7 @@ export class GoogleSheetService {
 
     const sheetHeaders = rows[0];
     const headerIndexMap = this.validateAndMapSchema(sheetHeaders);
-    const docketIndex = headerIndexMap.get("Docket No")!;
+    const docketIndex = headerIndexMap.get("Docket No-enq")!;
 
     const records: EpcTenderRecord[] = [];
 
@@ -294,7 +294,7 @@ export class GoogleSheetService {
   private validateAndMapSchema(headers: string[]): Map<string, number> {
     const requiredHeaders = [
       "SL No.",
-      "Docket No",
+      "Docket No-enq",
       "Tender For",
       "Type of Tender",
       "Tender No / NIT No with Date",
@@ -502,7 +502,7 @@ export class GoogleSheetService {
 
     return {
       slNo,
-      docketNo: getValue("Docket No"), // Guaranteed to exist by filtering
+      docketNo: getValue("Docket No-enq"), // Guaranteed to exist by filtering
       tenderFor: getValue("Tender For"),
       typeOfTender: getValue("Type of Tender"),
       tenderNoNitNo: getValue("Tender No / NIT No with Date"),

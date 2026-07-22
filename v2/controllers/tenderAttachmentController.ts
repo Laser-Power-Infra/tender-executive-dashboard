@@ -1,23 +1,17 @@
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 import { indexFolderFiles } from "@/services/fileIndexer";
+import { encryptPath, decryptPath } from "@/lib/fileCrypto";
+import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import type {
   FileResponse,
   DocketFilesResponse,
   SupplyBillFilesResponse,
   FolderDetailsResponse,
-  AuthConfig,
 } from "@/types/controller";
 
-const CONFIG: AuthConfig = {
-  encryptionKey:
-    process.env.FILE_CRYPTO_KEY || "8f7c9e1b2a3d4f5e6a7b8c9d0e1f2a3b",
-  encryptionIv: process.env.FILE_CRYPTO_IV || "1a2b3c4d5e6f7a8b",
-};
-
 const ALLOWED_ROOTS = [
-  path.resolve("Z:\\COSTING & INVOLVEMENT\\2026-27"),
+  path.resolve(process.env.COSTING_FILE_NETWORK_PATH!),
   path.resolve(
     "\\\\192.168.1.242\\dipankar roy\\COSTING & INVOLVEMENT\\2026-27",
   ),
@@ -27,32 +21,6 @@ const ALLOWED_ROOTS = [
 
 if (process.env.INDEXER_NETWORK_PATH) {
   ALLOWED_ROOTS.unshift(path.resolve(process.env.INDEXER_NETWORK_PATH));
-}
-
-function encryptPath(absolutePath: string): string {
-  const cipher = crypto.createCipheriv(
-    "aes-256-cbc",
-    Buffer.from(CONFIG.encryptionKey),
-    Buffer.from(CONFIG.encryptionIv),
-  );
-  let encrypted = cipher.update(absolutePath, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  return encrypted;
-}
-
-function decryptPath(fileId: string): string {
-  try {
-    const decipher = crypto.createDecipheriv(
-      "aes-256-cbc",
-      Buffer.from(CONFIG.encryptionKey),
-      Buffer.from(CONFIG.encryptionIv),
-    );
-    let decrypted = decipher.update(fileId, "hex", "utf8");
-    decrypted += decipher.final("utf8");
-    return path.resolve(decrypted);
-  } catch {
-    throw new Error("Invalid or tampered fileId token.");
-  }
 }
 
 function verifyPathSafety(absolutePath: string): void {
@@ -89,22 +57,30 @@ export class TenderAttachmentController {
         "data",
         "tender_folder_matches.json",
       );
+      console.log(`[DEBUG getTenderFiles] docketNo=${docketNo}, matchesDbPath=${matchesDbPath}`);
       if (!fs.existsSync(matchesDbPath)) {
+        console.warn(`[DEBUG getTenderFiles] matchesDbPath NOT FOUND: ${matchesDbPath}`);
         return { docketNo, folderPath: "", files: [] };
       }
 
       const matches = JSON.parse(
         await fs.promises.readFile(matchesDbPath, "utf-8"),
       );
-      const match = matches[docketNo];
+      const lookupKey = extractNumericDocket(docketNo) || docketNo;
+      const match = matches[lookupKey];
+      console.log(`[DEBUG getTenderFiles] docket=${docketNo} lookupKey=${lookupKey} match:`, JSON.stringify(match));
 
       if (!match || !match.folderFound || !match.folderPath) {
+        console.warn(`[DEBUG getTenderFiles] No valid match for docket ${docketNo}`);
         return { docketNo, folderPath: "", files: [] };
       }
 
+      console.log(`[DEBUG getTenderFiles] verifying path safety: ${match.folderPath}`);
       verifyPathSafety(match.folderPath);
 
+      console.log(`[DEBUG getTenderFiles] calling indexFolderFiles on: ${match.folderPath}`);
       const scanResults = await indexFolderFiles(match.folderPath);
+      console.log(`[DEBUG getTenderFiles] indexFolderFiles returned ${scanResults.files.length} files`);
 
       const filesWithSecureIds: FileResponse[] = scanResults.files.map((f) => ({
         fileId: encryptPath(f.absolutePath),
@@ -154,7 +130,8 @@ export class TenderAttachmentController {
       const matches = JSON.parse(
         await fs.promises.readFile(matchesDbPath, "utf-8"),
       );
-      const match = matches[docketNo];
+      const lookupKey = extractNumericDocket(docketNo) || docketNo;
+      const match = matches[lookupKey];
 
       if (!match) {
         return {
@@ -192,7 +169,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = decryptPath(fileId);
+      const absolutePath = path.resolve(decryptPath(fileId));
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {
@@ -230,7 +207,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = decryptPath(fileId);
+      const absolutePath = path.resolve(decryptPath(fileId));
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {
@@ -274,6 +251,7 @@ export class TenderAttachmentController {
     try {
       const dbPath = path.resolve(
         process.cwd(),
+        "..",
         "data",
         "supply_document_index.json",
       );

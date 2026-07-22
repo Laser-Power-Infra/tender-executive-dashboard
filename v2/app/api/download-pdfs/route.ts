@@ -102,6 +102,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (nonGemRequests.length > 0) {
+      for (const t of nonGemRequests) {
+        publishTenderTask({
+          type: "NON_GEM_DOWNLOAD",
+          tenderId: t.id,
+          referenceNo: t.referenceNo,
+          timestamp: Date.now(),
+        }).catch((e) => {
+          console.error(e)
+        });
+      }
+
       const resolved = await Promise.all(
         nonGemRequests.map(resolveNonGemTenderInfo),
       );

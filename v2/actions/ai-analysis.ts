@@ -128,6 +128,7 @@ export async function saveAiRelevance(params: {
   const referenceNo = params.type === "Gem"
     ? (await prisma.gemTender.findUnique({ where: { id: params.id }, select: { referenceNo: true } }))?.referenceNo
     : (await prisma.nonGemTender.findUnique({ where: { id: params.id }, select: { referenceNo: true } }))?.referenceNo;
+
   logActivity({
     action: "UPDATE",
     tableName: params.type === "Gem" ? "GemTender" : "NonGemTender",

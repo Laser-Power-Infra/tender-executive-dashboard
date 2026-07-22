@@ -109,11 +109,26 @@ export async function executeSyncPipeline(
       const tenderCachePath = path.resolve(process.cwd(), "excel_cache", "last_sheet_fetch.json");
       if (fs.existsSync(tenderCachePath)) {
         tenders = JSON.parse(await fs.promises.readFile(tenderCachePath, "utf-8"));
-      } else {
-        console.warn("[SyncPipeline] Cache sheet file not found. Skipping tender matching.");
       }
     } catch (e) {
       console.warn(`[SyncPipeline] Could not read cached tenders: ${(e as Error).message}`);
+    }
+
+    if (tenders.length === 0) {
+      try {
+        const { DatabaseTenderService } = await import("@/services/databaseTenderService");
+        const dbTenders = await DatabaseTenderService.getAllTenders();
+        if (dbTenders && dbTenders.length > 0) {
+          tenders = dbTenders as Record<string, unknown>[];
+          console.log(`[SyncPipeline] Loaded ${tenders.length} tenders from database.`);
+        }
+      } catch (dbErr) {
+        console.warn(`[SyncPipeline] Database fallback also failed: ${(dbErr as Error).message}`);
+      }
+    }
+
+    if (tenders.length === 0) {
+      console.warn("[SyncPipeline] No tender records available. Skipping folder matching.");
     }
 
     console.log("[SyncPipeline] Step 3/4: Executing tender and folder matching...");

@@ -1,13 +1,14 @@
 import { getChannel } from "@/lib/rabbitmq";
 import { QUEUES } from "./config";
 
-export interface TenderTaskPayload {
-  type: "GEM_DOWNLOAD";
+export type TenderTaskPayload = {
   tenderId: number;
-  gemId: string;
   referenceNo?: string;
   timestamp: number;
-}
+} & (
+  | { type: "GEM_DOWNLOAD"; gemId: string }
+  | { type: "NON_GEM_DOWNLOAD" }
+);
 
 export async function publishTenderTask(
   payload: TenderTaskPayload,

@@ -2,19 +2,30 @@ import fs from "fs";
 import path from "path";
 import type { DocumentIndex, DocumentIndexEntry } from "@/types/indexer";
 
-let resolvedPath = "\\\\192.168.1.242\\dipankar roy\\COSTING & INVOLVEMENT\\2026-27";
-if (fs.existsSync("Z:\\COSTING & INVOLVEMENT\\2026-27")) {
-  resolvedPath = "Z:\\COSTING & INVOLVEMENT\\2026-27";
-} else if (fs.existsSync("\\\\192.168.1.242\\dipankar roy\\COSTING & INVOLVEMENT\\2026-27")) {
-  resolvedPath = "\\\\192.168.1.242\\dipankar roy\\COSTING & INVOLVEMENT\\2026-27";
+interface ScanRecord {
+  docketNo: string;
+  folderName: string;
+  folderPath: string;
+  lastModified: number;
+}
+
+function resolveRootPath(): string {
+  const candidates = [
+    process.env.INDEXER_NETWORK_PATH,
+    "Z:\\",                                        // asmita : Z, bidyut : Z
+    "\\\\192.168.1.242\\dipankar roy\\",
+    "\\\\192.168.1.242\\COSTING & INVOLVEMENT\\",
+  ];
+  for (const c of candidates) {
+    if (c && fs.existsSync(c)) {
+      return c;
+    }
+  }
+  return "Z:\\";
 }
 
 const CONFIG = {
-  networkPath: process.env.INDEXER_NETWORK_PATH || resolvedPath,
-  monthlyFolders: [
-    "04_APRIL 2026", "05_MAY 2026", "06_JUNE 2026",
-    "04_APRIL_2026", "05_MAY_2026", "06_JUNE_2026"
-  ],
+  networkRoot: resolveRootPath(),
   dbFilePath: path.resolve(process.cwd(), "data", "document_index.json"),
   scanIntervalMs: 60 * 60 * 1000
 };
@@ -65,92 +76,111 @@ const db = new IndexDatabase(CONFIG.dbFilePath);
 function extractDocketNumber(folderName: string): string | null {
   if (!folderName) return null;
 
-  const fiveDigitMatch = folderName.match(/\b\d{5}\b/);
-  if (fiveDigitMatch) {
-    return fiveDigitMatch[0];
+  const allFiveDigit = folderName.match(/\b\d{5}\b/g);
+  if (allFiveDigit && allFiveDigit.length > 0) {
+    return allFiveDigit[allFiveDigit.length - 1];
   }
 
   const numericSegments = folderName.match(/\d+/g);
   if (numericSegments) {
-    for (const segment of numericSegments) {
-      if (
-        segment.length >= 4 &&
-        segment.length <= 6 &&
-        segment !== "2026" &&
-        segment !== "2027"
-      ) {
-        return segment;
-      }
+    const valid = numericSegments.filter(s => {
+      const len = s.length;
+      return len >= 4 && len <= 6 && s !== "2026" && s !== "2027";
+    });
+    if (valid.length > 0) {
+      return valid[valid.length - 1];
     }
   }
 
   return null;
 }
 
-interface ScanRecord {
-  docketNo: string;
-  folderName: string;
-  folderPath: string;
-  lastModified: number;
+async function scanDirectoryRecursive(
+  currentDir: string,
+  scannedIndex: Map<string, ScanRecord>,
+  depth: number
+): Promise<void> {
+  if (depth > 8) return;
+
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  const dirs = entries.filter(e => e.isDirectory());
+  const files = entries.filter(e => e.isFile() && !e.name.startsWith("~$") && !e.name.endsWith(".tmp"));
+
+  for (const dir of dirs) {
+    const folderPath = path.join(currentDir, dir.name);
+    const docketNo = extractDocketNumber(dir.name);
+
+    if (docketNo) {
+      let lastModified = Date.now();
+      try {
+        const stats = await fs.promises.stat(folderPath);
+        lastModified = stats.mtimeMs;
+      } catch { /* ignore */ }
+
+      if (!scannedIndex.has(docketNo)) {
+        scannedIndex.set(docketNo, {
+          docketNo,
+          folderName: dir.name,
+          folderPath,
+          lastModified
+        });
+      } else {
+        const existing = scannedIndex.get(docketNo)!;
+        const existingFiles = await countFiles(existing.folderPath);
+        const currentFiles = await countFiles(folderPath);
+        if (currentFiles > existingFiles) {
+          scannedIndex.set(docketNo, {
+            docketNo,
+            folderName: dir.name,
+            folderPath,
+            lastModified
+          });
+        }
+      }
+    }
+
+    await scanDirectoryRecursive(folderPath, scannedIndex, depth + 1);
+  }
+}
+
+async function countFiles(dirPath: string): Promise<number> {
+  try {
+    let count = 0;
+    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        count += await countFiles(path.join(dirPath, e.name));
+      } else if (e.isFile() && !e.name.startsWith("~$") && !e.name.endsWith(".tmp")) {
+        count++;
+      }
+    }
+    return count;
+  } catch {
+    return 0;
+  }
 }
 
 async function scanNetworkLocation(): Promise<Map<string, ScanRecord>> {
   const scannedIndex = new Map<string, ScanRecord>();
-  console.log(`[Scanner] Initializing network scan at: ${CONFIG.networkPath}`);
+  console.log(`[Scanner] Initializing recursive scan at root: ${CONFIG.networkRoot}`);
 
-  for (const monthFolder of CONFIG.monthlyFolders) {
-    const targetMonthPath = path.join(CONFIG.networkPath, monthFolder);
-
-    try {
-      if (!fs.existsSync(targetMonthPath)) {
-        console.warn(`[Scanner] Warning: Monthly folder does not exist: "${targetMonthPath}"`);
-        continue;
-      }
-
-      const files = await fs.promises.readdir(targetMonthPath, { withFileTypes: true });
-
-      for (const file of files) {
-        if (file.isDirectory()) {
-          const folderName = file.name;
-          const folderPath = path.join(targetMonthPath, folderName);
-
-          const docketNo = extractDocketNumber(folderName);
-          if (!docketNo) {
-            console.warn(`[Scanner] Warning: Could not extract docket number from folder name: "${folderName}"`);
-            continue;
-          }
-
-          let lastModified = Date.now();
-          try {
-            const stats = await fs.promises.stat(folderPath);
-            lastModified = stats.mtimeMs;
-          } catch {
-            console.error(`[Scanner] Failed to get stats for: ${folderPath}`);
-          }
-
-          const record: ScanRecord = {
-            docketNo,
-            folderName,
-            folderPath,
-            lastModified
-          };
-
-          if (scannedIndex.has(docketNo)) {
-            const existing = scannedIndex.get(docketNo)!;
-            console.warn(
-              `[Conflict] Duplicate docket number "${docketNo}" detected during scan.\n` +
-              `  - Retaining: "${existing.folderPath}"\n` +
-              `  - Ignoring:  "${folderPath}"`
-            );
-            continue;
-          }
-
-          scannedIndex.set(docketNo, record);
-        }
-      }
-    } catch (err) {
-      console.error(`[Scanner] Error reading directory "${targetMonthPath}": ${(err as Error).message}`);
+  try {
+    if (!fs.existsSync(CONFIG.networkRoot)) {
+      console.warn(`[Scanner] Root path does not exist: "${CONFIG.networkRoot}"`);
+      return scannedIndex;
     }
+
+    await scanDirectoryRecursive(CONFIG.networkRoot, scannedIndex, 0);
+
+    console.log(`[Scanner] Scan complete. Found ${scannedIndex.size} indexed folders.`);
+  } catch (err) {
+    console.error(`[Scanner] Error scanning root "${CONFIG.networkRoot}": ${(err as Error).message}`);
   }
 
   return scannedIndex;

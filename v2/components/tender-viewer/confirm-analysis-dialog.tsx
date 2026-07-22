@@ -84,6 +84,19 @@ export default function ConfirmAnalysisDialog({
           } else if (row.type === "Non-Gem") {
             const referenceNo = row.referenceNo as string | undefined;
             const website = row.website as string | undefined;
+
+            if (referenceNo) {
+              try {
+                await dispatch(downloadTenderPdf({
+                  id: Number(row.id),
+                  type: "Non-Gem",
+                  referenceNo,
+                })).unwrap();
+              } catch {
+                console.error("[Non-GEM] Queue publish via download endpoint failed");
+              }
+            }
+
             if (referenceNo && website) {
               try {
                 console.log(process.env.DJANGO_API_KEY)
@@ -97,8 +110,6 @@ export default function ConfirmAnalysisDialog({
               } catch (e) {
                 console.error(`[Non-GEM] Django API call failed for ${referenceNo}:`, e);
               }
-            } else {
-              console.warn(`[Non-GEM] Skipping — missing referenceNo or website`);
             }
           }
         }

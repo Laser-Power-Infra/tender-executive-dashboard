@@ -30,24 +30,32 @@ const filesPromiseCache = new Map<string, Promise<any[]>>();
 
 const fetchDocketFiles = (docketNo: string): Promise<any[]> => {
   if (filesCache.has(docketNo)) {
+    console.log(`[DEBUG fetchDocketFiles] CACHE HIT for ${docketNo}:`, filesCache.get(docketNo));
     return Promise.resolve(filesCache.get(docketNo)!);
   }
   if (filesPromiseCache.has(docketNo)) {
+    console.log(`[DEBUG fetchDocketFiles] IN-FLIGHT HIT for ${docketNo}`);
     return filesPromiseCache.get(docketNo)!;
   }
+  console.log(`[DEBUG fetchDocketFiles] FETCHING for ${docketNo}`);
   const promise = fetch(`/api/executive-tenders/${docketNo}/files`, {
     headers: {
       Authorization: "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE",
     },
   })
-    .then((res) => (res.ok ? res.json() : { files: [] }))
+    .then((res) => {
+      console.log(`[DEBUG fetchDocketFiles] ${docketNo} response status:`, res.status, res.statusText);
+      return res.ok ? res.json() : { files: [] };
+    })
     .then((data) => {
+      console.log(`[DEBUG fetchDocketFiles] ${docketNo} response data:`, JSON.stringify(data).slice(0, 500));
       const files = data.files || [];
       filesCache.set(docketNo, files);
       filesPromiseCache.delete(docketNo);
       return files;
     })
-    .catch(() => {
+    .catch((err) => {
+      console.warn(`[DEBUG fetchDocketFiles] ${docketNo} fetch error:`, err);
       return [];
     });
   filesPromiseCache.set(docketNo, promise);
@@ -101,20 +109,26 @@ const FilesCell: React.FC<{
   useEffect(() => {
     if (!docketNo || docketNo === "-") return;
 
+    console.log(`[DEBUG FilesCell] MOUNTED for docketNo=${docketNo}`);
     let isMounted = true;
     setLoading(true);
     fetchDocketFiles(docketNo).then((data) => {
+      console.log(`[DEBUG FilesCell] ${docketNo} got data, length=${data?.length}, isMounted=${isMounted}`);
       if (isMounted) {
         setFiles(data);
         setLoading(false);
       }
     });
     return () => {
+      console.log(`[DEBUG FilesCell] UNMOUNTED for docketNo=${docketNo}`);
       isMounted = false;
     };
   }, [docketNo]);
 
+  console.log(`[DEBUG FilesCell] RENDER docketNo=${docketNo}, loading=${loading}, files=${files ? files.length : null}`);
   if (loading || !files || files.length === 0) {
+    if (!loading && !files) console.log(`[DEBUG FilesCell] ${docketNo} -> NULL (files not loaded yet)`);
+    else if (!loading && files?.length === 0) console.log(`[DEBUG FilesCell] ${docketNo} -> NULL (empty files array)`);
     return null; // Empty
   }
 
@@ -133,11 +147,13 @@ const FilesCell: React.FC<{
 
 const BOQChartCell: React.FC<{
   docketNo: string;
-}> = ({ docketNo }) => {
+  boqFileId?: string | null;
+}> = ({ docketNo, boqFileId }) => {
   const [boqFile, setBoqFile] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
+    if (boqFileId) return;
     if (!docketNo || docketNo === "-") return;
 
     let isMounted = true;
@@ -159,16 +175,17 @@ const BOQChartCell: React.FC<{
     return () => {
       isMounted = false;
     };
-  }, [docketNo]);
+  }, [docketNo, boqFileId]);
 
-  if (loading || !boqFile) {
-    return null; // Empty
-  }
+  if (loading) return null;
+
+  const effectiveFileId = boqFileId || boqFile?.fileId;
+  if (!effectiveFileId) return null;
 
   const handleDownload = () => {
     const token = "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE";
     window.open(
-      `/api/executive-files/download/${boqFile.fileId}?auth=${encodeURIComponent(token)}`,
+      `/api/executive-files/download/${effectiveFileId}?auth=${encodeURIComponent(token)}`,
       "_blank",
     );
   };
@@ -177,7 +194,7 @@ const BOQChartCell: React.FC<{
     <button
       className="table-boq-btn"
       onClick={handleDownload}
-      title={`Download ${boqFile.filename}`}
+      title={`Download Comparative Chart`}
       style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
     >
       <BarChart3 size={14} /> Comparative Chart
@@ -1184,7 +1201,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleSort = (
     column: keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart",
   ) => {
-    if (column === "rawMaterials") return; // Skip sorting on custom rawMaterials column
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
@@ -1258,12 +1274,22 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     // Sorting
     if (sortColumn) {
       result.sort((a, b) => {
-        if (sortColumn === "rawMaterials") return 0; // Skip sorting on rawMaterials custom virtual column
-
         let valA: any;
         let valB: any;
 
-        if (sortColumn === "files") {
+        if (sortColumn === "rawMaterials") {
+          const materialFields = [
+            "aluminiumPrice", "aluminiumAlloyPrice", "copperTapePrice",
+            "extrudedSemiconductivePrice", "htXlpePrice", "pvcTypeSt2Price",
+            "galvanisedSteelFlatStripPrice", "fillerPrice",
+          ] as const;
+          valA = materialFields.reduce(
+            (sum, f) => sum + (typeof a[f as keyof EpcTenderRecord] === "number" ? (a[f as keyof EpcTenderRecord] as number) : 0), 0,
+          );
+          valB = materialFields.reduce(
+            (sum, f) => sum + (typeof b[f as keyof EpcTenderRecord] === "number" ? (b[f as keyof EpcTenderRecord] as number) : 0), 0,
+          );
+        } else if (sortColumn === "files") {
           valA = a.fileCount !== undefined ? a.fileCount : 0;
           valB = b.fileCount !== undefined ? b.fileCount : 0;
         } else if (sortColumn === "boqChart") {
@@ -2347,7 +2373,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           cellClass = "col-center";
                         } else if (col.accessor === "boqChart") {
                           cellContent = (
-                            <BOQChartCell docketNo={record.docketNo} />
+                            <BOQChartCell docketNo={record.docketNo} boqFileId={record.boqFileId} />
                           );
                           cellClass = "col-center";
                         } else if (

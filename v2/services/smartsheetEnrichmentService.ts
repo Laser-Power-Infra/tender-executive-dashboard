@@ -54,7 +54,7 @@ async function buildCostingMap(accessToken: string): Promise<Map<string, Costing
   });
 
   if (!costingResponse.ok) {
-    console.warn(`[SmartsheetEnrichment] Failed to fetch costing sheet: ${costingResponse.statusText}`);
+    // console.warn(`[SmartsheetEnrichment] Failed to fetch costing sheet: ${costingResponse.statusText}`);
     return costingMap;
   }
 
@@ -91,7 +91,7 @@ async function buildCostingMap(accessToken: string): Promise<Map<string, Costing
   return costingMap;
 }
 
-async function getCostingDetails(
+export async function getCostingDetails(
   attachmentUrl: string,
   docketNo: string,
   driveAccessToken: string | null
@@ -104,7 +104,7 @@ async function getCostingDetails(
   const fileId = getGoogleDriveFileId(attachmentUrl);
   if (fileId) {
     if (!driveAccessToken) {
-      console.warn(`[SmartsheetEnrichment] No Drive access token, skipping docket "${docketNo}"`);
+      // console.warn(`[SmartsheetEnrichment] No Drive access token, skipping docket "${docketNo}"`);
       return null;
     }
     downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
@@ -118,10 +118,10 @@ async function getCostingDetails(
 
   if (!fileExists) {
     try {
-      console.log(`[SmartsheetEnrichment] Downloading costing Excel for docket "${docketNo}"...`);
+      // console.log(`[SmartsheetEnrichment] Downloading costing Excel for docket "${docketNo}"...`);
       const response = await fetch(downloadUrl, { headers });
       if (!response.ok) {
-        console.warn(`[SmartsheetEnrichment] Failed to download Excel for docket "${docketNo}": ${response.statusText}`);
+        // console.warn(`[SmartsheetEnrichment] Failed to download Excel for docket "${docketNo}": ${response.statusText}`);
         return null;
       }
       const buffer = await response.arrayBuffer();
@@ -129,7 +129,7 @@ async function getCostingDetails(
       fs.writeFileSync(localPath, Buffer.from(buffer));
       fileExists = true;
     } catch (err) {
-      console.warn(`[SmartsheetEnrichment] Error downloading Excel for docket "${docketNo}": ${(err as Error).message}`);
+      // console.warn(`[SmartsheetEnrichment] Error downloading Excel for docket "${docketNo}": ${(err as Error).message}`);
       return null;
     }
   }
@@ -141,7 +141,7 @@ async function getCostingDetails(
     const sheetName = findCostingSheet(workbook);
     const sheet = sheetName ? workbook.Sheets[sheetName] : null;
     if (!sheet) {
-      console.warn(`[SmartsheetEnrichment] Costing sheet not found for docket "${docketNo}"`);
+      // console.warn(`[SmartsheetEnrichment] Costing sheet not found for docket "${docketNo}"`);
       return null;
     }
 
@@ -319,7 +319,7 @@ async function getCostingDetails(
       fillerPrice: prices.filler,
     };
   } catch (err) {
-    console.warn(`[SmartsheetEnrichment] Error parsing Excel for docket "${docketNo}": ${(err as Error).message}`);
+    // console.warn(`[SmartsheetEnrichment] Error parsing Excel for docket "${docketNo}": ${(err as Error).message}`);
     try {
       fs.unlinkSync(localPath);
     } catch {}
@@ -333,7 +333,7 @@ export async function fetchAndEnrichSmartsheetTenders(): Promise<SmartsheetTende
 
   const creds = getCleanCredentials();
   if (!creds) {
-    console.warn("[SmartsheetEnrichment] No Google credentials, returning basic records");
+    // console.warn("[SmartsheetEnrichment] No Google credentials, returning basic records");
     return records;
   }
 
@@ -341,7 +341,7 @@ export async function fetchAndEnrichSmartsheetTenders(): Promise<SmartsheetTende
   try {
     driveAccessToken = await getAccessToken(creds.email, creds.key);
   } catch (err) {
-    console.warn(`[SmartsheetEnrichment] Failed to get Drive token: ${(err as Error).message}`);
+    // console.warn(`[SmartsheetEnrichment] Failed to get Drive token: ${(err as Error).message}`);
     return records;
   }
 
@@ -359,7 +359,7 @@ export async function fetchAndEnrichSmartsheetTenders(): Promise<SmartsheetTende
       try {
         costing = await getCostingDetails(match.url, numericDocket, driveAccessToken);
       } catch (err) {
-        console.warn(`[SmartsheetEnrichment] Failed to enrich docket "${numericDocket}": ${(err as Error).message}`);
+        // console.warn(`[SmartsheetEnrichment] Failed to enrich docket "${numericDocket}": ${(err as Error).message}`);
       }
     }
 
