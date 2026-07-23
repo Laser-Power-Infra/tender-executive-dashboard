@@ -4,6 +4,8 @@ import path from "path";
 import os from "os";
 import { generateCertificatePdf } from "@/lib/generate-offer-pdf";
 import { uploadFileToDrive } from "@/lib/gdrive";
+import { logActivity } from "@/lib/activity-logger";
+import { prisma } from "@/lib/prisma";
 import { CertificateTemplateData } from "@/app/types/certificate";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 
@@ -52,7 +54,14 @@ export async function POST(request: NextRequest) {
     }
 
     const data = mapRowsToCertificateData(rows);
-    const fileName = `Certificate_${data.partyRefNo || "NAN"}_${sanitizeFileName(data.partyName || "Unknown")}.pdf`;
+    const partyRefNo = data.partyRefNo || "NAN";
+
+    const prevCount = await prisma.activityLog.count({
+      where: { referenceNo: partyRefNo, action: "GENERATE_CERTIFICATE_PDF" },
+    });
+    const version = prevCount + 1;
+
+    const versionedFileName = `Certificate_${partyRefNo}_${sanitizeFileName(data.partyName || "Unknown")}_v${version}.pdf`;
 
     const template = loadTemplate();
 
@@ -61,17 +70,33 @@ export async function POST(request: NextRequest) {
     const pdfBuffer = await generateCertificatePdf(template, data, { outputPath: tempPath });
 
     const base64 = pdfBuffer.toString("base64");
-    const result = await uploadFileToDrive(fileName, "application/pdf", base64, CERTIFICATE_FOLDER_ID);
+    const result = await uploadFileToDrive(versionedFileName, "application/pdf", base64, CERTIFICATE_FOLDER_ID);
 
     try {
       fs.unlinkSync(tempPath);
     } catch {}
 
+    logActivity({
+      action: "GENERATE_CERTIFICATE_PDF",
+      tableName: "SupplyHistory",
+      referenceNo: partyRefNo,
+      details: JSON.stringify({
+        version,
+        partyRefNo: data.partyRefNo,
+        partyName: data.partyName,
+        fy: data.fy,
+        itemCount: data.items.length,
+        invoiceAmt: data.invoiceAmt,
+        driveUrl: result.url,
+        fileName: versionedFileName,
+      }),
+    });
+
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Disposition": `attachment; filename="${versionedFileName}"`,
         "X-Drive-Url": result.url,
       },
     });

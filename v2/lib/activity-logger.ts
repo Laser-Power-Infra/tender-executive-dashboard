@@ -2,7 +2,7 @@ import "server-only"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
-type Action = "CREATE" | "UPDATE" | "DELETE"
+type Action = "CREATE" | "UPDATE" | "DELETE" | "GENERATE_CERTIFICATE_PDF"
 
 export async function logActivity(params: {
   action: Action
