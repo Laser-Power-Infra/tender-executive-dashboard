@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useCallback, useEffect } from "react"
 import { useSupplyHistory } from "@/hooks/useSupplyHistory";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
-import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
+import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText } from "lucide-react";
 import { toast } from "sonner";
 import "@/app/SupplyHistory.css";
 
@@ -104,6 +104,60 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [selectedBillNo, setSelectedBillNo] = useState<string | null>(null);
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [indexing, setIndexing] = useState(false);
+
+  type CertState =
+    | { status: "idle" }
+    | { status: "generating" }
+    | { status: "error"; error: string };
+
+  const [certStates, setCertStates] = useState<Record<string, CertState>>({});
+  const certGeneratingRef = useRef<Set<string>>(new Set());
+
+  const triggerDownload = useCallback((blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleGenerateCertificate = useCallback(
+    async (partyRefNo: string) => {
+      if (certGeneratingRef.current.has(partyRefNo)) return;
+      certGeneratingRef.current.add(partyRefNo);
+
+      setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "generating" } }));
+
+      const group = data.filter((r) => r.partyRefNo === partyRefNo);
+      const fileName = `Certificate_${partyRefNo || "NAN"}.pdf`;
+
+      try {
+        const res = await fetch("/api/supply-history/generate-certificate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: group }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Generation failed" }));
+          throw new Error(err.error || "Generation failed");
+        }
+        const blob = await res.blob();
+        triggerDownload(blob, fileName);
+        setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "idle" } }));
+      } catch (err: any) {
+        setCertStates((prev) => ({
+          ...prev,
+          [partyRefNo]: { status: "error", error: err.message },
+        }));
+      } finally {
+        certGeneratingRef.current.delete(partyRefNo);
+      }
+    },
+    [data, triggerDownload]
+  );
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
@@ -847,13 +901,16 @@ export const SupplyHistoryDashboard: React.FC = () => {
                           />
                         </th>
                       ))}
+                      <th style={{ width: "150px", minWidth: "150px" }}>
+                        <div className="supply-th-inner">Certificate PDF</div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginated.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={COLUMNS.length}
+                          colSpan={COLUMNS.length + 1}
                           style={{
                             textAlign: "center",
                             padding: "48px 20px",
@@ -930,6 +987,37 @@ export const SupplyHistoryDashboard: React.FC = () => {
                           ) : (
                             <span className="supply-null-cell">—</span>
                           )}
+                        </td>
+                        <td className="col-center">
+                          {!row.partyRefNo ? (
+                            <span className="supply-null-cell">—</span>
+                          ) : (() => {
+                            const state = certStates[row.partyRefNo] ?? { status: "idle" };
+                            if (state.status === "generating") {
+                              return <span className="supply-generating"><span className="supply-spinner-sm" /> Generating...</span>;
+                            }
+                            if (state.status === "error") {
+                              return (
+                                <button
+                                  className="retry-pdf-btn"
+                                  onClick={() => handleGenerateCertificate(row.partyRefNo!)}
+                                  title={state.error}
+                                  style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                >
+                                  <RefreshCw size={14} /> Retry
+                                </button>
+                              );
+                            }
+                            return (
+                              <button
+                                className="generate-pdf-btn"
+                                onClick={() => handleGenerateCertificate(row.partyRefNo!)}
+                                style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+                              >
+                                <FileText size={14} /> Generate PDF
+                              </button>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}

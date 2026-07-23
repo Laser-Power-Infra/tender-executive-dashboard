@@ -86,13 +86,13 @@ export { getGoogleClients };
 /**
  * Uploads a base64 encoded file directly to the configured Google Drive folder.
  */
-export async function uploadFileToDrive(fileName: string, mimeType: string, base64Data: string) {
+export async function uploadFileToDrive(fileName: string, mimeType: string, base64Data: string, folderId?: string) {
   try {
     const { drive } = getGoogleClients();
     const buffer = Buffer.from(base64Data, "base64");
     const fileMetadata = {
       name: fileName,
-      parents: [DRIVE_FOLDER_ID],
+      parents: [folderId || DRIVE_FOLDER_ID],
     };
     const media = {
       mimeType,
