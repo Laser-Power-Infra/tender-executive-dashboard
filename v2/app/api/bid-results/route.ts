@@ -4,10 +4,6 @@ import { extractBidResults } from "@/lib/services/gem-bid-results";
 
 const HARDCODED_GEM_IDS = [
   "GEM/2026/B/7669772",
-  // "GEM/2026/B/7663025",
-  // "GEM/2026/B/7709924",
-  // "GEM/2026/B/7712073",
-  // "GEM/2026/B/7669291",
 ];
 
 export async function GET(request: NextRequest) {
@@ -30,17 +26,17 @@ export async function GET(request: NextRequest) {
       if (!result.success) continue;
 
       try {
-        const existing = await prisma.gemTender.findUnique({
+        const existing = await prisma.tenderMerged.findUnique({
           where: { referenceNo: result.gemId },
           include: { evaluations: true },
         });
 
         if (!existing) {
-          try { console.error(`GemTender with referenceNo ${result.gemId} not found in DB`); } catch {}
+          try { console.error(`TenderMerged with referenceNo ${result.gemId} not found in DB`); } catch {}
           continue;
         }
 
-        await prisma.gemTender.update({
+        await prisma.tenderMerged.update({
           where: { referenceNo: result.gemId },
           data: {
             bidStatus: result.bidStatus || null,
@@ -50,12 +46,12 @@ export async function GET(request: NextRequest) {
 
         if (result.evaluations && result.evaluations.length > 0) {
           await prisma.evaluation.deleteMany({
-            where: { gemTenderId: existing.id },
+            where: { tenderMergedId: existing.id },
           });
 
           await prisma.evaluation.createMany({
             data: result.evaluations.map((e) => ({
-              gemTenderId: existing.id,
+              tenderMergedId: existing.id,
               sellerName: e.sellerName,
               offeredItem: e.offeredItem,
               totalPrice: e.totalPrice,

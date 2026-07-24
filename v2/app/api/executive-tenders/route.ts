@@ -170,15 +170,27 @@ async function enrichWithCosting(tenders: any[]): Promise<any[]> {
     return tenders;
   }
 
+  const withAttachment = tenders.filter((t: any) => t.attachmentUrl && t.attachmentUrl !== "-");
+  console.log(`[CostingEnrich] ${withAttachment.length} of ${tenders.length} tenders have attachment URLs.`);
+
   const results = await Promise.allSettled(
     tenders.map(async (tender: any) => {
-      if (!tender.attachmentUrl || tender.attachmentUrl === "-") return tender;
+      if (!tender.attachmentUrl || tender.attachmentUrl === "-") {
+        if (!tender.attachmentUrl) {
+          // console.log(`[CostingEnrich] Skipping tender "${tender.tenderNoNitNo}": no attachmentUrl`);
+        }
+        return tender;
+      }
 
       const numericDocket = extractNumericDocket(tender.docketNo) || tender.docketNo || "";
+      console.log(`[CostingEnrich] Enriching docket "${numericDocket}" from URL: ${tender.attachmentUrl.substring(0, 80)}...`);
       const costing = await getCostingDetails(tender.attachmentUrl, numericDocket, driveAccessToken);
-      if (!costing) return tender;
+      if (!costing) {
+        console.warn(`[CostingEnrich] getCostingDetails returned null for docket "${numericDocket}"`);
+        return tender;
+      }
 
-      return {
+      const enriched = {
         ...tender,
         priceBasis: costing.priceBasis ?? tender.priceBasis,
         proposedErpItemName: costing.proposedErpItemName ?? tender.proposedErpItemName,
@@ -191,10 +203,15 @@ async function enrichWithCosting(tenders: any[]): Promise<any[]> {
         pvcTypeSt2Price: costing.pvcTypeSt2Price ?? tender.pvcTypeSt2Price,
         galvanisedSteelFlatStripPrice: costing.galvanisedSteelFlatStripPrice ?? tender.galvanisedSteelFlatStripPrice,
         fillerPrice: costing.fillerPrice ?? tender.fillerPrice,
+        cva: costing.cva ?? tender.cva,
       };
+      console.log(`[CostingEnrich] Enriched docket "${numericDocket}": cva="${enriched.cva}"`);
+      return enriched;
     })
   );
 
+  const fulfilledCount = results.filter(r => r.status === "fulfilled").length;
+  console.log(`[CostingEnrich] Completed: ${fulfilledCount}/${tenders.length} settled.`);
   return results.map((r) => (r.status === "fulfilled" ? r.value : tenders[results.indexOf(r)]));
 }
 

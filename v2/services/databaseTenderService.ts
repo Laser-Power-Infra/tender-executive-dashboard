@@ -70,7 +70,8 @@ const isRecordModified = (sheet: Record<string, unknown>, db: DbRecord): boolean
     { name: "bidValidityExpired", type: "boolean" },
     { name: "reason", type: "string" },
     { name: "finalRemarks", type: "string" },
-    { name: "attachmentUrl", type: "string" }
+    { name: "attachmentUrl", type: "string" },
+    { name: "cva", type: "string" }
   ];
 
   if (!db.diffL1ManuallyEdited) {
@@ -183,6 +184,7 @@ export class DatabaseTenderService {
         reason: record.reason || null,
         finalRemarks: record.finalRemarks || null,
         attachmentUrl: record.attachmentUrl || null,
+        cva: (record.cva as string) || null,
       };
 
       try {

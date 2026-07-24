@@ -26,7 +26,7 @@ import AiFeedbackDialog from "@/components/tender-viewer/ai-feedback-dialog";
 import DashboardSkeleton from "@/components/tender-viewer/dashboard-skeleton";
 import WebsiteEditDialog from "@/components/tender-viewer/website-edit-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, MessageSquare, Pencil, Check } from "lucide-react";
+import { Loader2, MessageSquare, Pencil, Check, FileText } from "lucide-react";
 import { getDisplayNameMap } from "@/lib/tender-columns";
 import {
   OptimizedTenderTable,
@@ -165,8 +165,7 @@ export default function Dashboard() {
       dispatch(
         updateTenderAssignments({
           rowIndex,
-          gemTenderId: type === "Gem" ? parseInt(id, 10) : undefined,
-          nonGemTenderId: type === "Non-Gem" ? parseInt(id, 10) : undefined,
+          tenderMergedId: parseInt(id, 10),
           associationIds: associationIds.map(Number),
           oldValue,
         }),
@@ -192,8 +191,7 @@ export default function Dashboard() {
           rowIndex,
           field: col,
           value,
-          type: type as "Gem" | "Non-Gem",
-          id: parseInt(id, 10),
+          tenderMergedId: parseInt(id, 10),
           oldValue,
         }),
       )
@@ -219,8 +217,7 @@ export default function Dashboard() {
 
   const handleSaveFeedback = useCallback(
     (params: {
-      tenderId: number;
-      tenderType: string;
+      tenderMergedId: number;
       briefText: string;
       originalAi: string;
       correctedAi: string;
@@ -248,16 +245,14 @@ export default function Dashboard() {
 
   const handleWebsiteSave = useCallback(
     (params: {
-      tenderId: number;
-      tenderType: string;
+      tenderMergedId: number;
       website: string;
       oldValue: string;
     }) => {
       const toastId = toast.loading("Saving website...");
       dispatch(
         updateWebsiteMapping({
-          type: params.tenderType as "Gem" | "Non-Gem",
-          id: params.tenderId,
+          tenderMergedId: params.tenderMergedId,
           website: params.website,
           oldValue: params.oldValue,
         }),
@@ -266,20 +261,17 @@ export default function Dashboard() {
         .then((result) => {
           toast.success("Website saved", { id: toastId });
           setWebsiteEditRow(null);
-          const type = params.tenderType as "Gem" | "Non-Gem";
           dispatch(
             bulkAssignUtilityMapping({
               organization: result.organization,
               website: params.website,
               utilityMappingId: result.utilityMappingId,
-              excludeTenderId: params.tenderId,
-              excludeTenderType: type,
+              excludeTenderMergedId: params.tenderMergedId,
             }),
           )
             .unwrap()
             .then((bulkResult) => {
-              const total =
-                bulkResult.updatedGem.length + bulkResult.updatedNonGem.length;
+              const total = bulkResult.updatedIds.length;
               if (total > 0) {
                 toast.success(
                   `Updated ${total} tender${total > 1 ? "s" : ""} with same organization`,
@@ -397,6 +389,28 @@ export default function Dashboard() {
     });
   }, [tenderData, exclusionFilter]);
 
+  const rowsWithMergedValues = useMemo(() => {
+    return excludedRows.map((row) => {
+      const newRow = { ...row } as Record<string, unknown>;
+      for (const g of mergedGroups) {
+        if (g.fields.length >= 2) {
+          const isConcatenated = g.separator.trim().length > 0;
+          if (isConcatenated) {
+            const parts = g.fields
+              .map((f) => String(row[f as keyof typeof row] ?? ""))
+              .filter(Boolean);
+            newRow[g.label] = parts.join(g.separator);
+          } else {
+            const firstField = g.fields[0];
+            const val = row[firstField as keyof typeof row];
+            newRow[g.label] = val != null && val !== "" ? String(val) : "";
+          }
+        }
+      }
+      return newRow;
+    });
+  }, [excludedRows, mergedGroups]);
+
   const columnDefs = useMemo(() => {
     if (!tenderData) return [];
 
@@ -482,16 +496,14 @@ export default function Dashboard() {
               </div>
             );
           },
-          filter:
-            col === "apm"
-              ? {
-                  type: "select" as const,
-                  options: [
-                    { value: "YES", label: "Yes" },
-                    { value: "NO", label: "No" },
-                  ],
-                }
-              : undefined,
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "YES", label: "Yes" },
+              { value: "NO", label: "No" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
         };
       }
 
@@ -500,6 +512,13 @@ export default function Dashboard() {
           header: "Size",
           accessor: col as keyof Record<string, unknown>,
           defaultWidth: 120,
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
         };
       }
 
@@ -516,6 +535,7 @@ export default function Dashboard() {
               { value: "true", label: "Yes" },
               { value: "false", label: "No" },
               { value: "not_analysed", label: "Not Analysed" },
+              { value: "__blank__", label: "Blank" },
             ],
           },
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
@@ -597,10 +617,13 @@ export default function Dashboard() {
           searchable: false,
           filter: {
             type: "select" as const,
-            options: tenderData.associations.map((a) => ({
-              value: String(a.id),
-              label: a.name,
-            })),
+            options: [
+              ...tenderData.associations.map((a) => ({
+                value: String(a.id),
+                label: a.name,
+              })),
+              { value: "__blank__", label: "Blank" },
+            ],
           },
           sortValue: (value: unknown) => {
             const ids = String(value ?? "")
@@ -665,6 +688,7 @@ export default function Dashboard() {
               { value: "FAILED", label: "Failed" },
               { value: "RATE_LIMITED", label: "Rate Limited" },
               { value: "PROCESSING", label: "Processing" },
+              { value: "__blank__", label: "Blank" },
             ],
           },
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
@@ -702,25 +726,35 @@ export default function Dashboard() {
         return {
           header: "Tender Document",
           accessor: col as keyof Record<string, unknown>,
-          defaultWidth: 300,
+          defaultWidth: 250,
           filter: {
             type: "select" as const,
             options: [
               { value: "Available", label: "Available" },
               { value: "Not Available", label: "Not Available" },
+              { value: "__blank__", label: "Blank" },
             ],
           },
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
-            const url = String(row[col] ?? "");
+            const filesRaw = row.tenderFiles as string | undefined;
+            const files: Array<{ url: string; tags: string[] }> = filesRaw
+              ? JSON.parse(filesRaw)
+              : [];
+            const docFile = files.find((f) =>
+              f.tags?.includes("tenderDocument"),
+            );
+            const url = docFile?.url ?? "";
+
             if (!url) return <span className="text-slate-300">-</span>;
             return (
               <a
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 underline hover:text-blue-800 text-xs"
                 onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 border-2 border-rose-500 text-rose-500 px-3 py-1.5 text-xs font-medium  hover:bg-rose-500 hover:text-rose-100 transition-colors mr-auto"
               >
+                <FileText className="h-3.5 w-3.5" />
                 Show Tender Document
               </a>
             );
@@ -733,6 +767,10 @@ export default function Dashboard() {
           header: "Reporting Officers",
           accessor: col as keyof Record<string, unknown>,
           defaultWidth: 200,
+          filter: {
+            type: "select" as const,
+            options: [{ value: "__blank__", label: "Blank" }],
+          },
           sortValue: (value: unknown) => {
             if (!value) return "";
             try {
@@ -791,6 +829,7 @@ export default function Dashboard() {
             options: [
               { value: "Available", label: "Available" },
               { value: "Not Available", label: "Not Available" },
+              { value: "__blank__", label: "Blank" },
             ],
           },
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
@@ -858,6 +897,13 @@ export default function Dashboard() {
           header: "Location",
           accessor: col as keyof Record<string, unknown>,
           defaultWidth: 200,
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
           sortValue: (value: unknown, row: Record<string, unknown>) => {
             const reportingsRaw = String(row.reportings ?? "");
             const addresses: string[] = [];
@@ -912,7 +958,7 @@ export default function Dashboard() {
         };
       }
 
-      let filterType: "text" | "select" | "dateRange" | "boolean" | undefined;
+      let filterType: "select" | "dateRange" | undefined;
 
       if (
         colLower.includes("date") ||
@@ -920,11 +966,7 @@ export default function Dashboard() {
         colLower.includes("submission")
       ) {
         filterType = "dateRange";
-      } else if (colLower.includes("status")) {
-        filterType = "select";
-      } else if (colLower.includes("type")) {
-        filterType = "select";
-      } else if (col === "organization") {
+      } else {
         filterType = "select";
       }
 
@@ -946,16 +988,19 @@ export default function Dashboard() {
         hidden: colIndex !== undefined ? !colIndex.visible : col === "id" ? true : undefined,
         type: filterType === "dateRange" ? "date" : undefined,
         filter:
-          options && filterType === "select"
+          filterType === "select"
             ? {
                 type: "select" as const,
-                options,
+                options: [
+                  ...(options ?? []),
+                  { value: "__blank__", label: "Blank" },
+                ],
                 ...(col === "organization"
                   ? { searchable: true as const }
                   : {}),
               }
-            : filterType
-              ? { type: filterType }
+            : filterType === "dateRange"
+              ? { type: "dateRange" as const }
               : undefined,
       };
     });
@@ -982,6 +1027,10 @@ export default function Dashboard() {
             : (displayNameMap[firstField] ?? firstField),
           accessor: g.label as keyof Record<string, unknown>,
           defaultWidth: 250,
+          filter: {
+            type: "select" as const,
+            options: [{ value: "__blank__", label: "Blank" }],
+          },
           sortValue: (_: unknown, row: Record<string, unknown>) => {
             if (isConcatenated) {
               const parts = g.fields
@@ -1177,7 +1226,7 @@ export default function Dashboard() {
                         row={feedbackRow}
                         isSaving={
                           feedbackSaving[
-                            `${feedbackRow.id}-${feedbackRow.type === "Gem" ? "Gem" : "NonGem"}`
+                            `${feedbackRow.id}-feedback`
                           ] ?? false
                         }
                         onSave={handleSaveFeedback}
@@ -1189,7 +1238,7 @@ export default function Dashboard() {
                         row={websiteEditRow}
                         isSaving={
                           updatingCells[
-                            `${websiteEditRow.id}-${websiteEditRow.type === "Gem" ? "Gem" : "NonGem"}-website`
+                            `${websiteEditRow.id}-website`
                           ] ?? false
                         }
                         onSave={handleWebsiteSave}
@@ -1199,7 +1248,7 @@ export default function Dashboard() {
                   </>
                 }
                 columns={columnDefs}
-                rows={excludedRows as Record<string, unknown>[]}
+                rows={rowsWithMergedValues as Record<string, unknown>[]}
                 associations={tenderData.associations ?? []}
                 title="Tender Table"
               />

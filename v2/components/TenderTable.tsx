@@ -453,6 +453,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       align: "left",
       type: "custom",
     },
+    {
+      header: "CVA",
+      accessor: "cva",
+      defaultWidth: 120,
+      align: "center",
+      type: "string",
+    },
   ];
 
   // 2. States

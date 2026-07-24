@@ -41,6 +41,7 @@ interface CostingDetails {
   pvcTypeSt2Price: number | null;
   galvanisedSteelFlatStripPrice: number | null;
   fillerPrice: number | null;
+  cva: string | null;
 }
 
 async function buildCostingMap(accessToken: string): Promise<Map<string, CostingEntry>> {
@@ -96,32 +97,42 @@ export async function getCostingDetails(
   docketNo: string,
   driveAccessToken: string | null
 ): Promise<CostingDetails | null> {
-  if (!attachmentUrl) return null;
+  if (!attachmentUrl) {
+    console.warn(`[CostingDetails] Called with null attachmentUrl for docket "${docketNo}"`);
+    return null;
+  }
 
+  console.log(`[CostingDetails] Starting for docket "${docketNo}"`);
   let downloadUrl: string | null = attachmentUrl;
   const headers: Record<string, string> = {};
 
   const fileId = getGoogleDriveFileId(attachmentUrl);
+  let isLocalFile = false;
+
   if (fileId) {
     if (!driveAccessToken) {
-      // console.warn(`[SmartsheetEnrichment] No Drive access token, skipping docket "${docketNo}"`);
+      console.warn(`[SmartsheetEnrichment] No Drive access token, skipping docket "${docketNo}"`);
       return null;
     }
     downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
     headers["Authorization"] = `Bearer ${driveAccessToken}`;
+  } else if (fs.existsSync(attachmentUrl)) {
+    isLocalFile = true;
+    console.log(`[CostingDetails] Local file found for docket "${docketNo}": ${attachmentUrl}`);
   }
 
-  const hash = crypto.createHash("md5").update(downloadUrl).digest("hex");
-  const localPath = path.join(CACHE_DIR, `${hash}.xlsx`);
+  const localPath = isLocalFile
+    ? attachmentUrl
+    : path.join(CACHE_DIR, `${crypto.createHash("md5").update(downloadUrl).digest("hex")}.xlsx`);
 
   let fileExists = fs.existsSync(localPath);
 
   if (!fileExists) {
     try {
-      // console.log(`[SmartsheetEnrichment] Downloading costing Excel for docket "${docketNo}"...`);
+      console.log(`[CostingDetails] Downloading costing Excel for docket "${docketNo}"...`);
       const response = await fetch(downloadUrl, { headers });
       if (!response.ok) {
-        // console.warn(`[SmartsheetEnrichment] Failed to download Excel for docket "${docketNo}": ${response.statusText}`);
+        console.warn(`[CostingDetails] Failed to download Excel for docket "${docketNo}": ${response.statusText}`);
         return null;
       }
       const buffer = await response.arrayBuffer();
@@ -129,7 +140,7 @@ export async function getCostingDetails(
       fs.writeFileSync(localPath, Buffer.from(buffer));
       fileExists = true;
     } catch (err) {
-      // console.warn(`[SmartsheetEnrichment] Error downloading Excel for docket "${docketNo}": ${(err as Error).message}`);
+      console.warn(`[CostingDetails] Error downloading Excel for docket "${docketNo}": ${(err as Error).message}`);
       return null;
     }
   }
@@ -305,6 +316,65 @@ export async function getCostingDetails(
       }
     }
 
+    let cvaMfg: number | null = null;
+    let cvaIntt: number | null = null;
+    let cvaInsp: number | null = null;
+
+    const normalizeHeaderText = (h: string): string =>
+      h.trim().toLowerCase().replace(/[^\w]/g, "");
+
+    console.log(`[CVA] Scanning ${workbook.SheetNames.length} sheets for docket "${docketNo}"...`);
+    for (const sheetName of workbook.SheetNames) {
+      const ws = workbook.Sheets[sheetName];
+      if (!ws || !ws["!ref"]) continue;
+      const wsRange = XLSX.utils.decode_range(ws["!ref"]);
+
+      for (let r = wsRange.s.r; r <= Math.min(wsRange.e.r, 40); r++) {
+        for (let c = wsRange.s.c; c <= wsRange.e.c; c++) {
+          const cell = ws[XLSX.utils.encode_cell({ r, c })];
+          if (!cell || cell.v === undefined) continue;
+          const raw = String(cell.v).trim().toLowerCase();
+          const norm = normalizeHeaderText(raw);
+
+          let key: "mfg" | "intt" | "insp" | null = null;
+          if (norm === "mfg" || norm === "mfgpercentage" || norm === "mfgpercent" || norm === "mfgr") key = "mfg";
+          else if (norm === "intt" || norm === "inttpercentage" || norm === "inttpercent") key = "intt";
+          else if (norm === "insp" || norm === "insppercentage" || norm === "insppercent" || norm === "inspection") key = "insp";
+          if (!key) continue;
+
+          console.log(`[CVA] Found header "${raw}" (norm="${norm}") as "${key}" at sheet="${sheetName}" row=${r} col=${c}`);
+
+          const valRow = r + 2;
+          if (valRow > wsRange.e.r) {
+            console.warn(`[CVA] Value row ${valRow} out of range (max ${wsRange.e.r}), skipping.`);
+            continue;
+          }
+          const valCell = ws[XLSX.utils.encode_cell({ r: valRow, c })];
+          if (!valCell || valCell.v === undefined || valCell.v === "") {
+            console.warn(`[CVA] Value cell at row=${valRow} col=${c} is empty.`);
+            continue;
+          }
+          const cleaned = String(valCell.v).replace(/[^\d.-]/g, "");
+          const num = parseFloat(cleaned);
+          if (!isNaN(num)) {
+            if (key === "mfg" && cvaMfg === null) cvaMfg = num;
+            else if (key === "intt" && cvaIntt === null) cvaIntt = num;
+            else if (key === "insp" && cvaInsp === null) cvaInsp = num;
+            console.log(`[CVA] Parsed ${key}=${num} (raw cell: "${String(valCell.v)}", cleaned: "${cleaned}")`);
+          } else {
+            console.warn(`[CVA] Could not parse number from cell value "${String(valCell.v)}" (cleaned: "${cleaned}")`);
+          }
+        }
+      }
+    }
+
+    const cvaParts: string[] = [];
+    if (cvaMfg !== null) cvaParts.push(String(cvaMfg));
+    if (cvaIntt !== null) cvaParts.push(String(cvaIntt));
+    if (cvaInsp !== null) cvaParts.push(String(cvaInsp));
+    const cva = cvaParts.length > 0 ? cvaParts.join("@") : null;
+    console.log(`[CVA] Result for docket "${docketNo}": mfg=${cvaMfg} intt=${cvaIntt} insp=${cvaInsp} → cva="${cva}"`);
+
     return {
       priceBasis,
       proposedErpItemName: erpItems.join("\n") || null,
@@ -317,6 +387,7 @@ export async function getCostingDetails(
       pvcTypeSt2Price: prices.pvcTypeSt2,
       galvanisedSteelFlatStripPrice: prices.galvanisedSteelFlatStrip,
       fillerPrice: prices.filler,
+      cva,
     };
   } catch (err) {
     // console.warn(`[SmartsheetEnrichment] Error parsing Excel for docket "${docketNo}": ${(err as Error).message}`);

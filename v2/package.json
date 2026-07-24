@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --port 3125",
     "build": "next build",
-    "start": "next start --port 3124",
+    "start": "next start --port 3126",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "typecheck": "tsc --noEmit"

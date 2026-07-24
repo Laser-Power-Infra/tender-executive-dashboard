@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { Zap, Square } from "lucide-react";
 
 interface ConfirmAnalysisDialogProps {
@@ -45,83 +46,107 @@ export default function ConfirmAnalysisDialog({
       return true;
     });
 
+    if (targets.length === 0) {
+      toast.info("No tenders to analyze — all filtered tenders already have an AI result or are missing a tender brief");
+      setIsAnalyzing(false);
+      setOpen(false);
+      return;
+    }
+
+    const toastId = toast.loading(`Analyzing ${targets.length} tender(s)...`);
+
     setAnalysisProgress({ done: 0, total: targets.length });
     setOpen(false);
 
+    let successCount = 0;
+    let failCount = 0;
+    let stoppedByRateLimit = false;
+
     for (let i = 0; i < targets.length; i++) {
-      if (abortRef.current) break;
+      if (abortRef.current) {
+        toast.info(`Analysis stopped (${successCount} completed)`, { id: toastId });
+        break;
+      }
 
       const row = targets[i];
       const brief = String(row.tenderBrief ?? "");
 
       try {
-        const result = await dispatch(analyzeTender({
-          id: Number(row.id),
-          type: row.type as "Gem" | "Non-Gem",
+        await dispatch(analyzeTender({
+          tenderMergedId: Number(row.id),
           brief,
         })).unwrap();
 
-        if (result.valid === "true") {
-          if (row.type === "Gem") {
-            const gemId = row.referenceNo as string | undefined;
-            if (gemId) {
-              try {
-                const dlResult = await dispatch(downloadTenderPdf({
-                  id: Number(row.id),
-                  type: "Gem",
-                  gemId,
+        successCount++;
+        toast.loading(`Analyzing ${targets.length} tender(s)... (${successCount}/${targets.length})`, { id: toastId });
+
+        if (row.type === "Gem") {
+          const gemId = row.referenceNo as string | undefined;
+          if (gemId) {
+            try {
+              const dlResult = await dispatch(downloadTenderPdf({
+                tenderMergedId: Number(row.id),
+                gemId,
+              })).unwrap();
+
+              if (dlResult.tenderFileUrl) {
+                await dispatch(parseTenderPdf({
+                  tenderMergedId: Number(row.id),
                 })).unwrap();
-
-                if (dlResult.tenderFileUrl) {
-                  await dispatch(parseTenderPdf({
-                    id: Number(row.id),
-                  })).unwrap();
-                }
-              } catch {
-                console.error("Download or parse failed");
               }
+            } catch {
+              toast.error(`Failed to download/parse PDF for #${row.id}`);
             }
-          } else if (row.type === "Non-Gem") {
-            const referenceNo = row.referenceNo as string | undefined;
-            const website = row.website as string | undefined;
+          }
+        } else if (row.type === "Non-Gem") {
+          const referenceNo = row.referenceNo as string | undefined;
+          const website = row.website as string | undefined;
 
-            if (referenceNo) {
-              try {
-                await dispatch(downloadTenderPdf({
-                  id: Number(row.id),
-                  type: "Non-Gem",
-                  referenceNo,
-                })).unwrap();
-              } catch {
-                console.error("[Non-GEM] Queue publish via download endpoint failed");
-              }
+          if (referenceNo) {
+            try {
+              await dispatch(downloadTenderPdf({
+                tenderMergedId: Number(row.id),
+                referenceNo,
+              })).unwrap();
+            } catch {
+              toast.error(`Failed to queue PDF download for #${row.id}`);
             }
+          }
 
-            if (referenceNo && website) {
-              try {
-                console.log(process.env.DJANGO_API_KEY)
-                const res = await fetch(`${process.env.DJANGO_API_KEY}/api/search-tender/`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ website, reference_no: referenceNo }),
-                });
-                const data = await res.json();
-                console.log(`[Non-GEM] Django API result for ${referenceNo}:`, data);
-              } catch (e) {
-                console.error(`[Non-GEM] Django API call failed for ${referenceNo}:`, e);
-              }
+          if (referenceNo && website) {
+            try {
+              const res = await fetch(`${process.env.DJANGO_API_KEY}/api/search-tender/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ website, reference_no: referenceNo }),
+              });
+              const data = await res.json();
+              console.log(`[Non-GEM] Django API result for ${referenceNo}:`, data);
+            } catch (e) {
+              toast.error(`Django search failed for #${row.id}`);
             }
           }
         }
       } catch (err) {
+        failCount++;
         if (err instanceof Error && err.message === "rate_limit") {
           abortRef.current = true;
+          stoppedByRateLimit = true;
+          toast.error("OpenAI rate limit reached — analysis stopped");
           break;
         }
-        console.error("Analysis failed");
+        toast.error(`Analysis failed for #${row.id}`);
       }
 
       setAnalysisProgress(prev => ({ ...prev, done: prev.done + 1 }));
+    }
+
+    if (!abortRef.current && !stoppedByRateLimit) {
+      if (failCount === 0) {
+        toast.success(`Analysis complete — ${successCount} tender(s) analyzed`, { id: toastId });
+      } else {
+        toast.warning(`Analysis complete — ${successCount} succeeded, ${failCount} failed`, { id: toastId });
+      }
     }
 
     setIsAnalyzing(false);

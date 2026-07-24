@@ -326,6 +326,13 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       if (col.filter?.type === "select") {
         const selectVal = filterState.select;
         if (selectVal) {
+          if (selectVal === "__blank__") {
+            result = result.filter((row) => {
+              const val = row[col.accessor as keyof T];
+              return val === null || val === undefined || val === "" || val === "NOT_DECIDED";
+            });
+            return;
+          }
           result = result.filter((row) => {
             const val = String(row[col.accessor as keyof T] ?? "");
             if (accessorStr === "assignedTo") {

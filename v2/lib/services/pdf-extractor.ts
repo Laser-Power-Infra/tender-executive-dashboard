@@ -7,26 +7,52 @@ import { getPdfDataUrl } from "@/lib/services/pdf-parser";
 const model = openai("gpt-4o-mini");
 
 const extractionSchema = z.object({
-  itemCategory: z.string().describe("Item category extracted from the tender PDF"),
-  totalQuantity: z.string().describe("Total quantity as mentioned in the tender PDF"),
+  itemCategory: z
+    .string()
+    .describe("Item category extracted from the tender PDF"),
+  totalQuantity: z
+    .string()
+    .describe("Total quantity as mentioned in the tender PDF"),
   reportings: z
     .array(
       z.object({
         officer: z.string().describe("Consignee/Reporting officer name"),
-        address: z.string().describe("Address of the reporting officer/consignee"),
-        quantity: z.string().describe("Quantity allocated to this officer/consignee"),
+        address: z
+          .string()
+          .describe("Address of the reporting officer/consignee"),
+        quantity: z
+          .string()
+          .describe("Quantity allocated to this officer/consignee"),
       }),
     )
-    .describe("List of all consignees/reporting officers with their addresses and allocated quantities"),
+    .describe(
+      "List of all consignees/reporting officers with their addresses and allocated quantities",
+    ),
+  size: z.array(
+    z.object({
+      itemCategory: z
+        .string()
+        .describe("Item category extracted from tender pdf"),
+      TechnicalSpecifications: z
+        .string()
+        .describe(
+          "Technical specification table in markdown table format for this item cateogry ",
+        ),
+    }),
+  ),
 });
 
 export type ExtractionResult =
   | { success: true; data: z.infer<typeof extractionSchema> }
   | { success: false; error: "rate_limit" | "no_pdf_url" | "unknown" };
 
-async function updateStatus(tenderId: number, parseStatus: string, parseError?: string | null) {
+async function updateStatus(
+  tenderId: number,
+  parseStatus: string,
+  parseError?: string | null,
+) {
   try {
-    await prisma.gemTender.update({
+    await prisma.tenderMerged.update({
       where: { id: tenderId },
       data: { parseStatus, parseError: parseError ?? null },
     });
@@ -39,11 +65,13 @@ function parseRetryAfter(message: string): number | null {
   return null;
 }
 
-export async function extractPdfData(tenderId: number): Promise<ExtractionResult> {
+export async function extractPdfData(
+  tenderId: number,
+): Promise<ExtractionResult> {
   await updateStatus(tenderId, "PROCESSING");
 
   try {
-    const tender = await prisma.gemTender.findUnique({
+    const tender = await prisma.tenderMerged.findUnique({
       where: { id: tenderId },
       select: { id: true, tenderFileUrl: true, referenceNo: true },
     });
@@ -78,6 +106,7 @@ export async function extractPdfData(tenderId: number): Promise<ExtractionResult
                     "1. Item Category — what category of items is being procured\n" +
                     "2. Total Quantity — the total quantity across all line items\n" +
                     "3. Consignees / Reporting Officers — list each officer name, their address, and the quantity allocated to them\n\n" +
+                    "4. For each Item category - detailed breakdown of technical specifications. including specification, specification name, bid requirement.\n" +
                     "Return ALL consignees found. If address is not clearly mentioned, provide the best available location.",
                 },
                 {
@@ -118,21 +147,27 @@ export async function extractPdfData(tenderId: number): Promise<ExtractionResult
       );
     } catch {}
 
+    const size =
+      output.size
+        ?.map((s) => `### ${s.itemCategory}\n${s.TechnicalSpecifications}`)
+        .join("\n\n") || null;
+
     await prisma.$transaction([
-      prisma.gemTender.update({
+      prisma.tenderMerged.update({
         where: { id: tenderId },
         data: {
           parseStatus: "COMPLETED",
           parseError: null,
           itemCategory: output.itemCategory,
           totalQuantity: output.totalQuantity,
+          size,
         },
       }),
-      prisma.reporting.deleteMany({ where: { gemTenderId: tenderId } }),
+      prisma.reporting.deleteMany({ where: { tenderMergedId: tenderId } }),
       ...output.reportings.map((r) =>
         prisma.reporting.create({
           data: {
-            gemTenderId: tenderId,
+            tenderMergedId: tenderId,
             officer: r.officer,
             address: r.address || null,
             quantity: r.quantity || null,

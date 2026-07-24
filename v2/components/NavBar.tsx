@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, LogIn, LogOut, User, UserPlus } from "lucide-react";
+import { UnderChangesBanner } from "@/components/UnderChangesBanner";
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -53,7 +54,9 @@ export function NavBar() {
   const isAdminActive = adminLinks.some((l) => pathname === l.href);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 h-10.5 bg-white border-b border-gray-200 shadow-md">
+    <>
+      <UnderChangesBanner />
+      <nav className="fixed top-0 left-0 right-0 z-50 h-10.5 bg-white border-b border-gray-200 shadow-md">
       <NavigationMenu className="max-w-full w-full h-full gap-2 flex">
         <NavigationMenuList className="h-full px-2 gap-2 w-full justify-start">
           {links.map(({ href, label }) => {
@@ -164,5 +167,6 @@ export function NavBar() {
         </div>
       </NavigationMenu>
     </nav>
+    </>
   );
 }

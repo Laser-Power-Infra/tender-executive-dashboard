@@ -7,8 +7,7 @@ interface WebsiteEditDialogProps {
   row: Record<string, unknown>;
   isSaving: boolean;
   onSave: (params: {
-    tenderId: number;
-    tenderType: string;
+    tenderMergedId: number;
     website: string;
     oldValue: string;
   }) => void;
@@ -34,8 +33,7 @@ export default function WebsiteEditDialog({
   const handleSave = () => {
     if (!website.trim()) return;
     onSave({
-      tenderId: Number(row.id),
-      tenderType: String(row.type === "Gem" ? "Gem" : "NonGem"),
+      tenderMergedId: Number(row.id),
       website: website.trim(),
       oldValue: currentWebsite,
     });

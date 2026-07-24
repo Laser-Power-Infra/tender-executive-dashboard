@@ -67,15 +67,13 @@ export default function TenderSidebar({
     try {
       const result = await dispatch(importEpcGoTenders()).unwrap();
       toast.dismiss(toastId);
-      const total = result.gemInserted + result.nonGemInserted;
-      const merged = result.gemMerged + result.nonGemMerged;
-      if (total === 0) {
+      if (result.inserted === 0) {
         toast.info("No GO tenders to import");
       } else {
         toast.success(
-          `Imported: ${result.gemInserted} GEM · ${result.nonGemInserted} Non-GEM`,
+          `Imported ${result.inserted} tender(s)`,
           {
-            description: `${merged} merged (existing)${result.errors.length ? ` · ${result.errors.length} error(s)` : ""}`,
+            description: `${result.merged} merged (existing)${result.errors.length ? ` · ${result.errors.length} error(s)` : ""}`,
           },
         );
       }

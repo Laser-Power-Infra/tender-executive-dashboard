@@ -9,7 +9,7 @@ const prisma = new PrismaClient({
 
 async function main() {
   await prisma.exlusionKeywords.deleteMany();
-  await prisma.exlusionKeywords.deleteMany();
+  // await prisma.exlusionKeywords.deleteMany();
   await prisma.exlusionKeywords.createMany({
     data: [
       {
@@ -26,7 +26,7 @@ async function main() {
     skipDuplicates: true,
   });
 
-  await prisma.association.deleteMany();
+  // await prisma.association.deleteMany();
   await prisma.association.createMany({
     data: [
       {
@@ -57,17 +57,21 @@ async function main() {
         name: "Amarnath Manna",
         email: "amanna@laserpowerinfra.com",
       },
+      {
+        name: "Ashik Mandal",
+        email: "ashikmandal1@gmail.com",
+      },
     ],
     skipDuplicates: true,
   });
 
-  const result = await syncMasterWebsites();
-  if (result.errors.length) {
-    console.error("❌ Errors syncing tender status records:", result.errors);
-  }
-  console.log(
-    `✅ Synced ${result.total} tender status records from Google Sheets.`,
-  );
+  // const result = await syncMasterWebsites();
+  // if (result.errors.length) {
+  //   console.error("❌ Errors syncing tender status records:", result.errors);
+  // }
+  // console.log(
+  //   `✅ Synced ${result.total} tender status records from Google Sheets.`,
+  // );
 
   const adminPassword = await bcrypt.hash("admin123", 10);
   await prisma.user.upsert({

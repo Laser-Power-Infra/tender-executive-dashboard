@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+interface TenderFileInfo {
+  id: number;
+  name: string;
+  extension: string;
+  url: string;
+  source: string;
+  tags: string[];
+}
+
 interface FlatRow {
   type: "Gem" | "Non-Gem";
   id: string;
   reportings?: string;
   evaluations?: string;
+  tenderFiles?: string;
   [key: string]: string | undefined;
 }
 
@@ -60,6 +70,7 @@ const ALL_KNOWN_FIELDS = (() => {
     "evaluations",
     "parseStatus",
     "parseError",
+    "size",
   ])];
   const urlIdx = fields.indexOf("tenderFileUrl");
   if (urlIdx > 0) {
@@ -106,6 +117,11 @@ const ALL_KNOWN_FIELDS = (() => {
     fields.splice(peIdx, 1);
     fields.splice(18, 0, "parseError");
   }
+  const szIdx = fields.indexOf("size");
+  if (szIdx > 0) {
+    fields.splice(szIdx, 1);
+    fields.splice(2, 0, "size");
+  }
   return fields;
 })();
 
@@ -133,6 +149,7 @@ function flattenTender(
   tenderAssociations: { association: AssociationInfo }[],
   reportings?: ReportingInfo[],
   evaluations?: EvaluationInfo[],
+  tenderFiles?: TenderFileInfo[],
 ): FlatRow {
   const assignedIds = tenderAssociations.map((ta) => ta.association.id).join(",");
   const row: FlatRow = { type, id: String(id) };
@@ -147,6 +164,15 @@ function flattenTender(
   }
 
   row.assignedTo = assignedIds;
+
+  const docFile = tenderFiles?.find((f) => f.tags.includes("tenderDocument"));
+  row.tenderFileUrl = docFile?.url ?? "";
+
+  if (tenderFiles && tenderFiles.length > 0) {
+    row.tenderFiles = JSON.stringify(tenderFiles);
+  } else {
+    row.tenderFiles = "";
+  }
 
   for (const ef of extraFields) {
     row[ef.fieldName] = ef.fieldValue ?? "";
@@ -186,32 +212,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    const [gemTenders, nonGemTenders, allAssociations] = await Promise.all([
-      prisma.gemTender.findMany({
+    const [tenderMerged, allAssociations] = await Promise.all([
+      prisma.tenderMerged.findMany({
         where: { fileId },
-        include: { extraFields: true, tenderAssociations: { include: { association: true } }, reportings: true, evaluations: true },
-      }),
-      prisma.nonGemTender.findMany({
-        where: { fileId },
-        include: { extraFields: true, tenderAssociations: { include: { association: true } } },
+        include: {
+          extraFields: true,
+          tenderAssociations: { include: { association: true } },
+          reportings: true,
+          evaluations: true,
+          tenderFiles: true,
+        },
       }),
       prisma.association.findMany({ select: { id: true, name: true, email: true } }),
     ]);
 
-    // console.log("associations count:", allAssociations.length, allAssociations);
-
     const rows: FlatRow[] = [];
 
-    for (const t of gemTenders) {
-      rows.push(flattenTender(t as unknown as Record<string, unknown>, t.extraFields, "Gem", t.id, t.tenderAssociations, t.reportings, t.evaluations));
-    }
-    for (const t of nonGemTenders) {
-      rows.push(flattenTender(t as unknown as Record<string, unknown>, t.extraFields, "Non-Gem", t.id, t.tenderAssociations));
+    let totalGem = 0;
+    let totalNonGem = 0;
+
+    for (const t of tenderMerged) {
+      const type: "Gem" | "Non-Gem" = t.tenderType === "GEM" ? "Gem" : "Non-Gem";
+      if (type === "Gem") totalGem++;
+      else totalNonGem++;
+
+      rows.push(flattenTender(
+        t as unknown as Record<string, unknown>,
+        t.extraFields,
+        type,
+        t.id,
+        t.tenderAssociations,
+        t.reportings,
+        t.evaluations,
+        t.tenderFiles,
+      ));
     }
 
     const allExtraFieldNames = [
       ...new Set(
-        [...gemTenders, ...nonGemTenders].flatMap((t) =>
+        tenderMerged.flatMap((t) =>
           t.extraFields.map((ef) => ef.fieldName)
         )
       ),
@@ -224,8 +263,8 @@ export async function GET(request: NextRequest) {
       columns,
       rows,
       associations: allAssociations,
-      totalGem: gemTenders.length,
-      totalNonGem: nonGemTenders.length,
+      totalGem,
+      totalNonGem,
     });
   } catch (error) {
     console.error("Tenders fetch error:", error);

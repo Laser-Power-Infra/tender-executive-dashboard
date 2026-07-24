@@ -47,14 +47,12 @@ export const updateTenderAssignments = createAsyncThunk(
   "tenders/updateAssignments",
   async (params: {
     rowIndex: number;
-    gemTenderId?: number;
-    nonGemTenderId?: number;
+    tenderMergedId: number;
     associationIds: number[];
     oldValue: string;
   }) => {
     await updateTenderAssignmentsAction({
-      gemTenderId: params.gemTenderId,
-      nonGemTenderId: params.nonGemTenderId,
+      tenderMergedId: params.tenderMergedId,
       associationIds: params.associationIds,
     });
   },
@@ -63,17 +61,15 @@ export const updateTenderAssignments = createAsyncThunk(
 export const updateWebsiteMapping = createAsyncThunk(
   "tenders/updateWebsiteMapping",
   async (params: {
-    type: "Gem" | "Non-Gem";
-    id: number;
+    tenderMergedId: number;
     website: string;
     oldValue: string;
   }) => {
     const result = await updateTenderUtilityMapping({
-      type: params.type,
-      id: params.id,
+      tenderMergedId: params.tenderMergedId,
       website: params.website,
     });
-    return { ...result, type: params.type, id: params.id };
+    return { ...result, tenderMergedId: params.tenderMergedId };
   },
 );
 
@@ -83,8 +79,7 @@ export const bulkAssignUtilityMapping = createAsyncThunk(
     organization: string;
     website: string;
     utilityMappingId: number;
-    excludeTenderId: number;
-    excludeTenderType: "Gem" | "Non-Gem";
+    excludeTenderMergedId: number;
   }) => {
     const result = await bulkAssignUtilityMappingAction(params);
     return result;
@@ -97,13 +92,11 @@ export const updateTenderCell = createAsyncThunk(
     rowIndex: number;
     field: string;
     value: string;
-    type: "Gem" | "Non-Gem";
-    id: number;
+    tenderMergedId: number;
     oldValue: string;
   }) => {
     const result = await updateTenderDecision({
-      type: params.type,
-      id: params.id,
+      tenderMergedId: params.tenderMergedId,
       field: params.field as "app" | "aps" | "apm",
       value: params.value as "YES" | "NO" | "NOT_DECIDED",
     });
@@ -142,8 +135,7 @@ export const fetchTendersIncremental = createAsyncThunk(
 export const saveAiFeedback = createAsyncThunk(
   "tenders/saveAiFeedback",
   async (params: {
-    tenderId: number;
-    tenderType: string;
+    tenderMergedId: number;
     briefText: string;
     originalAi: string;
     correctedAi: string;
@@ -161,19 +153,18 @@ export const saveAiFeedback = createAsyncThunk(
 
 export const analyzeTender = createAsyncThunk(
   "tenders/analyzeTender",
-  async (params: { id: number; type: "Gem" | "Non-Gem"; brief: string }) => {
+  async (params: { tenderMergedId: number; brief: string }) => {
     const result = await analyzeTenderValidity(params.brief);
     if (!result.success) throw new Error(result.error);
 
     await saveAiRelevance({
-      id: params.id,
-      type: params.type,
+      tenderMergedId: params.tenderMergedId,
       valid: result.data.valid,
       reason: result.data.reason,
     });
 
     return {
-      id: params.id,
+      tenderMergedId: params.tenderMergedId,
       valid: String(result.data.valid),
       reason: result.data.reason,
     };
@@ -183,8 +174,7 @@ export const analyzeTender = createAsyncThunk(
 export const downloadTenderPdf = createAsyncThunk(
   "tenders/downloadTenderPdf",
   async (params: {
-    id: number;
-    type: "Gem" | "Non-Gem";
+    tenderMergedId: number;
     gemId?: string;
     referenceNo?: string;
     tenderStatusId?: number | null;
@@ -195,8 +185,7 @@ export const downloadTenderPdf = createAsyncThunk(
       body: JSON.stringify({
         tenders: [
           {
-            id: params.id,
-            type: params.type,
+            id: params.tenderMergedId,
             gemId: params.gemId,
             referenceNo: params.referenceNo,
             tenderStatusId: params.tenderStatusId,
@@ -208,7 +197,7 @@ export const downloadTenderPdf = createAsyncThunk(
     const detail = data.results?.[0];
     if (!detail?.success) throw new Error(detail?.error || "Download failed");
     return {
-      id: params.id,
+      tenderMergedId: params.tenderMergedId,
       tenderFileUrl: detail.pdfPath ?? "",
       captchaDetected: detail.captchaDetected,
     };
@@ -217,17 +206,17 @@ export const downloadTenderPdf = createAsyncThunk(
 
 export const parseTenderPdf = createAsyncThunk(
   "tenders/parseTenderPdf",
-  async (params: { id: number }) => {
+  async (params: { tenderMergedId: number }) => {
     const res = await fetch("/api/parse-pdfs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tenders: [{ id: params.id }] }),
+      body: JSON.stringify({ tenders: [{ id: params.tenderMergedId }] }),
     });
     const data = await res.json();
     const detail = data.results?.[0];
     if (!detail?.success) throw new Error(detail?.error || "Parse failed");
     return {
-      id: params.id,
+      tenderMergedId: params.tenderMergedId,
       itemCategory: detail.itemCategory,
       totalQuantity: detail.totalQuantity,
       parseStatus: "COMPLETED",
@@ -238,8 +227,7 @@ export const parseTenderPdf = createAsyncThunk(
 export const saveFeedbackAndReanalyze = createAsyncThunk(
   "tenders/saveFeedbackAndReanalyze",
   async (params: {
-    tenderId: number;
-    tenderType: string;
+    tenderMergedId: number;
     briefText: string;
     originalAi: string;
     correctedAi: string;
@@ -255,16 +243,14 @@ export const saveFeedbackAndReanalyze = createAsyncThunk(
     const result = await analyzeTenderValidity(params.briefText);
     if (!result.success) throw new Error(result.error);
 
-    const type = params.tenderType === "Gem" ? "Gem" : "Non-Gem";
     await saveAiRelevance({
-      id: params.tenderId,
-      type,
+      tenderMergedId: params.tenderMergedId,
       valid: result.data.valid,
       reason: result.data.reason,
     });
 
     return {
-      id: params.tenderId,
+      tenderMergedId: params.tenderMergedId,
       valid: String(result.data.valid),
       reason: result.data.reason,
     };
@@ -363,11 +349,11 @@ export const tendersSlice = createSlice({
     },
     updateAnalysisResult(
       state,
-      action: PayloadAction<{ id: number; valid: string; reason: string }>,
+      action: PayloadAction<{ tenderMergedId: number; valid: string; reason: string }>,
     ) {
       if (!state.data) return;
       const row = state.data.rows.find(
-        (r) => Number(r.id) === action.payload.id,
+        (r) => Number(r.id) === action.payload.tenderMergedId,
       );
       if (row) {
         row.aiRelevanceValid = action.payload.valid;
@@ -420,37 +406,33 @@ export const tendersSlice = createSlice({
     });
     // updateWebsiteMapping
     builder.addCase(updateWebsiteMapping.pending, (state, action) => {
-      const { id, type, website } = action.meta.arg;
-      const key = `${id}-${type}-website`;
+      const { tenderMergedId, website } = action.meta.arg;
+      const key = `${tenderMergedId}-website`;
       state.updatingCells[key] = true;
       if (state.data) {
-        const row = state.data.rows.find((r) => Number(r.id) === id);
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) row.website = website;
       }
     });
     builder.addCase(updateWebsiteMapping.fulfilled, (state, action) => {
-      const key = `${action.meta.arg.id}-${action.meta.arg.type}-website`;
+      const key = `${action.meta.arg.tenderMergedId}-website`;
       state.updatingCells[key] = false;
     });
     builder.addCase(updateWebsiteMapping.rejected, (state, action) => {
-      const { id, type, oldValue } = action.meta.arg;
-      const key = `${id}-${type}-website`;
+      const { tenderMergedId, oldValue } = action.meta.arg;
+      const key = `${tenderMergedId}-website`;
       state.updatingCells[key] = false;
       if (state.data) {
-        const row = state.data.rows.find((r) => Number(r.id) === id);
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) row.website = oldValue;
       }
     });
 
     // bulkAssignUtilityMapping
     builder.addCase(bulkAssignUtilityMapping.fulfilled, (state, action) => {
-      const { updatedGem, updatedNonGem } = action.payload;
+      const { updatedIds } = action.payload;
       if (state.data) {
-        for (const id of updatedGem) {
-          const row = state.data.rows.find((r) => Number(r.id) === id);
-          if (row) row.website = action.meta.arg.website;
-        }
-        for (const id of updatedNonGem) {
+        for (const id of updatedIds) {
           const row = state.data.rows.find((r) => Number(r.id) === id);
           if (row) row.website = action.meta.arg.website;
         }
@@ -458,16 +440,16 @@ export const tendersSlice = createSlice({
     });
 
     builder.addCase(saveAiFeedback.pending, (state, action) => {
-      const key = `${action.meta.arg.tenderId}-${action.meta.arg.tenderType}`;
+      const key = `${action.meta.arg.tenderMergedId}-feedback`;
       state.feedbackSaving[key] = true;
     });
     builder.addCase(saveAiFeedback.fulfilled, (state, action) => {
-      const { tenderId, tenderType, correctedAi, feedbackReason } =
+      const { tenderMergedId, correctedAi, feedbackReason } =
         action.meta.arg;
-      const key = `${tenderId}-${tenderType}`;
+      const key = `${tenderMergedId}-feedback`;
       state.feedbackSaving[key] = false;
       if (state.data) {
-        const row = state.data.rows.find((r) => Number(r.id) === tenderId);
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) {
           row.aiFeedbackCorrected = correctedAi;
           row.aiFeedbackReason = feedbackReason;
@@ -475,21 +457,21 @@ export const tendersSlice = createSlice({
       }
     });
     builder.addCase(saveAiFeedback.rejected, (state, action) => {
-      const key = `${action.meta.arg.tenderId}-${action.meta.arg.tenderType}`;
+      const key = `${action.meta.arg.tenderMergedId}-feedback`;
       state.feedbackSaving[key] = false;
     });
 
     // analyzeTender
     builder.addCase(analyzeTender.pending, (state, action) => {
       state.updatingCells[
-        `${action.meta.arg.id}-${action.meta.arg.type}-analyze`
+        `${action.meta.arg.tenderMergedId}-analyze`
       ] = true;
     });
     builder.addCase(analyzeTender.fulfilled, (state, action) => {
-      const { id, valid, reason } = action.payload;
-      state.updatingCells[`${id}-${action.meta.arg.type}-analyze`] = false;
+      const { tenderMergedId, valid, reason } = action.payload;
+      state.updatingCells[`${tenderMergedId}-analyze`] = false;
       if (state.data) {
-        const row = state.data.rows.find((r) => Number(r.id) === id);
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) {
           row.aiRelevanceValid = valid;
           row.aiRelevanceReason = reason;
@@ -498,37 +480,37 @@ export const tendersSlice = createSlice({
     });
     builder.addCase(analyzeTender.rejected, (state, action) => {
       state.updatingCells[
-        `${action.meta.arg.id}-${action.meta.arg.type}-analyze`
+        `${action.meta.arg.tenderMergedId}-analyze`
       ] = false;
     });
 
     // downloadTenderPdf
     builder.addCase(downloadTenderPdf.pending, (state, action) => {
-      state.pdfDownloading[String(action.meta.arg.id)] = true;
+      state.pdfDownloading[String(action.meta.arg.tenderMergedId)] = true;
     });
     builder.addCase(downloadTenderPdf.fulfilled, (state, action) => {
-      const { id, tenderFileUrl } = action.payload;
-      state.pdfDownloading[String(id)] = false;
+      const { tenderMergedId, tenderFileUrl } = action.payload;
+      state.pdfDownloading[String(tenderMergedId)] = false;
       if (state.data && tenderFileUrl) {
-        const row = state.data.rows.find((r) => Number(r.id) === id);
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) {
           row.tenderFileUrl = tenderFileUrl;
         }
       }
     });
     builder.addCase(downloadTenderPdf.rejected, (state, action) => {
-      state.pdfDownloading[String(action.meta.arg.id)] = false;
+      state.pdfDownloading[String(action.meta.arg.tenderMergedId)] = false;
     });
 
     // parseTenderPdf
     builder.addCase(parseTenderPdf.pending, (state, action) => {
-      state.pdfParsing[String(action.meta.arg.id)] = true;
+      state.pdfParsing[String(action.meta.arg.tenderMergedId)] = true;
     });
     builder.addCase(parseTenderPdf.fulfilled, (state, action) => {
-      const { id, itemCategory, totalQuantity, parseStatus } = action.payload;
-      state.pdfParsing[String(id)] = false;
+      const { tenderMergedId, itemCategory, totalQuantity, parseStatus } = action.payload;
+      state.pdfParsing[String(tenderMergedId)] = false;
       if (state.data) {
-        const row = state.data.rows.find((r) => Number(r.id) === id);
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) {
           row.itemCategory = itemCategory;
           row.totalQuantity = totalQuantity;
@@ -537,21 +519,21 @@ export const tendersSlice = createSlice({
       }
     });
     builder.addCase(parseTenderPdf.rejected, (state, action) => {
-      state.pdfParsing[String(action.meta.arg.id)] = false;
+      state.pdfParsing[String(action.meta.arg.tenderMergedId)] = false;
     });
 
     // saveFeedbackAndReanalyze
     builder.addCase(saveFeedbackAndReanalyze.pending, (state, action) => {
-      const key = `${action.meta.arg.tenderId}-${action.meta.arg.tenderType}`;
+      const key = `${action.meta.arg.tenderMergedId}-reanalyze`;
       state.feedbackSaving[key] = true;
     });
     builder.addCase(saveFeedbackAndReanalyze.fulfilled, (state, action) => {
-      const { id, valid, reason } = action.payload;
-      const { tenderType, correctedAi, feedbackReason } = action.meta.arg;
-      const key = `${id}-${tenderType}`;
+      const { tenderMergedId, valid, reason } = action.payload;
+      const { correctedAi, feedbackReason } = action.meta.arg;
+      const key = `${tenderMergedId}-reanalyze`;
       state.feedbackSaving[key] = false;
       if (state.data) {
-        const row = state.data.rows.find((r) => Number(r.id) === id);
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) {
           row.aiRelevanceValid = valid;
           row.aiRelevanceReason = reason;
@@ -561,7 +543,7 @@ export const tendersSlice = createSlice({
       }
     });
     builder.addCase(saveFeedbackAndReanalyze.rejected, (state, action) => {
-      const key = `${action.meta.arg.tenderId}-${action.meta.arg.tenderType}`;
+      const key = `${action.meta.arg.tenderMergedId}-reanalyze`;
       state.feedbackSaving[key] = false;
     });
   },

@@ -5,7 +5,7 @@ const DRIVE_REGEX = /\/file\/d\/([^\/]+)/;
 
 export async function POST() {
   try {
-    const tenders = await prisma.gemTender.findMany({
+    const tenders = await prisma.tenderMerged.findMany({
       where: { parseStatus: null },
       select: { id: true, tenderFileUrl: true, itemCategory: true },
     });
@@ -17,19 +17,19 @@ export async function POST() {
 
     for (const t of tenders) {
       if (!t.tenderFileUrl) {
-        await prisma.gemTender.update({
+        await prisma.tenderMerged.update({
           where: { id: t.id },
           data: { parseStatus: "FAILED", parseError: "No file URL" },
         });
         noUrl++;
       } else if (!DRIVE_REGEX.test(t.tenderFileUrl)) {
-        await prisma.gemTender.update({
+        await prisma.tenderMerged.update({
           where: { id: t.id },
           data: { parseStatus: "FAILED", parseError: "Invalid Google Drive URL" },
         });
         invalidUrl++;
       } else if (t.itemCategory) {
-        await prisma.gemTender.update({
+        await prisma.tenderMerged.update({
           where: { id: t.id },
           data: { parseStatus: "COMPLETED", parseError: null },
         });

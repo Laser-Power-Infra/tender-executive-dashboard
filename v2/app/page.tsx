@@ -5,7 +5,9 @@ import { TenderTable } from "@/components/TenderTable";
 import { AlertPanel } from "@/components/AlertPanel";
 import { useTenderData } from "@/hooks/useTenderData";
 import { TenderCalculations } from "@/services/tenderCalculations";
-import { Eraser, RefreshCw, AlertTriangle } from "lucide-react";
+import { Eraser, ExternalLink, Database, RefreshCw, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
+import { debugParseAllAttachments } from "@/actions/debugParseAttachments";
 import "./Dashboard.css";
 
 export default function Home() {
@@ -13,6 +15,7 @@ export default function Home() {
   const { data: liveRecords, loading: liveLoading, error: liveError, refresh: liveRefresh } = useTenderData();
   const [clearTrigger, setClearTrigger] = useState<number>(0);
   const rawRecords = liveRecords || [];
+  const [cvaLoading, setCvaLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState<string>("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedEngineer, setSelectedEngineer] = useState<string>("All");
@@ -98,6 +101,38 @@ export default function Home() {
     }
     await liveRefresh();
   };
+  const handleEnrichCva = async () => {
+    setCvaLoading(true);
+    try {
+      const results = await debugParseAllAttachments();
+      const total = results.length;
+      const withError = results.filter((r) => r.error);
+      const mfgFound = results.filter((r) => r.sheets?.some((s) => s.mfgPercentFound));
+      const lines = [
+        `Processed ${total} attachment(s)`,
+        mfgFound.length > 0 ? `MFG% found in ${mfgFound.length} file(s)` : "No MFG% header found",
+        withError.length > 0 ? `${withError.length} failed` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      toast.success(lines);
+      results.forEach((r) => {
+        if (r.error) {
+          console.warn(`[Parse] ${r.docketNo}: ${r.error}`);
+        } else {
+          const mfgSheets = r.sheets?.filter((s) => s.mfgPercentFound).map((s) => s.name) || [];
+          console.log(
+            `[Parse] ${r.docketNo}: sheets=${r.sheets?.length}, MFG% in=[${mfgSheets.join(", ")}]`,
+            r.sheets?.map((s) => ({ sheet: s.name, headers: s.headers })),
+          );
+        }
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Parsing failed");
+    } finally {
+      setCvaLoading(false);
+    }
+  };
   const handleClearAllFilters = () => {
     setClientSearch("");
     setSelectedStatuses([]);
@@ -136,6 +171,21 @@ export default function Home() {
             <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Eraser size={14} /> Clear Filters</button>
             <button className="erp-sync-btn" onClick={handleRefresh} disabled={liveLoading} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
               {liveLoading ? <><RefreshCw size={14} /> Syncing...</> : <><RefreshCw size={14} /> Sync Sheet Data</>}
+            </button>
+            <button
+              className="erp-sync-btn"
+              onClick={() => window.open("https://docs.google.com/spreadsheets/d/1GTwzxMgViohbCimXqfiBZBJsKbCSr7hCgbcHF_En1VE", "_blank", "noopener,noreferrer")}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <ExternalLink size={14} /> Open Sheet
+            </button>
+            <button
+              className="erp-sync-btn"
+              onClick={handleEnrichCva}
+              disabled={cvaLoading}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {cvaLoading ? <><RefreshCw size={14} className="spin" /> Parsing CVA...</> : <><Database size={14} /> Parse CVA</>}
             </button>
           </div>
         </header>

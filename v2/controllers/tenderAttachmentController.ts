@@ -57,9 +57,9 @@ export class TenderAttachmentController {
         "data",
         "tender_folder_matches.json",
       );
-      console.log(`[DEBUG getTenderFiles] docketNo=${docketNo}, matchesDbPath=${matchesDbPath}`);
+      //console.log(`[DEBUG getTenderFiles] docketNo=${docketNo}, matchesDbPath=${matchesDbPath}`);
       if (!fs.existsSync(matchesDbPath)) {
-        console.warn(`[DEBUG getTenderFiles] matchesDbPath NOT FOUND: ${matchesDbPath}`);
+        //console.warn(`[DEBUG getTenderFiles] matchesDbPath NOT FOUND: ${matchesDbPath}`);
         return { docketNo, folderPath: "", files: [] };
       }
 
@@ -68,19 +68,19 @@ export class TenderAttachmentController {
       );
       const lookupKey = extractNumericDocket(docketNo) || docketNo;
       const match = matches[lookupKey];
-      console.log(`[DEBUG getTenderFiles] docket=${docketNo} lookupKey=${lookupKey} match:`, JSON.stringify(match));
+      //console.log(`[DEBUG getTenderFiles] docket=${docketNo} lookupKey=${lookupKey} match:`, JSON.stringify(match));
 
       if (!match || !match.folderFound || !match.folderPath) {
-        console.warn(`[DEBUG getTenderFiles] No valid match for docket ${docketNo}`);
+        //console.warn(`[DEBUG getTenderFiles] No valid match for docket ${docketNo}`);
         return { docketNo, folderPath: "", files: [] };
       }
 
-      console.log(`[DEBUG getTenderFiles] verifying path safety: ${match.folderPath}`);
+      //console.log(`[DEBUG getTenderFiles] verifying path safety: ${match.folderPath}`);
       verifyPathSafety(match.folderPath);
 
-      console.log(`[DEBUG getTenderFiles] calling indexFolderFiles on: ${match.folderPath}`);
+      //console.log(`[DEBUG getTenderFiles] calling indexFolderFiles on: ${match.folderPath}`);
       const scanResults = await indexFolderFiles(match.folderPath);
-      console.log(`[DEBUG getTenderFiles] indexFolderFiles returned ${scanResults.files.length} files`);
+      //console.log(`[DEBUG getTenderFiles] indexFolderFiles returned ${scanResults.files.length} files`);
 
       const filesWithSecureIds: FileResponse[] = scanResults.files.map((f) => ({
         fileId: encryptPath(f.absolutePath),
@@ -98,9 +98,9 @@ export class TenderAttachmentController {
       };
     } catch (err) {
       if ((err as { status?: number }).status) throw err;
-      console.error(
-        `[API_ERROR] Failed to retrieve tender files: ${(err as Error).message}`,
-      );
+      //console.error(
+      //   `[API_ERROR] Failed to retrieve tender files: ${(err as Error).message}`,
+      // );
       throw { status: 500, error: (err as Error).message };
     }
   }
@@ -286,9 +286,9 @@ export class TenderAttachmentController {
       };
     } catch (err) {
       if ((err as { status?: number }).status) throw err;
-      console.error(
-        `[API_ERROR] Failed to retrieve supply bill files: ${(err as Error).message}`,
-      );
+      // console.error(
+      //   `[API_ERROR] Failed to retrieve supply bill files: ${(err as Error).message}`,
+      // );
       throw { status: 500, error: (err as Error).message };
     }
   }

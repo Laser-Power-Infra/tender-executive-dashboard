@@ -423,4 +423,6 @@ export function getFieldValue(
   return row[col] ?? null;
 }
 
+export const MERGED_FIELDS = new Set([...GEM_FIELDS, ...NON_GEM_FIELDS]);
+
 export { parseDate, GEM_FIELDS, NON_GEM_FIELDS };

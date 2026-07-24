@@ -6,42 +6,9 @@ import { publishTenderTask } from "@/lib/queue/publisher";
 
 interface TenderRequest {
   id: number;
-  type: "Gem" | "Non-Gem";
   gemId?: string;
   referenceNo?: string;
   tenderStatusId?: number | null;
-}
-
-interface ResolvedNonGem {
-  id: number;
-  referenceNo: string;
-  tenderStatusId: number | null;
-  website: string | null;
-}
-
-async function resolveNonGemTenderInfo(
-  t: TenderRequest,
-): Promise<ResolvedNonGem> {
-  if (t.tenderStatusId && t.referenceNo) {
-    return {
-      id: t.id,
-      referenceNo: t.referenceNo,
-      tenderStatusId: t.tenderStatusId,
-      website: null,
-    };
-  }
-
-  const tender = await prisma.nonGemTender.findUnique({
-    where: { id: t.id },
-    select: { tenderStatusId: true, referenceNo: true, website: true },
-  });
-
-  return {
-    id: t.id,
-    referenceNo: tender?.referenceNo || t.referenceNo || "",
-    tenderStatusId: tender?.tenderStatusId ?? null,
-    website: tender?.website || null,
-  };
 }
 
 export async function POST(request: NextRequest) {
@@ -56,8 +23,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const gemTenders = tenders.filter((t) => t.type === "Gem");
-    const nonGemRequests = tenders.filter((t) => t.type === "Non-Gem");
+    // Resolve tender types from DB
+    const tenderIds = tenders.map((t) => t.id);
+    const dbTenders = await prisma.tenderMerged.findMany({
+      where: { id: { in: tenderIds } },
+      select: { id: true, tenderType: true },
+    });
+    const typeMap = new Map(dbTenders.map((t) => [t.id, t.tenderType]));
+
+    const gemTenders = tenders.filter((t) => typeMap.get(t.id) === "GEM");
+    const nonGemTenders = tenders.filter((t) => typeMap.get(t.id) === "NON_GEM");
 
     let gemResults: Awaited<ReturnType<typeof downloadGemPdfs>> = [];
     let nonGemResults: Awaited<ReturnType<typeof searchNonGemTenders>> = [];
@@ -85,7 +60,7 @@ export async function POST(request: NextRequest) {
       for (const result of gemResults) {
         if (result.success && result.pdfPath) {
           try {
-            await prisma.gemTender.update({
+            await prisma.tenderMerged.update({
               where: { id: result.id },
               data: { tenderFileUrl: result.pdfPath } as any,
             });
@@ -101,8 +76,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (nonGemRequests.length > 0) {
-      for (const t of nonGemRequests) {
+    if (nonGemTenders.length > 0) {
+      for (const t of nonGemTenders) {
         publishTenderTask({
           type: "NON_GEM_DOWNLOAD",
           tenderId: t.id,
@@ -112,17 +87,6 @@ export async function POST(request: NextRequest) {
           console.error(e)
         });
       }
-
-      const resolved = await Promise.all(
-        nonGemRequests.map(resolveNonGemTenderInfo),
-      );
-
-      // nonGemResults = await searchNonGemTenders(
-      //   resolved,
-      //   (current, total) => {
-      //     console.log(`Non-GEM progress: ${current}/${total}`);
-      //   },
-      // );
     }
 
     const allResults = [...gemResults, ...nonGemResults];

@@ -3,8 +3,7 @@ import * as XLSX from "xlsx";
 import pLimit from "p-limit";
 import { prisma } from "@/lib/prisma";
 import {
-  GEM_FIELDS,
-  NON_GEM_FIELDS,
+  MERGED_FIELDS,
   mapRowToTender,
   hasReferenceNoColumn,
   getReferenceNo,
@@ -21,8 +20,7 @@ const TX_TIMEOUT = 10 * 60 * 1000;
 
 interface SheetResult {
   sheetName: string;
-  gemCount: number;
-  nonGemCount: number;
+  count: number;
   excludedCount: number;
   errors: string[];
   skipped: boolean;
@@ -32,22 +30,20 @@ interface FileResult {
   fileName: string;
   fileId: number;
   sheets: SheetResult[];
-  totalGem: number;
-  totalNonGem: number;
-  totalErrors: string[];
   totalCount: number;
+  totalErrors: string[];
   excludedCount: number;
 }
 
 interface PreparedTender {
   refNo: string;
+  tenderType: "GEM" | "NON_GEM";
   createData: Record<string, unknown>;
 }
 
 interface ParsedSheet {
   sheetName: string;
-  gemPrepared: PreparedTender[];
-  nonGemPrepared: PreparedTender[];
+  prepared: PreparedTender[];
   skipped: boolean;
   excludedCount: number;
 }
@@ -64,17 +60,18 @@ function buildCreateData(
   row: Record<string, unknown>,
   headers: string[],
   fileId: number,
-  knownFieldSet: Set<string>,
   excludedCategory: string | null,
   customColumnMap?: Record<string, string>,
   associations?: { id: number; name: string; email: string }[],
-): { refNo: string; createData: Record<string, unknown> } {
+): { refNo: string; tenderType: "GEM" | "NON_GEM"; createData: Record<string, unknown> } {
   const refNo = (getReferenceNo(row, headers, customColumnMap) || "").toUpperCase();
-  const { knownFields, extraFields } = mapRowToTender(row, knownFieldSet, customColumnMap);
+  const { knownFields, extraFields } = mapRowToTender(row, MERGED_FIELDS, customColumnMap);
+  const tenderType: "GEM" | "NON_GEM" = isGemReference(refNo) ? "GEM" : "NON_GEM";
 
   const createData: Record<string, unknown> = {
     fileId,
     referenceNo: refNo,
+    tenderType,
     excludedCategory,
   };
 
@@ -111,7 +108,7 @@ function buildCreateData(
     };
   }
 
-  return { refNo, createData };
+  return { refNo, tenderType, createData };
 }
 
 function parseSheetData(
@@ -131,8 +128,7 @@ function parseSheetData(
   if (!jsonData.length) {
     return {
       sheetName,
-      gemPrepared: [],
-      nonGemPrepared: [],
+      prepared: [],
       skipped: true,
       excludedCount: 0,
     };
@@ -143,15 +139,13 @@ function parseSheetData(
   if (!hasReferenceNoColumn(headers, customColumnMap)) {
     return {
       sheetName,
-      gemPrepared: [],
-      nonGemPrepared: [],
+      prepared: [],
       skipped: true,
       excludedCount: 0,
     };
   }
 
-  const gemPrepared: PreparedTender[] = [];
-  const nonGemPrepared: PreparedTender[] = [];
+  const prepared: PreparedTender[] = [];
   let excludedCount = 0;
 
   for (const row of jsonData) {
@@ -185,41 +179,26 @@ function parseSheetData(
 
     if (excludedCategory !== null) excludedCount++;
 
-    if (isGemReference(refNo)) {
-      const { refNo: r, createData } = buildCreateData(
-        row,
-        headers,
-        0,
-        GEM_FIELDS,
-        excludedCategory,
-        customColumnMap,
-        associations,
-      );
-      gemPrepared.push({ refNo: r, createData });
-    } else {
-      const { refNo: r, createData } = buildCreateData(
-        row,
-        headers,
-        0,
-        NON_GEM_FIELDS,
-        excludedCategory,
-        customColumnMap,
-        associations,
-      );
-      nonGemPrepared.push({ refNo: r, createData });
-    }
+    const { refNo: r, tenderType, createData } = buildCreateData(
+      row,
+      headers,
+      0,
+      excludedCategory,
+      customColumnMap,
+      associations,
+    );
+    prepared.push({ refNo: r, tenderType, createData });
   }
 
   return {
     sheetName,
-    gemPrepared,
-    nonGemPrepared,
+    prepared,
     skipped: false,
     excludedCount,
   };
 }
 
-async function insertGemPrepared(
+async function insertTenderMerged(
   prepared: PreparedTender[],
   fileId: number,
   sheetResult: SheetResult,
@@ -228,7 +207,7 @@ async function insertGemPrepared(
 
   const refNos = prepared.map((p) => p.refNo);
 
-  const existingRecords = await prisma.gemTender.findMany({
+  const existingRecords = await prisma.tenderMerged.findMany({
     where: { referenceNo: { in: refNos } },
     include: { tenderAssociations: { include: { association: true } } },
   });
@@ -261,7 +240,7 @@ async function insertGemPrepared(
       }
 
       if (Object.keys(updateData).length > 0) {
-        await prisma.gemTender.update({
+        await prisma.tenderMerged.update({
           where: { id: old.id },
           data: updateData as any,
         });
@@ -272,7 +251,7 @@ async function insertGemPrepared(
         const assocData = p.createData.tenderAssociations as { create: { associationId: number }[] };
         await prisma.tenderAssociation.createMany({
           data: assocData.create.map((a) => ({
-            gemTenderId: old.id,
+            tenderMergedId: old.id,
             associationId: a.associationId,
           })),
           skipDuplicates: true,
@@ -298,20 +277,20 @@ async function insertGemPrepared(
   for (const batch of batches) {
     try {
       await prisma.$transaction(
-        batch.map((data) => prisma.gemTender.create({ data: data as any })),
+        batch.map((data) => prisma.tenderMerged.create({ data: data as any })),
         { timeout: TX_TIMEOUT },
       );
-      sheetResult.gemCount += batch.length;
+      sheetResult.count += batch.length;
     } catch (error) {
       console.error(error);
 
       for (const data of batch) {
         try {
-          await prisma.gemTender.create({ data: data as any });
-          sheetResult.gemCount++;
+          await prisma.tenderMerged.create({ data: data as any });
+          sheetResult.count++;
         } catch (err) {
           sheetResult.errors.push(
-            `Gem row ${(data as any).referenceNo || "unknown"}: ${err instanceof Error ? err.message : "Unknown error"}`,
+            `Row ${(data as any).referenceNo || "unknown"}: ${err instanceof Error ? err.message : "Unknown error"}`,
           );
         }
       }
@@ -319,7 +298,7 @@ async function insertGemPrepared(
   }
 
   if (webhookQueue.length > 0) {
-    const tenders = await prisma.gemTender.findMany({
+    const tenders = await prisma.tenderMerged.findMany({
       where: { referenceNo: { in: webhookQueue } },
       include: { tenderAssociations: { include: { association: true } } },
     });
@@ -333,136 +312,7 @@ async function insertGemPrepared(
             deadline: t.deadline,
             tenderFileUrl: t.tenderFileUrl ?? "",
           },
-          "Gem",
-          t.tenderAssociations,
-        );
-      }
-    }
-  }
-}
-
-async function insertNonGemPrepared(
-  prepared: PreparedTender[],
-  fileId: number,
-  sheetResult: SheetResult,
-): Promise<void> {
-  if (!prepared.length) return;
-
-  const refNos = prepared.map((p) => p.refNo);
-
-  const existingRecords = await prisma.nonGemTender.findMany({
-    where: { referenceNo: { in: refNos } },
-    include: { tenderAssociations: { include: { association: true } } },
-  });
-
-  const existingMap = new Map(existingRecords.map((r) => [r.referenceNo, r]));
-
-  const toCreate: Record<string, unknown>[] = [];
-  const webhookQueue: string[] = [];
-
-  for (const p of prepared) {
-    const old = existingMap.get(p.refNo);
-    if (old) {
-      const updateData: Record<string, unknown> = {
-        fileId,
-      };
-
-      const newDeadline = p.createData.deadline as Date | undefined;
-      if (newDeadline && (!old.deadline || newDeadline.getTime() >= old.deadline.getTime())) {
-        updateData.deadline = newDeadline;
-      }
-
-      if (p.createData.app && p.createData.app !== "NOT_DECIDED" && old.app === "NOT_DECIDED") {
-        updateData.app = p.createData.app;
-      }
-      if (p.createData.aps && p.createData.aps !== "NOT_DECIDED" && old.aps === "NOT_DECIDED") {
-        updateData.aps = p.createData.aps;
-      }
-      if (p.createData.apm && p.createData.apm !== "NOT_DECIDED" && old.apm === "NOT_DECIDED") {
-        updateData.apm = p.createData.apm;
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        await prisma.nonGemTender.update({
-          where: { id: old.id },
-          data: updateData as any,
-        });
-      }
-
-      const addedAssociations = p.createData.tenderAssociations && old.tenderAssociations.length === 0;
-      if (addedAssociations) {
-        const assocData = p.createData.tenderAssociations as { create: { associationId: number }[] };
-        await prisma.tenderAssociation.createMany({
-          data: assocData.create.map((a) => ({
-            nonGemTenderId: old.id,
-            associationId: a.associationId,
-          })),
-          skipDuplicates: true,
-        });
-      }
-
-      const wasAlready = old.apm === "YES" && old.tenderAssociations.length > 0;
-      const afterApm = (updateData.apm as string | undefined) ?? old.apm;
-      const afterHasAssociations = addedAssociations || old.tenderAssociations.length > 0;
-      if (!wasAlready && afterApm === "YES" && afterHasAssociations) {
-        webhookQueue.push(old.referenceNo);
-      }
-    } else {
-      toCreate.push({ ...p.createData, fileId });
-      if (p.createData.apm === "YES" && p.createData.tenderAssociations) {
-        webhookQueue.push(p.refNo);
-      }
-    }
-  }
-
-  const batches = chunk(toCreate, INSERT_BATCH_SIZE);
-
-  for (const batch of batches) {
-    try {
-      await prisma.$transaction(
-        batch.map((data) => prisma.nonGemTender.create({ data: data as any })),
-        { timeout: TX_TIMEOUT },
-      );
-      sheetResult.nonGemCount += batch.length;
-    } catch (error) {
-      console.error(error);
-      for (const data of batch) {
-        try {
-          await prisma.nonGemTender.create({ data: data as any });
-          sheetResult.nonGemCount++;
-        } catch (err) {
-          sheetResult.errors.push(
-            `Non-gem row ${(data as any).referenceNo || "unknown"}: ${err instanceof Error ? err.message : "Unknown error"}`,
-          );
-        }
-      }
-    }
-  }
-
-  if (webhookQueue.length > 0) {
-    const tenders: {
-      referenceNo: string;
-      itemCategory: string | null;
-      organization: string | null;
-      deadline: Date | null;
-      tenderFileUrl: string | null;
-      apm: string;
-      tenderAssociations: { association: { name: string; email: string } }[];
-    }[] = (await prisma.nonGemTender.findMany({
-      where: { referenceNo: { in: webhookQueue } },
-      include: { tenderAssociations: { include: { association: true } } },
-    })) as any;
-    for (const t of tenders) {
-      if (t.apm === "YES" && t.tenderAssociations.length > 0) {
-        sendTenderWebhook(
-          {
-            referenceNo: t.referenceNo,
-            itemCategory: t.itemCategory,
-            organization: t.organization,
-            deadline: t.deadline,
-            tenderFileUrl: t.tenderFileUrl ?? "",
-          },
-          "Non-Gem",
+          t.tenderType === "GEM" ? "Gem" : "Non-Gem",
           t.tenderAssociations,
         );
       }
@@ -503,10 +353,8 @@ async function processFile(file: File): Promise<FileResult> {
     fileName: file.name,
     fileId: 0,
     sheets: [],
-    totalGem: 0,
-    totalNonGem: 0,
-    totalErrors: [],
     totalCount: 0,
+    totalErrors: [],
     excludedCount: 0,
   };
 
@@ -571,8 +419,7 @@ async function processFile(file: File): Promise<FileResult> {
 
       const sheetResult: SheetResult = {
         sheetName: parsed.sheetName,
-        gemCount: 0,
-        nonGemCount: 0,
+        count: 0,
         excludedCount: parsed.excludedCount,
         errors: [],
         skipped: parsed.skipped,
@@ -580,10 +427,7 @@ async function processFile(file: File): Promise<FileResult> {
 
       if (parsed.skipped) return sheetResult;
 
-      await Promise.all([
-        insertGemPrepared(parsed.gemPrepared, fileRecord.id, sheetResult),
-        insertNonGemPrepared(parsed.nonGemPrepared, fileRecord.id, sheetResult),
-      ]);
+      await insertTenderMerged(parsed.prepared, fileRecord.id, sheetResult);
 
       return sheetResult;
     }),
@@ -593,12 +437,10 @@ async function processFile(file: File): Promise<FileResult> {
   fileResult.sheets = sheetResults;
 
   for (const s of sheetResults) {
-    fileResult.totalGem += s.gemCount;
-    fileResult.totalNonGem += s.nonGemCount;
+    fileResult.totalCount += s.count;
     fileResult.excludedCount += s.excludedCount;
     fileResult.totalErrors.push(...s.errors);
   }
-  fileResult.totalCount = fileResult.totalGem + fileResult.totalNonGem;
 
   await prisma.file.update({
     where: { id: fileRecord.id },

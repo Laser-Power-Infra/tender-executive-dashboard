@@ -85,6 +85,7 @@ export interface EpcTenderRecord {
   bgStatus?: string | null;
   tenderUpdateStatus?: TenderUpdateStatus;
   nextAction?: NextAction | null;
+  cva?: string | null;
 }
 
 export enum TenderUpdateStatus {

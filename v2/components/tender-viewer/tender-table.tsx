@@ -283,8 +283,7 @@ export default function TenderTable({
           rowIndex,
           field: col,
           value,
-          type: type as "Gem" | "Non-Gem",
-          id: parseInt(id, 10),
+          tenderMergedId: parseInt(id, 10),
           oldValue,
         }),
       );
@@ -299,8 +298,7 @@ export default function TenderTable({
       dispatch(
         updateTenderAssignments({
           rowIndex,
-          gemTenderId: type === "Gem" ? parseInt(id, 10) : undefined,
-          nonGemTenderId: type === "Non-Gem" ? parseInt(id, 10) : undefined,
+          tenderMergedId: parseInt(id, 10),
           associationIds: numericIds,
           oldValue,
         }),
@@ -699,8 +697,7 @@ export default function TenderTable({
         if (currentRow) {
           try {
             await saveAiRelevance({
-              id: Number(currentRow.id),
-              type: currentRow.type as "Gem" | "Non-Gem",
+              tenderMergedId: Number(currentRow.id),
               valid: result.data.valid,
               reason: result.data.reason,
             });

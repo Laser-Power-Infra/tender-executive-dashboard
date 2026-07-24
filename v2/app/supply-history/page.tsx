@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useCallback, useEffect } from "react"
 import { useSupplyHistory } from "@/hooks/useSupplyHistory";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
-import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
+import { Package, RefreshCw, Eraser, ExternalLink, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import "@/app/SupplyHistory.css";
 
@@ -488,6 +488,13 @@ export const SupplyHistoryDashboard: React.FC = () => {
             </button>
             <button className="export-excel-btn" onClick={handleExportExcel} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
               <FileSpreadsheet size={14} /> Export Excel
+            </button>
+            <button
+              className="clear-filters-btn"
+              onClick={() => window.open("https://docs.google.com/spreadsheets/d/1tXiJC9AZNiAAoL8mM_KxKuzrFqzuk-n3n16abJbaam0", "_blank", "noopener,noreferrer")}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <ExternalLink size={14} /> Open Sheet
             </button>
           </div>
         </header>
