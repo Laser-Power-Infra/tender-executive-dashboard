@@ -45,6 +45,7 @@ export class TenderController {
 
   static async updateDiffPercents(id: string, body: DiffUpdateBody) {
     const { diffPercentFromL1, diffPercentFromL2 } = body;
+    console.log(`[controller:updateDiffPercents] id=${id} L1=${diffPercentFromL1} L2=${diffPercentFromL2}`);
 
     if (diffPercentFromL1 === undefined && diffPercentFromL2 === undefined) {
       throw { status: 400, error: "At least one of diffPercentFromL1 or diffPercentFromL2 must be provided" };

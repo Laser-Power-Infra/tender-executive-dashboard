@@ -8,6 +8,11 @@ import {
   bulkAssignUtilityMappingAction,
   updateDocketNumber,
   updateBgNoUtrNo,
+  updateRemarks,
+  updateLoiPoNoAndDate,
+  updateCompetitors,
+  updateDiffPercentFromL1,
+  updateDiffPercentFromL2,
 } from "@/actions/tender";
 import { importEpcTendersAction } from "@/actions/importEpcTenders";
 import { analyzeTenderValidity, saveAiRelevance } from "@/actions/ai-analysis";
@@ -149,6 +154,46 @@ export const updateTenderBgNoUtrNo = createAsyncThunk(
       tenderMergedId: params.tenderMergedId,
       bgNoUtrNo: params.bgNoUtrNo,
     });
+    return params;
+  },
+);
+
+export const updateTenderRemarks = createAsyncThunk(
+  "tenders/updateRemarks",
+  async (params: { tenderMergedId: number; remarks: string; oldRemarks: string }) => {
+    await updateRemarks({ tenderMergedId: params.tenderMergedId, remarks: params.remarks });
+    return params;
+  },
+);
+
+export const updateTenderLoiPoNoAndDate = createAsyncThunk(
+  "tenders/updateLoiPoNoAndDate",
+  async (params: { tenderMergedId: number; loiPoNoAndDate: string; oldLoiPoNoAndDate: string }) => {
+    await updateLoiPoNoAndDate({ tenderMergedId: params.tenderMergedId, loiPoNoAndDate: params.loiPoNoAndDate });
+    return params;
+  },
+);
+
+export const updateTenderCompetitors = createAsyncThunk(
+  "tenders/updateCompetitors",
+  async (params: { tenderMergedId: number; competitors: string; oldCompetitors: string }) => {
+    await updateCompetitors({ tenderMergedId: params.tenderMergedId, competitors: params.competitors });
+    return params;
+  },
+);
+
+export const updateTenderDiffPercentFromL1 = createAsyncThunk(
+  "tenders/updateDiffPercentFromL1",
+  async (params: { tenderMergedId: number; diffPercentFromL1: number | null; oldDiffPercentFromL1: string }) => {
+    await updateDiffPercentFromL1({ tenderMergedId: params.tenderMergedId, diffPercentFromL1: params.diffPercentFromL1 });
+    return params;
+  },
+);
+
+export const updateTenderDiffPercentFromL2 = createAsyncThunk(
+  "tenders/updateDiffPercentFromL2",
+  async (params: { tenderMergedId: number; diffPercentFromL2: number | null; oldDiffPercentFromL2: string }) => {
+    await updateDiffPercentFromL2({ tenderMergedId: params.tenderMergedId, diffPercentFromL2: params.diffPercentFromL2 });
     return params;
   },
 );
@@ -481,6 +526,91 @@ export const tendersSlice = createSlice({
     builder.addCase(updateTenderBgNoUtrNo.rejected, (state, action) => {
       const { tenderMergedId } = action.meta.arg;
       state.updatingCells[`${tenderMergedId}-bgNoUtrNo`] = false;
+    });
+    // updateTenderRemarks
+    builder.addCase(updateTenderRemarks.pending, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-remarks`] = true;
+    });
+    builder.addCase(updateTenderRemarks.fulfilled, (state, action) => {
+      const { tenderMergedId, remarks } = action.meta.arg;
+      console.log(`[redux] updateTenderRemarks.fulfilled id=${tenderMergedId} remarks="${remarks}"`);
+      state.updatingCells[`${tenderMergedId}-remarks`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.remarks = remarks;
+      }
+    });
+    builder.addCase(updateTenderRemarks.rejected, (state, action) => {
+      console.warn(`[redux] updateTenderRemarks.rejected:`, action.error);
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-remarks`] = false;
+    });
+    // updateTenderLoiPoNoAndDate
+    builder.addCase(updateTenderLoiPoNoAndDate.pending, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-loiPoNoAndDate`] = true;
+    });
+    builder.addCase(updateTenderLoiPoNoAndDate.fulfilled, (state, action) => {
+      const { tenderMergedId, loiPoNoAndDate } = action.meta.arg;
+      console.log(`[redux] updateTenderLoiPoNoAndDate.fulfilled id=${tenderMergedId} loiPoNoAndDate="${loiPoNoAndDate}"`);
+      state.updatingCells[`${tenderMergedId}-loiPoNoAndDate`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.loiPoNoAndDate = loiPoNoAndDate;
+      }
+    });
+    builder.addCase(updateTenderLoiPoNoAndDate.rejected, (state, action) => {
+      console.warn(`[redux] updateTenderLoiPoNoAndDate.rejected:`, action.error);
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-loiPoNoAndDate`] = false;
+    });
+    // updateTenderCompetitors
+    builder.addCase(updateTenderCompetitors.pending, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-competitors`] = true;
+    });
+    builder.addCase(updateTenderCompetitors.fulfilled, (state, action) => {
+      const { tenderMergedId, competitors } = action.meta.arg;
+      console.log(`[redux] updateTenderCompetitors.fulfilled id=${tenderMergedId} competitors="${competitors}"`);
+      state.updatingCells[`${tenderMergedId}-competitors`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.competitors = competitors;
+      }
+    });
+    builder.addCase(updateTenderCompetitors.rejected, (state, action) => {
+      console.warn(`[redux] updateTenderCompetitors.rejected:`, action.error);
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-competitors`] = false;
+    });
+    // updateTenderDiffPercentFromL1
+    builder.addCase(updateTenderDiffPercentFromL1.pending, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-diffL1`] = true;
+    });
+    builder.addCase(updateTenderDiffPercentFromL1.fulfilled, (state, action) => {
+      const { tenderMergedId, diffPercentFromL1 } = action.meta.arg;
+      console.log(`[redux] updateTenderDiffPercentFromL1.fulfilled id=${tenderMergedId} value=${diffPercentFromL1}`);
+      state.updatingCells[`${tenderMergedId}-diffL1`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.diffPercentFromL1 = String(diffPercentFromL1 ?? "");
+      }
+    });
+    builder.addCase(updateTenderDiffPercentFromL1.rejected, (state, action) => {
+      console.warn(`[redux] updateTenderDiffPercentFromL1.rejected:`, action.error);
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-diffL1`] = false;
+    });
+    // updateTenderDiffPercentFromL2
+    builder.addCase(updateTenderDiffPercentFromL2.pending, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-diffL2`] = true;
+    });
+    builder.addCase(updateTenderDiffPercentFromL2.fulfilled, (state, action) => {
+      const { tenderMergedId, diffPercentFromL2 } = action.meta.arg;
+      console.log(`[redux] updateTenderDiffPercentFromL2.fulfilled id=${tenderMergedId} value=${diffPercentFromL2}`);
+      state.updatingCells[`${tenderMergedId}-diffL2`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.diffPercentFromL2 = String(diffPercentFromL2 ?? "");
+      }
+    });
+    builder.addCase(updateTenderDiffPercentFromL2.rejected, (state, action) => {
+      console.warn(`[redux] updateTenderDiffPercentFromL2.rejected:`, action.error);
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-diffL2`] = false;
     });
     builder.addCase(updateTenderAssignments.pending, (state, action) => {
       const { rowIndex, associationIds } = action.meta.arg;

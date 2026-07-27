@@ -1,5 +1,5 @@
 import { TenderData } from "@/lib/slices/tendersSlice";
-import { EpcTenderRecord, ManagementDecision } from "@/types/tender";
+import { EpcTenderRecord, ManagementDecision, NextAction } from "@/types/tender";
 
 function parseFloatOrNull(val: string | undefined | null): number | null {
   if (val == null || val === "") return null;
@@ -40,9 +40,9 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     reverseAuctionApplicable: null,
     reverseAuctionDate: null,
     emdPaymentMode: null,
-    bgNoUtrNo: null,
+    bgNoUtrNo: row.bgNoUtrNo || null,
     emdValidity: null,
-    loiPoNoAndDate: null,
+    loiPoNoAndDate: row.loiPoNoAndDate || null,
     remarks: row.remarks || null,
     bidValidityExpired: false,
     diffPercentFromL1: parseFloatOrNull(row.diffPercentFromL1),
@@ -64,13 +64,13 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     proposedQty: row.proposedQty || undefined,
     statusCategory: undefined,
     itemCategory: row.itemCategory || null,
-    competitors: null,
+    competitors: row.competitors || null,
     fileCount: undefined,
     hasBoqChart: undefined,
     boqFileId: undefined,
     bgStatus: null,
     tenderUpdateStatus: undefined,
-    nextAction: null,
+    nextAction: (row.nextAction || null) as NextAction | null,
     cva: null,
   }));
 }

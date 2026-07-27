@@ -164,11 +164,13 @@ export async function updateDocketNumber(params: {
   tenderMergedId: number;
   docketNo: string;
 }) {
+  console.log(`[action:updateDocketNumber] called with:`, params);
   try {
     await prisma.tenderMerged.update({
       where: { id: params.tenderMergedId },
       data: { docketNo: params.docketNo },
     });
+    console.log(`[action:updateDocketNumber] success for id=${params.tenderMergedId}`);
     logActivity({
       action: "UPDATE",
       tableName: "TenderMerged",
@@ -176,7 +178,7 @@ export async function updateDocketNumber(params: {
       details: `Updated docketNo to "${params.docketNo}" on tender #${params.tenderMergedId}`,
     });
   } catch (error: any) {
-    console.error(error);
+    console.error(`[action:updateDocketNumber] ERROR for id=${params.tenderMergedId}:`, error);
     throw new Error(error.message ?? "Failed to update docket number");
   }
 }
@@ -185,11 +187,13 @@ export async function updateBgNoUtrNo(params: {
   tenderMergedId: number;
   bgNoUtrNo: string;
 }) {
+  console.log(`[action:updateBgNoUtrNo] called with:`, params);
   try {
     await prisma.tenderMerged.update({
       where: { id: params.tenderMergedId },
       data: { bgNoUtrNo: params.bgNoUtrNo },
     });
+    console.log(`[action:updateBgNoUtrNo] success for id=${params.tenderMergedId}`);
     logActivity({
       action: "UPDATE",
       tableName: "TenderMerged",
@@ -197,7 +201,122 @@ export async function updateBgNoUtrNo(params: {
       details: `Updated bgNoUtrNo to "${params.bgNoUtrNo}" on tender #${params.tenderMergedId}`,
     });
   } catch (error: any) {
-    console.error(error);
+    console.error(`[action:updateBgNoUtrNo] ERROR for id=${params.tenderMergedId}:`, error);
     throw new Error(error.message ?? "Failed to update BG/UTR number");
+  }
+}
+
+export async function updateRemarks(params: {
+  tenderMergedId: number;
+  remarks: string;
+}) {
+  console.log(`[action:updateRemarks] called with:`, params);
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { remarks: params.remarks },
+    });
+    console.log(`[action:updateRemarks] success for id=${params.tenderMergedId}`);
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated remarks to "${params.remarks}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(`[action:updateRemarks] ERROR for id=${params.tenderMergedId}:`, error);
+    throw new Error(error.message ?? "Failed to update remarks");
+  }
+}
+
+export async function updateLoiPoNoAndDate(params: {
+  tenderMergedId: number;
+  loiPoNoAndDate: string;
+}) {
+  console.log(`[action:updateLoiPoNoAndDate] called with:`, params);
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { loiPoNoAndDate: params.loiPoNoAndDate },
+    });
+    console.log(`[action:updateLoiPoNoAndDate] success for id=${params.tenderMergedId}`);
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated loiPoNoAndDate to "${params.loiPoNoAndDate}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(`[action:updateLoiPoNoAndDate] ERROR for id=${params.tenderMergedId}:`, error);
+    throw new Error(error.message ?? "Failed to update LOI/PO No");
+  }
+}
+
+export async function updateCompetitors(params: {
+  tenderMergedId: number;
+  competitors: string;
+}) {
+  console.log(`[action:updateCompetitors] called with:`, params);
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { competitors: params.competitors },
+    });
+    console.log(`[action:updateCompetitors] success for id=${params.tenderMergedId}`);
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated competitors to "${params.competitors}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(`[action:updateCompetitors] ERROR for id=${params.tenderMergedId}:`, error);
+    throw new Error(error.message ?? "Failed to update competitors");
+  }
+}
+
+export async function updateDiffPercentFromL1(params: {
+  tenderMergedId: number;
+  diffPercentFromL1: number | null;
+}) {
+  console.log(`[action:updateDiffPercentFromL1] called with:`, params);
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { diffPercentFromL1: params.diffPercentFromL1 },
+    });
+    console.log(`[action:updateDiffPercentFromL1] success for id=${params.tenderMergedId}`);
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated diffPercentFromL1 to "${params.diffPercentFromL1}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(`[action:updateDiffPercentFromL1] ERROR for id=${params.tenderMergedId}:`, error);
+    throw new Error(error.message ?? "Failed to update Diff L1");
+  }
+}
+
+export async function updateDiffPercentFromL2(params: {
+  tenderMergedId: number;
+  diffPercentFromL2: number | null;
+}) {
+  console.log(`[action:updateDiffPercentFromL2] called with:`, params);
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { diffPercentFromL2: params.diffPercentFromL2 },
+    });
+    console.log(`[action:updateDiffPercentFromL2] success for id=${params.tenderMergedId}`);
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated diffPercentFromL2 to "${params.diffPercentFromL2}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(`[action:updateDiffPercentFromL2] ERROR for id=${params.tenderMergedId}:`, error);
+    throw new Error(error.message ?? "Failed to update Diff L2");
   }
 }

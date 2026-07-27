@@ -9,7 +9,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ te
   try {
     const { tenderId } = await params;
     const body = await req.json();
+    console.log(`[api:diff] PATCH called tenderId=${tenderId} body=`, body);
     const result = await TenderController.updateDiffPercents(tenderId, body);
+    console.log(`[api:diff] success tenderId=${tenderId}`);
     const parts: string[] = [];
     if (body.diffPercentFromL1 !== undefined) parts.push(`diffL1=${body.diffPercentFromL1}`);
     if (body.diffPercentFromL2 !== undefined) parts.push(`diffL2=${body.diffPercentFromL2}`);
