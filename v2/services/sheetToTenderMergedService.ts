@@ -7,6 +7,7 @@ import { getNetworkFolderIndex } from "./documentIndexer";
 import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import { encryptPath } from "@/lib/fileCrypto";
 import type { EpcTenderRecord } from "@/types/tender";
+import { syncDocketFromSmartsheet } from "./smartsheetDocketSync";
 
 interface AssociationInfo {
   id: number;
@@ -403,6 +404,21 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
     }
   } catch (e) {
     console.warn("[SheetSync] Network folder scan failed:", (e as Error).message);
+  }
+
+  // Backfill blank docket numbers from Smartsheet
+  try {
+    const docketStats = await syncDocketFromSmartsheet();
+    if (docketStats.totalBlank > 0) {
+      console.log(
+        `[SheetSync] Smartsheet docket sync: ${docketStats.foundInEmailSubject} from Email Subject, ` +
+          `${docketStats.foundInEnquiryTender} from Enquiry Tender, ` +
+          `${docketStats.notFound} not found, ` +
+          `${docketStats.errors} errors (${docketStats.totalBlank} blank total)`,
+      );
+    }
+  } catch (e) {
+    console.warn("[SheetSync] Smartsheet docket sync failed:", (e as Error).message);
   }
 
   // Fetch affected records to return as TenderData
