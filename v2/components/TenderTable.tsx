@@ -926,27 +926,22 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] =
     useState<boolean>(false);
-  const [statusHeaderFilter, setStatusHeaderFilter] = useState<string>("All");
-  const [decisionHeaderFilter, setDecisionHeaderFilter] =
-    useState<string>("All");
-  const [emdPaymentHeaderFilter, setEmdPaymentHeaderFilter] =
-    useState<string>("All");
-  const [tenderForHeaderFilter, setTenderForHeaderFilter] =
-    useState<string>("All");
-  const [typeHeaderFilter, setTypeHeaderFilter] = useState<string>("All");
-  const [prepareByHeaderFilter, setPrepareByHeaderFilter] =
-    useState<string>("All");
-  const [raHeaderFilter, setRaHeaderFilter] = useState<string>("All");
-  const [participatedHeaderFilter, setParticipatedHeaderFilter] =
-    useState<string>("All");
-  const [statusCategoryHeaderFilter, setStatusCategoryHeaderFilter] =
-    useState<string>("All");
-  const [itemCategoryHeaderFilter, setItemCategoryHeaderFilter] =
-    useState<string>("All");
-  const [bgStatusHeaderFilter, setBgStatusHeaderFilter] =
-    useState<string>("All");
-  const [priceBasisHeaderFilter, setPriceBasisHeaderFilter] =
-    useState<string>("All");
+  const BOOLEAN_COLUMNS = new Set(["participated", "reverseAuctionApplicable"]);
+  const SKIP_FILTER_COLUMNS = new Set([
+    "lastDateOfSubmission", "attachmentUrl", "files", "boqChart",
+    "rawMaterials", "diffPercentFromL1", "diffPercentFromL2",
+    "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
+    "itemCategory",
+  ]);
+
+  const [multiSelectFilters, setMultiSelectFilters] = useState<
+    Record<string, string[]>
+  >({});
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [columnSearchText, setColumnSearchText] = useState<
+    Record<string, string>
+  >({});
   const [remarksTextFilter, setRemarksTextFilter] = useState<string>("");
   const [remarksDropdownFilter, setRemarksDropdownFilter] =
     useState<string>("All");
@@ -955,23 +950,56 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [proposedErpItemCategoryFilter, setProposedErpItemCategoryFilter] =
     useState<string>("All");
 
+  const toggleFilter = (accessor: string, value: string) => {
+    setMultiSelectFilters((prev) => {
+      const current = prev[accessor] ?? [];
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      return { ...prev, [accessor]: next };
+    });
+    setCurrentPage(1);
+  };
+
+  const selectAllFilter = (accessor: string) => {
+    const all = [...(uniqueValueCache[accessor] ?? [])];
+    if (BOOLEAN_COLUMNS.has(accessor)) {
+      all.push("Yes", "No");
+    }
+    all.push("(Blank)");
+    setMultiSelectFilters((prev) => ({ ...prev, [accessor]: all }));
+    setCurrentPage(1);
+  };
+
+  const clearFilter = (accessor: string) => {
+    setMultiSelectFilters((prev) => {
+      const next = { ...prev };
+      delete next[accessor];
+      return next;
+    });
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const el = dropdownRefs.current[openDropdown];
+      if (el && !el.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdown]);
+
   React.useEffect(() => {
     if (clearTrigger) {
       setGlobalSearch("");
       setStartDate("");
       setEndDate("");
-      setStatusHeaderFilter("All");
-      setDecisionHeaderFilter("All");
-      setEmdPaymentHeaderFilter("All");
-      setTenderForHeaderFilter("All");
-      setTypeHeaderFilter("All");
-      setPrepareByHeaderFilter("All");
-      setRaHeaderFilter("All");
-      setParticipatedHeaderFilter("All");
-      setStatusCategoryHeaderFilter("All");
-      setItemCategoryHeaderFilter("All");
-      setBgStatusHeaderFilter("All");
-      setPriceBasisHeaderFilter("All");
+      setMultiSelectFilters({});
+      setOpenDropdown(null);
+      setColumnSearchText({});
       setRemarksTextFilter("");
       setRemarksDropdownFilter("All");
       setProposedErpItemTextFilter("");
@@ -979,8 +1007,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       setCurrentPage(1);
     }
   }, [clearTrigger]);
-
-  // Helper for cascading dependent filters
 
   // Helper for cascading dependent filters
   const getFilteredRecordsExcept = (excludeAccessor: string | null) => {
@@ -1019,160 +1045,37 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       );
     }
 
-    if (excludeAccessor !== "currentStatus" && statusHeaderFilter !== "All") {
-      if (statusHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.currentStatus || record.currentStatus.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.currentStatus === statusHeaderFilter,
-        );
-      }
+    for (const [accessor, selected] of Object.entries(multiSelectFilters)) {
+      if (accessor === excludeAccessor || selected.length === 0) continue;
+      result = result.filter((r) => {
+        if (BOOLEAN_COLUMNS.has(accessor)) {
+          const val = r[accessor as keyof EpcTenderRecord];
+          if (selected.includes("Yes") && val === true) return true;
+          if (selected.includes("No") && val === false) return true;
+          if (selected.includes("(Blank)") && (val == null)) return true;
+          return false;
+        }
+        const cellStr = String(r[accessor as keyof EpcTenderRecord] ?? "");
+        if (!cellStr.trim()) return selected.includes("(Blank)");
+        return selected.includes(cellStr);
+      });
     }
-    if (
-      excludeAccessor !== "managementDecision" &&
-      decisionHeaderFilter !== "All"
-    ) {
-      if (decisionHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.managementDecision || record.managementDecision.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.managementDecision === decisionHeaderFilter,
-        );
-      }
+
+    for (const [accessor, searchVal] of Object.entries(columnSearchText)) {
+      if (accessor === excludeAccessor || !searchVal.trim()) continue;
+      const searchLower = searchVal.toLowerCase().trim();
+      result = result.filter((r) => {
+        const cellVal = String(
+          r[accessor as keyof EpcTenderRecord] ?? "",
+        ).toLowerCase();
+        return cellVal.includes(searchLower);
+      });
     }
-    if (
-      excludeAccessor !== "emdPaymentMode" &&
-      emdPaymentHeaderFilter !== "All"
-    ) {
-      if (emdPaymentHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.emdPaymentMode,
-        );
-      } else {
-        result = result.filter(
-          (record) => record.emdPaymentMode === emdPaymentHeaderFilter,
-        );
-      }
-    }
-    if (excludeAccessor !== "tenderFor" && tenderForHeaderFilter !== "All") {
-      if (tenderForHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.tenderFor || record.tenderFor.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.tenderFor === tenderForHeaderFilter,
-        );
-      }
-    }
-    if (excludeAccessor !== "typeOfTender" && typeHeaderFilter !== "All") {
-      if (typeHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.typeOfTender || record.typeOfTender.toString().trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.typeOfTender === typeHeaderFilter,
-        );
-      }
-    }
-    if (
-      excludeAccessor !== "tenderPrepareBy" &&
-      prepareByHeaderFilter !== "All"
-    ) {
-      if (prepareByHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) =>
-            !record.tenderPrepareBy || record.tenderPrepareBy.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.tenderPrepareBy === prepareByHeaderFilter,
-        );
-      }
-    }
-    if (
-      excludeAccessor !== "reverseAuctionApplicable" &&
-      raHeaderFilter !== "All"
-    ) {
-      const isRa = raHeaderFilter === "YES";
-      result = result.filter(
-        (record) => record.reverseAuctionApplicable === isRa,
-      );
-    }
-    if (
-      excludeAccessor !== "participated" &&
-      participatedHeaderFilter !== "All"
-    ) {
-      if (participatedHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) =>
-            record.participated === null || record.participated === undefined,
-        );
-      } else {
-        const isPart = participatedHeaderFilter === "YES";
-        result = result.filter((record) => record.participated === isPart);
-      }
-    }
-    if (
-      excludeAccessor !== "statusCategory" &&
-      statusCategoryHeaderFilter !== "All"
-    ) {
-      if (statusCategoryHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) =>
-            !record.statusCategory || record.statusCategory.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.statusCategory === statusCategoryHeaderFilter,
-        );
-      }
-    }
-    if (
-      excludeAccessor !== "itemCategory" &&
-      itemCategoryHeaderFilter !== "All"
-    ) {
-      if (itemCategoryHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.itemCategory || record.itemCategory.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.itemCategory === itemCategoryHeaderFilter,
-        );
-      }
-    }
-    if (excludeAccessor !== "priceBasis" && priceBasisHeaderFilter !== "All") {
-      if (priceBasisHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.priceBasis || record.priceBasis.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.priceBasis === priceBasisHeaderFilter,
-        );
-      }
-    }
+
     if (excludeAccessor !== "remarks" && remarksDropdownFilter !== "All") {
       result = result.filter(
         (record) => record.remarks === remarksDropdownFilter,
       );
-    }
-    if (excludeAccessor !== "bgStatus" && bgStatusHeaderFilter !== "All") {
-      if (bgStatusHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.bgStatus || record.bgStatus.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.bgStatus === bgStatusHeaderFilter,
-        );
-      }
     }
     if (excludeAccessor !== "proposedErpItemName") {
       if (proposedErpItemCategoryFilter !== "All") {
@@ -1196,27 +1099,24 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     return result;
   };
 
-  const uniqueBgStatuses = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("bgStatus");
-    const list = filtered
-      .map((r) => r.bgStatus)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(list)).sort();
+  const uniqueValueCache = useMemo(() => {
+    const cache: Record<string, string[]> = {};
+    for (const col of columns) {
+      if (SKIP_FILTER_COLUMNS.has(col.accessor)) continue;
+      const filtered = getFilteredRecordsExcept(col.accessor);
+      const values = filtered
+        .map((r) => String(r[col.accessor as keyof EpcTenderRecord] ?? ""))
+        .filter((v) => v.trim() !== "");
+      cache[col.accessor] = Array.from(new Set(values)).sort();
+    }
+    return cache;
   }, [
     records,
     globalSearch,
     startDate,
     endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
+    multiSelectFilters,
+    columnSearchText,
     remarksDropdownFilter,
     proposedErpItemTextFilter,
     proposedErpItemCategoryFilter,
@@ -1239,253 +1139,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     globalSearch,
     startDate,
     endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniqueStatuses = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("currentStatus");
-    const statuses = filtered
-      .map((r) => r.currentStatus)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(statuses)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
+    multiSelectFilters,
+    columnSearchText,
     remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniqueStatusCategories = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("statusCategory");
-    const categories = filtered
-      .map((r) => r.statusCategory)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(categories)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    itemCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniqueEmdPaymentModes = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("emdPaymentMode");
-    const modes = filtered
-      .map((r) => r.emdPaymentMode)
-      .filter((m): m is EMDExchangeMode => m !== null && m !== undefined);
-    return Array.from(new Set(modes)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniqueTenderFor = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("tenderFor");
-    const list = filtered
-      .map((r) => r.tenderFor)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(list)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniqueTypes = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("typeOfTender");
-    const list = filtered
-      .map((r) => r.typeOfTender)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(list)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniqueItemCategories = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("itemCategory");
-    const list = filtered
-      .map((r) => r.itemCategory)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(list)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniquePrepareBy = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("tenderPrepareBy");
-    const list = filtered
-      .map((r) => r.tenderPrepareBy)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(list)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniqueDecisions = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("managementDecision");
-    const list = filtered
-      .map((r) => r.managementDecision)
-      .filter((s) => s && s.trim() !== "");
-    return Array.from(new Set(list)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
-    priceBasisHeaderFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
-
-  const uniquePriceBasis = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("priceBasis");
-    const list = filtered
-      .map((r) => r.priceBasis)
-      .filter((s): s is string => !!s && s.trim() !== "");
-    return Array.from(new Set(list)).sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
-    remarksDropdownFilter,
-    bgStatusHeaderFilter,
     proposedErpItemTextFilter,
     proposedErpItemCategoryFilter,
   ]);
@@ -1628,165 +1284,33 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       });
     }
 
-    // Column Status Header Filter
-    if (statusHeaderFilter !== "All") {
-      if (statusHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.currentStatus || record.currentStatus.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.currentStatus === statusHeaderFilter,
-        );
-      }
+    // Column Header Filters (multi-select)
+    for (const [accessor, selected] of Object.entries(multiSelectFilters)) {
+      if (selected.length === 0) continue;
+      result = result.filter((r) => {
+        if (BOOLEAN_COLUMNS.has(accessor)) {
+          const val = r[accessor as keyof EpcTenderRecord];
+          if (selected.includes("Yes") && val === true) return true;
+          if (selected.includes("No") && val === false) return true;
+          if (selected.includes("(Blank)") && (val == null)) return true;
+          return false;
+        }
+        const cellStr = String(r[accessor as keyof EpcTenderRecord] ?? "");
+        if (!cellStr.trim()) return selected.includes("(Blank)");
+        return selected.includes(cellStr);
+      });
     }
 
-    // Column Management Decision Header Filter
-    if (decisionHeaderFilter !== "All") {
-      if (decisionHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.managementDecision || record.managementDecision.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.managementDecision === decisionHeaderFilter,
-        );
-      }
-    }
-
-    // Column EMD Payment Mode Header Filter
-    if (emdPaymentHeaderFilter !== "All") {
-      if (emdPaymentHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.emdPaymentMode,
-        );
-      } else {
-        result = result.filter(
-          (record) => record.emdPaymentMode === emdPaymentHeaderFilter,
-        );
-      }
-    }
-
-    // Column Tender For Header Filter
-    if (tenderForHeaderFilter !== "All") {
-      if (tenderForHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.tenderFor || record.tenderFor.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.tenderFor === tenderForHeaderFilter,
-        );
-      }
-    }
-
-    // Column Type Header Filter
-    if (typeHeaderFilter !== "All") {
-      if (typeHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.typeOfTender || record.typeOfTender.toString().trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.typeOfTender === typeHeaderFilter,
-        );
-      }
-    }
-
-    // Column Prepare By Header Filter
-    if (prepareByHeaderFilter !== "All") {
-      if (prepareByHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) =>
-            !record.tenderPrepareBy || record.tenderPrepareBy.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.tenderPrepareBy === prepareByHeaderFilter,
-        );
-      }
-    }
-
-    // Column RA? Header Filter
-    if (raHeaderFilter !== "All") {
-      if (raHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) =>
-            record.reverseAuctionApplicable === null ||
-            record.reverseAuctionApplicable === undefined,
-        );
-      } else {
-        const isRa = raHeaderFilter === "YES";
-        result = result.filter(
-          (record) => record.reverseAuctionApplicable === isRa,
-        );
-      }
-    }
-
-    // Column Participated? Header Filter
-    if (participatedHeaderFilter !== "All") {
-      if (participatedHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) =>
-            record.participated === null || record.participated === undefined,
-        );
-      } else {
-        const isPart = participatedHeaderFilter === "YES";
-        result = result.filter((record) => record.participated === isPart);
-      }
-    }
-
-    // Column Status Category Header Filter
-    if (statusCategoryHeaderFilter !== "All") {
-      if (statusCategoryHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) =>
-            !record.statusCategory || record.statusCategory.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.statusCategory === statusCategoryHeaderFilter,
-        );
-      }
-    }
-
-    // Column Item Category Header Filter
-    if (itemCategoryHeaderFilter !== "All") {
-      if (itemCategoryHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.itemCategory || record.itemCategory.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.itemCategory === itemCategoryHeaderFilter,
-        );
-      }
-    }
-
-    // Column Price Basis Header Filter
-    if (priceBasisHeaderFilter !== "All") {
-      if (priceBasisHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.priceBasis || record.priceBasis.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.priceBasis === priceBasisHeaderFilter,
-        );
-      }
-    }
-
-    // Column BG Status Header Filter
-    if (bgStatusHeaderFilter !== "All") {
-      if (bgStatusHeaderFilter === "BLANK") {
-        result = result.filter(
-          (record) => !record.bgStatus || record.bgStatus.trim() === "",
-        );
-      } else {
-        result = result.filter(
-          (record) => record.bgStatus === bgStatusHeaderFilter,
-        );
-      }
+    // Column Search Text Filters
+    for (const [accessor, searchVal] of Object.entries(columnSearchText)) {
+      if (!searchVal.trim()) continue;
+      const searchLower = searchVal.toLowerCase().trim();
+      result = result.filter((r) => {
+        const cellVal = String(
+          r[accessor as keyof EpcTenderRecord] ?? "",
+        ).toLowerCase();
+        return cellVal.includes(searchLower);
+      });
     }
 
     // Column Remarks Header Filters
@@ -1911,19 +1435,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     sortDirection,
     startDate,
     endDate,
-    statusHeaderFilter,
-    decisionHeaderFilter,
-    emdPaymentHeaderFilter,
-    tenderForHeaderFilter,
-    typeHeaderFilter,
-    prepareByHeaderFilter,
-    raHeaderFilter,
-    participatedHeaderFilter,
-    statusCategoryHeaderFilter,
-    itemCategoryHeaderFilter,
+    multiSelectFilters,
+    columnSearchText,
     remarksTextFilter,
     remarksDropdownFilter,
-    bgStatusHeaderFilter,
     proposedErpItemTextFilter,
     proposedErpItemCategoryFilter,
   ]);
@@ -2254,7 +1769,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                 ...visibleColumns.map((col) => (
                   <th
                     key={col.accessor}
-                    style={{ width: `${columnWidths[col.accessor]}px` }}
+                    style={{
+                      width: `${columnWidths[col.accessor]}px`,
+                      ...(openDropdown === col.accessor
+                        ? { zIndex: 100 }
+                        : {}),
+                    }}
                   >
                     <div
                       className="header-content"
@@ -2312,193 +1832,132 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         )}
                       </div>
                     )}
-                    {col.accessor === "priceBasis" && (
+                    {!SKIP_FILTER_COLUMNS.has(col.accessor) && (
                       <div
-                        className="column-price-basis-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
+                        className="custom-multiselect-container"
+                        ref={(el) => {
+                          dropdownRefs.current[col.accessor] = el;
+                        }}
                       >
-                        <select
-                          className="price-basis-filter-select"
-                          value={priceBasisHeaderFilter}
-                          onChange={(e) => {
-                            setPriceBasisHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
+                        <button
+                          className="multiselect-trigger-btn"
+                          onClick={() =>
+                            setOpenDropdown(
+                              openDropdown === col.accessor ? null : col.accessor,
+                            )
+                          }
                         >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniquePriceBasis.map((pb) => (
-                            <option key={pb} value={pb}>{pb}</option>
-                          ))}
-                        </select>
+                          {(!multiSelectFilters[col.accessor] ||
+                            multiSelectFilters[col.accessor].length === 0)
+                            ? `All ${col.header}`
+                            : `${multiSelectFilters[col.accessor].length} Selected`}
+                          <span
+                            className="dropdown-arrow"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            <ChevronDown size={12} />
+                          </span>
+                        </button>
+                        {openDropdown === col.accessor && (
+                          <div className="multiselect-dropdown-panel">
+                            <div className="multiselect-actions">
+                              <button
+                                className="multiselect-action-btn"
+                                onClick={() => clearFilter(col.accessor)}
+                              >
+                                Clear All
+                              </button>
+                              <button
+                                className="multiselect-action-btn"
+                                onClick={() => selectAllFilter(col.accessor)}
+                              >
+                                Select All
+                              </button>
+                            </div>
+                            <div className="multiselect-options-list">
+                              {BOOLEAN_COLUMNS.has(col.accessor) ? (
+                                <>
+                                  {["Yes", "No"].map((opt) => (
+                                    <label
+                                      key={opt}
+                                      className="multiselect-option-label"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={
+                                          multiSelectFilters[col.accessor]?.includes(
+                                            opt,
+                                          ) ?? false
+                                        }
+                                        onChange={() =>
+                                          toggleFilter(col.accessor, opt)
+                                        }
+                                      />
+                                      <span>{opt}</span>
+                                    </label>
+                                  ))}
+                                </>
+                              ) : (
+                                (uniqueValueCache[col.accessor] ?? []).map(
+                                  (val) => (
+                                    <label
+                                      key={val}
+                                      className="multiselect-option-label"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={
+                                          multiSelectFilters[col.accessor]?.includes(
+                                            val,
+                                          ) ?? false
+                                        }
+                                        onChange={() =>
+                                          toggleFilter(col.accessor, val)
+                                        }
+                                      />
+                                      <span>{val}</span>
+                                    </label>
+                                  ),
+                                )
+                              )}
+                              <label className="multiselect-option-label">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    multiSelectFilters[col.accessor]?.includes(
+                                      "(Blank)",
+                                    ) ?? false
+                                  }
+                                  onChange={() =>
+                                    toggleFilter(col.accessor, "(Blank)")
+                                  }
+                                />
+                                <span>(Blank)</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
-                    {col.accessor === "bgStatus" && (
-                      <div
-                        className="column-bg-status-filter"
+                    {col.accessor !== "lastDateOfSubmission" && col.accessor !== "rawMaterials" && col.accessor !== "proposedErpItemName" && col.accessor !== "remarks" && (
+                      <input
+                        type="text"
+                        className="column-search-input"
+                        placeholder={`Search ${col.header}...`}
+                        value={columnSearchText[col.accessor] ?? ""}
+                        onChange={(e) => {
+                          setColumnSearchText((prev) => ({
+                            ...prev,
+                            [col.accessor]: e.target.value,
+                          }));
+                          setCurrentPage(1);
+                        }}
                         onClick={(e) => e.stopPropagation()}
                         onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="bg-status-filter-select"
-                          value={bgStatusHeaderFilter}
-                          onChange={(e) => {
-                            setBgStatusHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueBgStatuses.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "currentStatus" && (
-                      <div
-                        className="column-status-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="status-filter-select"
-                          value={statusHeaderFilter}
-                          onChange={(e) => {
-                            setStatusHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All Statuses</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueStatuses.map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "statusCategory" && (
-                      <div
-                        className="column-status-category-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="status-category-filter-select"
-                          value={statusCategoryHeaderFilter}
-                          onChange={(e) => {
-                            setStatusCategoryHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All Categories</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueStatusCategories.map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "managementDecision" && (
-                      <div
-                        className="column-decision-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="decision-filter-select"
-                          value={decisionHeaderFilter}
-                          onChange={(e) => {
-                            setDecisionHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueDecisions.map((d) => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "emdPaymentMode" && (
-                      <div
-                        className="column-emd-payment-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="emd-payment-filter-select"
-                          value={emdPaymentHeaderFilter}
-                          onChange={(e) => {
-                            setEmdPaymentHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueEmdPaymentModes.map((mode) => (
-                            <option key={mode} value={mode}>
-                              {mode}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "tenderFor" && (
-                      <div
-                        className="column-tender-for-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="tender-for-filter-select"
-                          value={tenderForHeaderFilter}
-                          onChange={(e) => {
-                            setTenderForHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueTenderFor.map((tf) => (
-                            <option key={tf} value={tf}>
-                              {tf}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "itemCategory" && (
-                      <div
-                        className="column-item-category-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="item-category-filter-select"
-                          value={itemCategoryHeaderFilter}
-                          onChange={(e) => {
-                            setItemCategoryHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueItemCategories.map((ic) => (
-                            <option key={ic} value={ic}>
-                              {ic}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      />
                     )}
                     {col.accessor === "proposedErpItemName" && (
                       <div
@@ -2532,96 +1991,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           <option value="XLPE Cable">XLPE Cable</option>
                           <option value="PVC Cable">PVC Cable</option>
                           <option value="Control Cable">Control Cable</option>
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "typeOfTender" && (
-                      <div
-                        className="column-type-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="type-filter-select"
-                          value={typeHeaderFilter}
-                          onChange={(e) => {
-                            setTypeHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniqueTypes.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "tenderPrepareBy" && (
-                      <div
-                        className="column-prepare-by-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="prepare-by-filter-select"
-                          value={prepareByHeaderFilter}
-                          onChange={(e) => {
-                            setPrepareByHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          {uniquePrepareBy.map((p) => (
-                            <option key={p} value={p}>
-                              {p}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "reverseAuctionApplicable" && (
-                      <div
-                        className="column-ra-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="ra-filter-select"
-                          value={raHeaderFilter}
-                          onChange={(e) => {
-                            setRaHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          <option value="YES">YES</option>
-                          <option value="NO">NO</option>
-                        </select>
-                      </div>
-                    )}
-                    {col.accessor === "participated" && (
-                      <div
-                        className="column-participated-filter"
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          className="participated-filter-select"
-                          value={participatedHeaderFilter}
-                          onChange={(e) => {
-                            setParticipatedHeaderFilter(e.target.value);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <option value="All">All</option>
-                          <option value="BLANK">(Blank)</option>
-                          <option value="YES">YES</option>
-                          <option value="NO">NO</option>
                         </select>
                       </div>
                     )}
