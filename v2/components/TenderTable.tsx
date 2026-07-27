@@ -25,6 +25,7 @@ import {
   Circle,
   AlertTriangle,
   Loader2,
+  RotateCcw,
 } from "lucide-react";
 import "./TenderTable.css";
 
@@ -1398,6 +1399,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     setCurrentPage(1); // Reset to first page when sorting changes
   };
 
+  const handleClearSort = () => {
+    setSortColumn(null);
+    setSortDirection("desc");
+    setCurrentPage(1);
+  };
+
   // Toggle Row Expansion
   const toggleRowExpansion = (slNo: number) => {
     setExpandedRows((prev) => ({
@@ -1456,68 +1463,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         }
 
         return true;
-      });
-    }
-
-    // Sorting
-    if (sortColumn) {
-      result.sort((a, b) => {
-        let valA: any;
-        let valB: any;
-
-        if (sortColumn === "rawMaterials") {
-          const materialFields = [
-            "aluminiumPrice", "aluminiumAlloyPrice", "copperTapePrice",
-            "extrudedSemiconductivePrice", "htXlpePrice", "pvcTypeSt2Price",
-            "galvanisedSteelFlatStripPrice", "fillerPrice",
-          ] as const;
-          valA = materialFields.reduce(
-            (sum, f) => sum + (typeof a[f as keyof EpcTenderRecord] === "number" ? (a[f as keyof EpcTenderRecord] as number) : 0), 0,
-          );
-          valB = materialFields.reduce(
-            (sum, f) => sum + (typeof b[f as keyof EpcTenderRecord] === "number" ? (b[f as keyof EpcTenderRecord] as number) : 0), 0,
-          );
-        } else if (sortColumn === "files") {
-          valA = a.fileCount !== undefined ? a.fileCount : 0;
-          valB = b.fileCount !== undefined ? b.fileCount : 0;
-        } else if (sortColumn === "boqChart") {
-          valA = a.hasBoqChart ? 1 : 0;
-          valB = b.hasBoqChart ? 1 : 0;
-        } else if (sortColumn === "attachmentUrl") {
-          const getHasCosting = (r: EpcTenderRecord) => {
-            if (!r.tenderFiles) return 0;
-            try {
-              const files: Array<{ tags: string[] }> = JSON.parse(r.tenderFiles);
-              return files.some((f) => f.tags?.includes("costingAttachment")) ? 1 : 0;
-            } catch { return 0; }
-          };
-          valA = getHasCosting(a);
-          valB = getHasCosting(b);
-        } else {
-          valA = a[sortColumn as keyof EpcTenderRecord];
-          valB = b[sortColumn as keyof EpcTenderRecord];
-        }
-
-        if (valA === valB) return 0;
-        if (valA === null || valA === undefined)
-          return sortDirection === "asc" ? -1 : 1;
-        if (valB === null || valB === undefined)
-          return sortDirection === "asc" ? 1 : -1;
-
-        if (valA instanceof Date && valB instanceof Date) {
-          return sortDirection === "asc"
-            ? valA.getTime() - valB.getTime()
-            : valB.getTime() - valA.getTime();
-        }
-
-        if (typeof valA === "number" && typeof valB === "number") {
-          return sortDirection === "asc" ? valA - valB : valB - valA;
-        }
-
-        // Default String compare
-        return sortDirection === "asc"
-          ? String(valA).localeCompare(String(valB))
-          : String(valB).localeCompare(String(valA));
       });
     }
 
@@ -1714,6 +1659,88 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       );
     }
 
+    // Sorting — applied last on the fully filtered set so order is definitive
+    if (sortColumn) {
+      result.sort((a, b) => {
+        let valA: any;
+        let valB: any;
+
+        if (sortColumn === "rawMaterials") {
+          const materialFields = [
+            "aluminiumPrice", "aluminiumAlloyPrice", "copperTapePrice",
+            "extrudedSemiconductivePrice", "htXlpePrice", "pvcTypeSt2Price",
+            "galvanisedSteelFlatStripPrice", "fillerPrice",
+          ] as const;
+          valA = materialFields.reduce(
+            (sum, f) => sum + (typeof a[f as keyof EpcTenderRecord] === "number" ? (a[f as keyof EpcTenderRecord] as number) : 0), 0,
+          );
+          valB = materialFields.reduce(
+            (sum, f) => sum + (typeof b[f as keyof EpcTenderRecord] === "number" ? (b[f as keyof EpcTenderRecord] as number) : 0), 0,
+          );
+        } else if (sortColumn === "files") {
+          const getFileCount = (r: EpcTenderRecord) => {
+            if (!r.tenderFiles) return 0;
+            try {
+              const files = JSON.parse(r.tenderFiles);
+              return Array.isArray(files) ? files.length : 0;
+            } catch { return 0; }
+          };
+          valA = getFileCount(a);
+          valB = getFileCount(b);
+        } else if (sortColumn === "boqChart") {
+          const getHasBoq = (r: EpcTenderRecord) => {
+            if (r.boqFileId) return 1;
+            if (!r.tenderFiles) return 0;
+            try {
+              const files: Array<{ name: string; tags: string[] }> = JSON.parse(r.tenderFiles);
+              return files.some((f) => {
+                const lower = (f.name || "").toLowerCase();
+                return lower.includes("boqcomparativechart") ||
+                       lower.includes("boq_comparative") ||
+                       lower.includes("boq comparative") ||
+                       f.tags?.includes("boqComparativeChart");
+              }) ? 1 : 0;
+            } catch { return 0; }
+          };
+          valA = getHasBoq(a);
+          valB = getHasBoq(b);
+        } else if (sortColumn === "attachmentUrl") {
+          const getHasCosting = (r: EpcTenderRecord) => {
+            if (!r.tenderFiles) return 0;
+            try {
+              const files: Array<{ tags: string[] }> = JSON.parse(r.tenderFiles);
+              return files.some((f) => f.tags?.includes("costingAttachment")) ? 1 : 0;
+            } catch { return 0; }
+          };
+          valA = getHasCosting(a);
+          valB = getHasCosting(b);
+        } else {
+          valA = a[sortColumn as keyof EpcTenderRecord];
+          valB = b[sortColumn as keyof EpcTenderRecord];
+        }
+
+        if (valA === valB) return 0;
+        if (valA === null || valA === undefined)
+          return sortDirection === "asc" ? -1 : 1;
+        if (valB === null || valB === undefined)
+          return sortDirection === "asc" ? 1 : -1;
+
+        if (valA instanceof Date && valB instanceof Date) {
+          return sortDirection === "asc"
+            ? valA.getTime() - valB.getTime()
+            : valB.getTime() - valA.getTime();
+        }
+
+        if (typeof valA === "number" && typeof valB === "number") {
+          return sortDirection === "asc" ? valA - valB : valB - valA;
+        }
+
+        return sortDirection === "asc"
+          ? String(valA).localeCompare(String(valB))
+          : String(valB).localeCompare(String(valA));
+      });
+    }
+
     return result;
   }, [
     records,
@@ -1751,10 +1778,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     return processedRecords.slice(startIndex, startIndex + rowsPerPage);
   }, [processedRecords, activePage, rowsPerPage]);
 
-  // Reset page when search, date filters, or row limit changes
+  // Reset page when search, sort, date filters, or row limit changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [globalSearch, rowsPerPage, startDate, endDate]);
+  }, [globalSearch, sortColumn, sortDirection, rowsPerPage, startDate, endDate]);
 
   // 7. Scrolling is managed natively by the browser's layout engine
 
@@ -2025,6 +2052,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           </div>
         </div>
         <div className="toolbar-right">
+          {sortColumn && (
+            <button
+              className="export-btn"
+              onClick={handleClearSort}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <RotateCcw size={14} /> Clear Sort
+            </button>
+          )}
           <button
             className="export-btn"
             onClick={handleExportCSV}
