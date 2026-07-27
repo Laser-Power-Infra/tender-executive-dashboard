@@ -3,7 +3,6 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { DatabaseTenderService } from "@/services/databaseTenderService";
 import { GoogleSheetService } from "@/services/googleSheetService";
-import { encryptPath } from "@/lib/fileCrypto";
 import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import { getAccessToken, getCleanCredentials } from "@/lib/googleDrive";
 import { getCostingDetails } from "@/services/smartsheetEnrichmentService";
@@ -11,61 +10,7 @@ import type { EpcTenderRecord } from "@/types/tender";
 
 export const runtime = "nodejs";
 
-const CONDUTOR_PATH = path.resolve(process.env.CONDUTOR_PATH!); // X: asmita, W: bidyut // comparative chart
-// const CONDUTOR_PATH = path.resolve("X:\\Tenders-bd\\Condutor"); // X: asmita, W: bidyut
-const TENDER_ID_PATTERN = /(\d{4}_[A-Z]+_\d+_\d+)/;
 const MATCHES_PATH = path.resolve(process.cwd(), "data", "tender_folder_matches.json");
-
-interface BoqCacheEntry {
-  modifiedDate: number;
-  tenderId: string;
-  cleanTenderId: string;
-  competitors: string;
-  parentFolderPath: string;
-}
-
-function loadBoqCache(): Record<string, BoqCacheEntry> {
-  const cachePath = path.resolve(process.cwd(), "data", "boq_cache.json");
-  try {
-    if (!fs.existsSync(cachePath)) {
-      console.warn("[BoQ Cache] Cache file not found at", cachePath);
-      return {};
-    }
-    const raw = fs.readFileSync(cachePath, "utf-8");
-    return JSON.parse(raw);
-  } catch (err) {
-    console.warn("[BoQ Cache] Failed to load:", (err as Error).message);
-    return {};
-  }
-}
-
-function loadCondutorBoqFiles(): Map<string, string> {
-  const result = new Map<string, string>();
-  try {
-    if (!fs.existsSync(CONDUTOR_PATH)) {
-      console.warn("[Condutor BoQ] Directory not found at", CONDUTOR_PATH);
-      return result;
-    }
-    const files = fs.readdirSync(CONDUTOR_PATH);
-    for (const filename of files) {
-      if (!filename.toLowerCase().endsWith(".xlsx")) continue;
-      const match = filename.match(TENDER_ID_PATTERN);
-      if (!match) continue;
-      const tenderId = match[1];
-      const cleanId = tenderId.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (!cleanId) continue;
-      const filePath = path.join(CONDUTOR_PATH, filename);
-      if (!result.has(cleanId)) {
-        result.set(cleanId, filePath);
-      } else if (!/\(\d+\)/.test(filename)) {
-        result.set(cleanId, filePath);
-      }
-    }
-  } catch (err) {
-    console.warn("[Condutor BoQ] Failed to scan:", (err as Error).message);
-  }
-  return result;
-}
 
 function loadFolderMatches(): Record<string, any> {
   try {
@@ -102,9 +47,6 @@ function getFileCount(dirPath: string): number {
 }
 
 function enrichTendersWithBoq(tenders: any[]): EpcTenderRecord[] {
-  const cache = loadBoqCache();
-  const cacheEntries = Object.entries(cache);
-  const condutorFiles = loadCondutorBoqFiles();
   const folderMatches = loadFolderMatches();
 
   return tenders.map((tender) => {
@@ -114,44 +56,7 @@ function enrichTendersWithBoq(tenders: any[]): EpcTenderRecord[] {
       match?.folderFound && match?.folderPath
         ? getFileCount(match.folderPath)
         : 0;
-    const enriched: any = { ...tender, fileCount };
-
-    if (!enriched.tenderNoNitNo) return enriched;
-
-    const cleanTenderNo = enriched.tenderNoNitNo
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-    if (!cleanTenderNo) return enriched;
-
-    const cacheMatch = cacheEntries.find(([, entry]) => {
-      if (!entry.cleanTenderId) return false;
-      return (
-        cleanTenderNo.includes(entry.cleanTenderId) ||
-        entry.cleanTenderId.includes(cleanTenderNo)
-      );
-    });
-
-    if (cacheMatch) {
-      const [filePath, entry] = cacheMatch;
-      enriched.hasBoqChart = true;
-      enriched.competitors = entry.competitors;
-      enriched.boqFileId = encryptPath(filePath);
-      return enriched;
-    }
-
-    for (const [condutorCleanId, condutorFilePath] of condutorFiles) {
-      if (
-        cleanTenderNo.includes(condutorCleanId) ||
-        condutorCleanId.includes(cleanTenderNo)
-      ) {
-        enriched.hasBoqChart = true;
-        enriched.boqFileId = encryptPath(condutorFilePath);
-        break;
-      }
-    }
-
-    return enriched;
+    return { ...tender, fileCount };
   });
 }
 

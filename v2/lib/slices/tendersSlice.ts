@@ -240,6 +240,7 @@ export const saveAiFeedback = createAsyncThunk(
   "tenders/saveAiFeedback",
   async (params: {
     tenderMergedId: number;
+    tenderType: string;
     briefText: string;
     originalAi: string;
     correctedAi: string;
@@ -248,7 +249,14 @@ export const saveAiFeedback = createAsyncThunk(
     const res = await fetch("/api/ai-feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        tenderId: params.tenderMergedId,
+        tenderType: params.tenderType,
+        briefText: params.briefText,
+        originalAi: params.originalAi,
+        correctedAi: params.correctedAi,
+        feedbackReason: params.feedbackReason,
+      }),
     });
     if (!res.ok) throw new Error("Failed to save feedback");
     return res.json();
@@ -331,6 +339,7 @@ export const saveFeedbackAndReanalyze = createAsyncThunk(
   "tenders/saveFeedbackAndReanalyze",
   async (params: {
     tenderMergedId: number;
+    tenderType: string;
     briefText: string;
     originalAi: string;
     correctedAi: string;
@@ -339,7 +348,14 @@ export const saveFeedbackAndReanalyze = createAsyncThunk(
     const res = await fetch("/api/ai-feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        tenderId: params.tenderMergedId,
+        tenderType: params.tenderType,
+        briefText: params.briefText,
+        originalAi: params.originalAi,
+        correctedAi: params.correctedAi,
+        feedbackReason: params.feedbackReason,
+      }),
     });
     if (!res.ok) throw new Error("Failed to save feedback");
 

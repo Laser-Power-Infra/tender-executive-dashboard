@@ -216,6 +216,7 @@ export default function Dashboard() {
   const handleSaveFeedback = useCallback(
     (params: {
       tenderMergedId: number;
+      tenderType: string;
       briefText: string;
       originalAi: string;
       correctedAi: string;

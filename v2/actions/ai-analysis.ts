@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getAiFeedbackContext } from "@/lib/ai-feedback";
 import { logActivity } from "@/lib/activity-logger";
 
-const model = openai("gpt-4o-mini");
+const model = openai("gpt-5-mini");
 
 export async function analyzeContent(prompt: string) {
   const { text } = await generateText({

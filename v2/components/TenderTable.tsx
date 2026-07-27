@@ -130,12 +130,26 @@ const FilesCell: React.FC<{
 const BOQChartCell: React.FC<{
   docketNo: string;
   boqFileId?: string | null;
-}> = ({ docketNo, boqFileId }) => {
+  tenderFilesJson?: string;
+}> = ({ docketNo, boqFileId, tenderFilesJson }) => {
   const [boqFile, setBoqFile] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  const tenderFilesSource = useMemo(() => {
+    if (!tenderFilesJson) return null;
+    try {
+      const files = JSON.parse(tenderFilesJson);
+      const boqFileEntry = files.find(
+        (f: any) => f.tags?.includes("boqComparativeChart"),
+      );
+      return boqFileEntry?.source || null;
+    } catch {
+      return null;
+    }
+  }, [tenderFilesJson]);
+
   useEffect(() => {
-    if (boqFileId) return;
+    if (boqFileId || tenderFilesSource) return;
     if (!docketNo || docketNo === "-") return;
 
     let isMounted = true;
@@ -157,11 +171,11 @@ const BOQChartCell: React.FC<{
     return () => {
       isMounted = false;
     };
-  }, [docketNo, boqFileId]);
+  }, [docketNo, boqFileId, tenderFilesSource]);
 
   if (loading) return null;
 
-  const effectiveFileId = boqFileId || boqFile?.fileId;
+  const effectiveFileId = boqFileId || tenderFilesSource || boqFile?.fileId;
   if (!effectiveFileId) return null;
 
   const handleDownload = () => {
@@ -2200,7 +2214,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           cellClass = "col-center";
                         } else if (col.accessor === "boqChart") {
                           cellContent = (
-                            <BOQChartCell docketNo={record.docketNo} boqFileId={record.boqFileId} />
+                            <BOQChartCell docketNo={record.docketNo} boqFileId={record.boqFileId} tenderFilesJson={record.tenderFiles} />
                           );
                           cellClass = "col-center";
                         } else if (
