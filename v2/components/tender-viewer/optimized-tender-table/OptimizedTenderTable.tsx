@@ -80,6 +80,7 @@ export interface ColumnDef<T> {
   resizable?: boolean;
   searchable?: boolean;
   hidden?: boolean;
+  frozen?: boolean;
   renderCell?: (value: unknown, row: T) => React.ReactNode;
   renderExpanded?: (row: T) => React.ReactNode;
   sortValue?: (value: unknown, row: T) => string | number | boolean | null;
@@ -488,30 +489,37 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
     const filtered = columns.filter(
       (col) => !col.hidden && columnVisibility[String(col.accessor)] !== false,
     );
-    const refIdx = filtered.findIndex(
-      (col) => String(col.accessor) === "referenceNo",
-    );
-    if (refIdx > 0) {
-      const [refCol] = filtered.splice(refIdx, 1);
-      filtered.unshift(refCol);
-    }
+    const frozen = filtered.filter((col) => col.frozen);
+    const nonFrozen = filtered.filter((col) => !col.frozen);
 
-    const locIdx = filtered.findIndex(
+    const locIdx = nonFrozen.findIndex(
       (col) => String(col.accessor) === "location",
     );
-    const webIdx = filtered.findIndex(
+    const webIdx = nonFrozen.findIndex(
       (col) => String(col.accessor) === "website",
     );
     if (locIdx >= 0 && webIdx >= 0) {
-      const [webCol] = filtered.splice(webIdx, 1);
-      const newLocIdx = filtered.findIndex(
+      const [webCol] = nonFrozen.splice(webIdx, 1);
+      const newLocIdx = nonFrozen.findIndex(
         (col) => String(col.accessor) === "location",
       );
-      filtered.splice(newLocIdx + 1, 0, webCol);
+      nonFrozen.splice(newLocIdx + 1, 0, webCol);
     }
 
-    return filtered;
+    return [...frozen, ...nonFrozen];
   }, [columns, columnVisibility]);
+
+  const frozenColumnOffsets = useMemo(() => {
+    const offsets: Record<string, number> = {};
+    let currentLeft = 0;
+    for (const col of visibleColumns) {
+      if (col.frozen) {
+        offsets[String(col.accessor)] = currentLeft;
+        currentLeft += columnWidths[String(col.accessor)];
+      }
+    }
+    return offsets;
+  }, [visibleColumns, columnWidths]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1036,18 +1044,19 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
         <table className="optimized-tender-data-table">
           <thead className="w-full">
             <tr>
-              <th style={{ width: "40px" }} className="col-center"></th>
               {visibleColumns.map((col, colIdx) => {
-                // console.log("Rendering header col", colIdx, ":", col.header);
+                const isFrozen = col.frozen;
+                const offset = isFrozen
+                  ? frozenColumnOffsets[String(col.accessor)]
+                  : undefined;
                 return (
                   <th
                     key={String(col.accessor)}
-                    className={
-                      String(col.accessor) === "referenceNo"
-                        ? "sticky-first-column"
-                        : ""
-                    }
-                    style={{ width: `${columnWidths[String(col.accessor)]}px` }}
+                    className={isFrozen ? "sticky-column" : ""}
+                    style={{
+                      width: `${columnWidths[String(col.accessor)]}px`,
+                      ...(isFrozen ? { left: `${offset}px`, zIndex: 3 } : {}),
+                    }}
                   >
                     <div
                       className="header-content"
@@ -1125,7 +1134,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
             {paginatedRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length + 1}
+                  colSpan={columns.length}
                   style={{
                     textAlign: "center",
                     padding: "40px",
@@ -1145,23 +1154,11 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
                     <tr
                       className={`tender-row ${isExpanded ? "expanded-row" : ""}`}
                     >
-                      <td className="col-center">
-                        {columns.some((c) => c.renderExpanded) && (
-                          <button
-                            className="details-link"
-                            onClick={() => toggleRowExpansion(rowKeyValue)}
-                          >
-                            {isExpanded ? (
-                              <ChevronDown size={12} />
-                            ) : (
-                              <ChevronRight size={12} />
-                            )}
-                          </button>
-                        )}
-                      </td>
-
                       {visibleColumns.map((col, colIdx) => {
-                        // console.log("Rendering cell col", colIdx, ":", col.header);
+                        const isFrozen = col.frozen;
+                        const offset = isFrozen
+                          ? frozenColumnOffsets[String(col.accessor)]
+                          : undefined;
                         const cellClass = getColumnAlignClass(col);
                         let cellContent;
                         try {
@@ -1174,9 +1171,10 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
                         return (
                           <td
                             key={String(col.accessor)}
-                            className={`${cellClass}${String(col.accessor) === "referenceNo" ? " sticky-first-column" : ""}`}
+                            className={`${cellClass}${isFrozen ? " sticky-column" : ""}`}
                             style={{
                               width: `${columnWidths[String(col.accessor)]}px`,
+                              ...(isFrozen ? { left: `${offset}px` } : {}),
                             }}
                             onClick={() => onRowClick?.(row)}
                           >
@@ -1196,7 +1194,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
 
                     {isExpanded && columns.some((c) => c.renderExpanded) && (
                       <tr className="details-panel-row">
-                        <td colSpan={columns.length + 1}>
+                        <td colSpan={columns.length}>
                           <div className="details-panel-content">
                             <div className="details-grid">
                               {columns

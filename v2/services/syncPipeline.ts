@@ -219,8 +219,6 @@ export function startPipelineScheduler(): void {
   console.log(`[SyncPipeline] Scheduler active. Running every ${CONFIG.syncIntervalMs / 60000} minutes.`);
 }
 
-startPipelineScheduler();
-
 export function stopPipelineScheduler(): void {
   if (pipelineTimer) {
     clearInterval(pipelineTimer);

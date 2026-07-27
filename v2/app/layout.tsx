@@ -4,6 +4,7 @@ import "./globals.css";
 import { NavBar } from "@/components/NavBar";
 import StoreProvider from "@/lib/store-provider";
 import SessionProviderWrapper from "@/components/SessionProviderWrapper";
+import { DataLoader } from "@/components/DataLoader";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -63,7 +64,7 @@ export default function RootLayout({
               flexDirection: "column",
             }}
           >
-            <StoreProvider>{children}</StoreProvider>
+            <StoreProvider><DataLoader>{children}</DataLoader></StoreProvider>
             <Toaster richColors />
           </div>
         </SessionProviderWrapper>

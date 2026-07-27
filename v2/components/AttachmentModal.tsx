@@ -1,96 +1,31 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { X, AlertTriangle, FolderOpen, Eye, Download } from "lucide-react";
+import React from "react";
+import { X, FolderOpen, Eye, Download, ExternalLink } from "lucide-react";
 import { FileIcon } from "@/lib/file-icons";
 import "./AttachmentModal.css";
-
-interface FileRecord {
-  fileId: string;
-  filename: string;
-  extension: string;
-  size: number;
-  lastModified: number;
-  relativePath: string;
-}
 
 interface AttachmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  docketNo: string;
+  files: Record<string, string>[];
   authToken?: string;
+}
+
+function parseTags(file: Record<string, string>): string[] {
+  if (Array.isArray(file.tags)) return file.tags as unknown as string[];
+  if (typeof file.tags === "string") {
+    try { return JSON.parse(file.tags); } catch { return []; }
+  }
+  return [];
 }
 
 export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   isOpen,
   onClose,
-  docketNo,
+  files,
   authToken = "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE",
 }) => {
-  const [files, setFiles] = useState<FileRecord[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen || !docketNo || docketNo === "-") return;
-
-    const fetchFiles = async () => {
-      setLoading(true);
-      setError(null);
-      setFiles([]);
-
-      try {
-        const response = await fetch(
-          `/api/executive-tenders/${docketNo}/files`,
-          {
-            headers: { Authorization: authToken },
-          },
-        );
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error("No folder mapped to this docket number.");
-          }
-          const errText = await response.text();
-          throw new Error(errText || "Failed to load attachment files.");
-        }
-
-        const data = await response.json();
-        setFiles(data.files || []);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "An unexpected error occurred.",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFiles();
-  }, [isOpen, docketNo, authToken]);
-
   if (!isOpen) return null;
-
-  const formatSize = (bytes: number): string => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-
-  const handleDownload = (fileId: string) => {
-    window.open(
-      `/api/executive-files/download/${fileId}?auth=${encodeURIComponent(authToken)}`,
-      "_blank",
-    );
-  };
-
-  const handlePreview = (fileId: string) => {
-    window.open(
-      `/api/executive-files/view/${fileId}?auth=${encodeURIComponent(authToken)}`,
-      "_blank",
-    );
-  };
 
   return (
     <div className="attachment-modal-overlay" onClick={onClose}>
@@ -99,7 +34,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="attachment-modal-header">
-          <h3>Tender Files: Docket #{docketNo}</h3>
+          <h3>Tender Files</h3>
           <button
             className="attachment-modal-close-btn"
             onClick={onClose}
@@ -110,33 +45,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
           </button>
         </header>
         <div className="attachment-modal-body">
-          {loading && (
-            <div className="skeleton-container">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="skeleton-row">
-                  <div className="skeleton-icon"></div>
-                  <div className="skeleton-text-group">
-                    <div className="skeleton-title"></div>
-                    <div className="skeleton-subtitle"></div>
-                  </div>
-                  <div className="skeleton-btn"></div>
-                  <div className="skeleton-btn"></div>
-                </div>
-              ))}
-            </div>
-          )}
-          {error && (
-            <div className="attachment-error-state">
-              <span
-                className="error-icon"
-                style={{ display: "inline-flex", alignItems: "center" }}
-              >
-                <AlertTriangle size={24} />
-              </span>
-              <p className="error-message">{error}</p>
-            </div>
-          )}
-          {!loading && !error && files.length === 0 && (
+          {files.length === 0 && (
             <div className="attachment-empty-state">
               <span
                 className="empty-icon"
@@ -144,59 +53,98 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
               >
                 <FolderOpen size={24} />
               </span>
-              <p>No documents found in this tender folder.</p>
+              <p>No documents found.</p>
             </div>
           )}
-          {!loading && !error && files.length > 0 && (
+          {files.length > 0 && (
             <ul className="file-list">
-              {files.map((file) => (
-                <li key={file.fileId} className="file-item">
-                  <div
-                    className="file-icon"
-                    title={file.extension}
-                    style={{ display: "inline-flex", alignItems: "center" }}
-                  >
-                    <FileIcon extension={file.extension} size={18} />
-                  </div>
-                  <div className="file-info-group">
-                    <span className="file-name" title={file.filename}>
-                      {file.filename}
-                    </span>
-                    <span className="file-meta">
-                      {formatSize(file.size)} •{" "}
-                      {new Date(file.lastModified).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="file-actions">
-                    {file.extension.toLowerCase() === ".pdf" && (
-                      <button
-                        className="file-action-btn view-btn"
-                        onClick={() => handlePreview(file.fileId)}
-                        title="Preview PDF inline"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}
-                      >
-                        <Eye size={14} /> Preview
-                      </button>
-                    )}
-                    <button
-                      className="file-action-btn download-btn"
-                      onClick={() => handleDownload(file.fileId)}
-                      title="Download file"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
+              {files.map((file, idx) => {
+                const extension = file.extension || "";
+                const filename = file.name
+                  ? file.name.endsWith(extension) ? file.name : file.name + extension
+                  : (file.filename || "Unknown");
+                const tags = parseTags(file);
+                const isNetworkFile = tags.includes("networkFiles");
+                const isHttpUrl = file.url?.startsWith("http");
+
+                return (
+                  <li key={file.id || idx} className="file-item">
+                    <div
+                      className="file-icon"
+                      title={extension}
+                      style={{ display: "inline-flex", alignItems: "center" }}
                     >
-                      <Download size={14} /> Download
-                    </button>
-                  </div>
-                </li>
-              ))}
+                      <FileIcon extension={extension} size={18} />
+                    </div>
+                    <div className="file-info-group">
+                      <span className="file-name" title={filename}>
+                        {filename}
+                      </span>
+                      {tags.length > 0 && (
+                        <div className="file-tags">
+                          {tags.map(tag => (
+                            <span key={tag} className={`file-tag file-tag--${tag}`}>{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="file-actions">
+                      {isNetworkFile && extension.toLowerCase() === ".pdf" && (
+                        <button
+                          className="file-action-btn view-btn"
+                          onClick={() =>
+                            window.open(
+                              `/api/executive-files/view/${file.source}?auth=${encodeURIComponent(authToken)}`,
+                              "_blank",
+                            )
+                          }
+                          title="Preview PDF inline"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <Eye size={14} /> Preview
+                        </button>
+                      )}
+                      {isNetworkFile && (
+                        <button
+                          className="file-action-btn download-btn"
+                          onClick={() =>
+                            window.open(
+                              `/api/executive-files/download/${file.source}?auth=${encodeURIComponent(authToken)}`,
+                              "_blank",
+                            )
+                          }
+                          title="Download file"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <Download size={14} /> Download
+                        </button>
+                      )}
+                      {!isNetworkFile && isHttpUrl && (
+                        <button
+                          className="file-action-btn open-btn"
+                          onClick={() => window.open(file.url, "_blank")}
+                          title="Open in new tab"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <ExternalLink size={14} /> Open
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

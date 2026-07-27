@@ -14,9 +14,10 @@ import {
 } from "@/components/ui/navigation-menu";
 
 const links = [
-  { href: "/", label: "Executive Dashboard" },
-  { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/tenders", label: "Tenders" },
+  { href: "/", label: "Pre Participation" },
+  { href: "/post-participation", label: "Post Participation" },
+  { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/activity", label: "Activity" },
 ];
 

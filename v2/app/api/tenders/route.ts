@@ -24,106 +24,10 @@ interface AssociationInfo {
   name: string;
 }
 
-const GEM_DISPLAY_FIELDS = [
-  "referenceNo", "tenderBrief", "value", "deadline", "quantity", "app", "aps", "apm", "assignedTo", "location", "website",
-  "organization", "documentFees", "emd", "msmeExemption",
-  "startupExemption", "bidOpeningDateTime",
-  "bidOfferValidity", "ministryStateName", "departmentName",
-  "officeName", "minimumAverageAnnualTurnover", "yearsOfPastExperience",
-  "oemAverageTurnover", "contractPeriod",
-  "financialDocumentPriceBreakupRequired", "similarCategory",
-  "pastExperienceSimilarServicesRequired", "documentRequiredFromSeller",
-  "pastPerformance", "bidToRaEnabled", "raQualificationRule",
-  "boqTitle", "bidDetails", "comprehensiveMaintenanceChargesRequired",
-  "typeOfBid", "technicalClarificationTimeAllowed", "inspectionRequired",
-  "estimatedBidValue", "evaluationMethod", "advisoryBank",
-  "ePbgPercentage", "ePbgDurationMonths", "msePurchasePreference",
-  "miiPurchasePreference", "consigneesReportingOfficer",
-  "mediationClause", "arbitrationClause", "checklist",
-  "t247Id", "scrapedDate", "source", "assignedTo",
-  "markedStatus", "sheetStatus", "ready", "searchKey",
-  "downloadLink", "currency",
-  "bidStatus", "differenceBetweenRank1",
-] as const;
-
-const NON_GEM_DISPLAY_FIELDS = [
-  "referenceNo", "tenderBrief", "estimatedBidValue", "deadline", "quantity", "app", "aps", "apm", "assignedTo",
-  "location", "website", "organization", "documentFees", "emd",
-  "msmeExemption", "startupExemption", "checklist",
-  "t247Id", "scrapedDate", "source", "assignedTo",
-  "markedStatus", "sheetStatus", "ready", "searchKey",
-  "downloadLink", "currency",
-] as const;
-
-const ALL_KNOWN_FIELDS = (() => {
-  const fields = [...new Set([
-    ...GEM_DISPLAY_FIELDS,
-    ...NON_GEM_DISPLAY_FIELDS,
-    "tenderStatusId",
-    "aiRelevanceValid",
-    "aiRelevanceReason",
-    "excludedCategory",
-    "tenderFileUrl",
-    "itemCategory",
-    "totalQuantity",
-    "reportings",
-    "evaluations",
-    "parseStatus",
-    "parseError",
-    "size",
-  ])];
-  const urlIdx = fields.indexOf("tenderFileUrl");
-  if (urlIdx > 0) {
-    fields.splice(urlIdx, 1);
-    fields.splice(10, 0, "tenderFileUrl");
-  }
-  const catIdx = fields.indexOf("itemCategory");
-  if (catIdx > 0) {
-    fields.splice(catIdx, 1);
-    fields.splice(11, 0, "itemCategory");
-  }
-  const qtyIdx = fields.indexOf("totalQuantity");
-  if (qtyIdx > 0) {
-    fields.splice(qtyIdx, 1);
-    fields.splice(12, 0, "totalQuantity");
-  }
-  const repIdx = fields.indexOf("reportings");
-  if (repIdx > 0) {
-    fields.splice(repIdx, 1);
-    fields.splice(13, 0, "reportings");
-  }
-  const evalIdx = fields.indexOf("evaluations");
-  if (evalIdx > 0) {
-    fields.splice(evalIdx, 1);
-    fields.splice(14, 0, "evaluations");
-  }
-  const bsIdx = fields.indexOf("bidStatus");
-  if (bsIdx > 0) {
-    fields.splice(bsIdx, 1);
-    fields.splice(15, 0, "bidStatus");
-  }
-  const diffIdx = fields.indexOf("differenceBetweenRank1");
-  if (diffIdx > 0) {
-    fields.splice(diffIdx, 1);
-    fields.splice(16, 0, "differenceBetweenRank1");
-  }
-  const psIdx = fields.indexOf("parseStatus");
-  if (psIdx > 0) {
-    fields.splice(psIdx, 1);
-    fields.splice(17, 0, "parseStatus");
-  }
-  const peIdx = fields.indexOf("parseError");
-  if (peIdx > 0) {
-    fields.splice(peIdx, 1);
-    fields.splice(18, 0, "parseError");
-  }
-  const szIdx = fields.indexOf("size");
-  if (szIdx > 0) {
-    fields.splice(szIdx, 1);
-    fields.splice(2, 0, "size");
-  }
-  return fields;
-})();
+const SKIP_RELATION_FIELDS = new Set([
+  "extraFields", "tenderAssociations", "reportings", "evaluations",
+  "tenderFiles", "file", "tenderStatus", "utilityMapping",
+]);
 
 interface ReportingInfo {
   id: number;
@@ -154,7 +58,8 @@ function flattenTender(
   const assignedIds = tenderAssociations.map((ta) => ta.association.id).join(",");
   const row: FlatRow = { type, id: String(id) };
 
-  for (const field of ALL_KNOWN_FIELDS) {
+  for (const field of Object.keys(tender)) {
+    if (SKIP_RELATION_FIELDS.has(field)) continue;
     const val = tender[field];
     if (val instanceof Date) {
       row[field] = val.toISOString().split("T")[0];
@@ -256,7 +161,7 @@ export async function GET(request: NextRequest) {
       ),
     ];
 
-    const columns = ["type", "id", ...ALL_KNOWN_FIELDS, ...allExtraFieldNames];
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
     return NextResponse.json({
       fileName: fileRecord.fileName,

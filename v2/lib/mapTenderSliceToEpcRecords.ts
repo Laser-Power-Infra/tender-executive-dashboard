@@ -1,0 +1,76 @@
+import { TenderData } from "@/lib/slices/tendersSlice";
+import { EpcTenderRecord, ManagementDecision } from "@/types/tender";
+
+function parseFloatOrNull(val: string | undefined | null): number | null {
+  if (val == null || val === "") return null;
+  const n = parseFloat(val);
+  return isNaN(n) ? null : n;
+}
+
+function parseIntOrNull(val: string | undefined | null): number | null {
+  if (val == null || val === "") return null;
+  const n = parseInt(val, 10);
+  return isNaN(n) ? null : n;
+}
+
+export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTenderRecord[] {
+  if (!tenderData) return [];
+  return tenderData.rows.map((row, index) => ({
+    id: row.id,
+    slNo: index + 1,
+    docketNo: row.docketNo || "",
+    tenderFor: "",
+    typeOfTender: row.type === "Gem" ? "Open" : "Open",
+    tenderNoNitNo: row.referenceNo || "",
+    nameOfWorkDescription: row.tenderBrief || "",
+    totalQuantityMeter: parseFloatOrNull(row.totalQuantity ?? row.quantity),
+    nameOfTheClient: row.organization || "",
+    lastDateOfSubmission: row.deadline ? new Date(row.deadline) : null,
+    tenderOpeningDate: row.bidOpeningDateTime ? new Date(row.bidOpeningDateTime) : null,
+    costOfTenderFeeRs: parseFloatOrNull(row.documentFees),
+    emdAmountRs: parseFloatOrNull(row.emd),
+    estimatedCostRs: parseFloatOrNull(row.value ?? row.estimatedBidValue),
+    bidValidityDays: parseIntOrNull(row.bidOfferValidity),
+    contractPeriodDays: parseIntOrNull(row.contractPeriod),
+    managementDecision: (row.apm || "Pending") as ManagementDecision,
+    participated: row.participated === "true" ? true : row.participated === "false" ? false : null,
+    tenderPrepareBy: row.tenderPrepareBy || "",
+    currentStatus: row.currentStatus || "",
+    tenderSubmittedDate: row.scrapedDate ? new Date(row.scrapedDate) : null,
+    reverseAuctionApplicable: null,
+    reverseAuctionDate: null,
+    emdPaymentMode: null,
+    bgNoUtrNo: null,
+    emdValidity: null,
+    loiPoNoAndDate: null,
+    remarks: row.remarks || null,
+    bidValidityExpired: false,
+    diffPercentFromL1: parseFloatOrNull(row.diffPercentFromL1),
+    diffPercentFromL2: parseFloatOrNull(row.diffPercentFromL2),
+    reason: null,
+    finalRemarks: null,
+    attachmentUrl: null,
+    tenderFiles: row.tenderFiles || "",
+    priceBasis: row.priceBasis || null,
+    aluminiumPrice: parseFloatOrNull(row.aluminiumPrice),
+    aluminiumAlloyPrice: parseFloatOrNull(row.aluminiumAlloyPrice),
+    copperTapePrice: parseFloatOrNull(row.copperTapePrice),
+    extrudedSemiconductivePrice: null,
+    htXlpePrice: null,
+    pvcTypeSt2Price: null,
+    galvanisedSteelFlatStripPrice: null,
+    fillerPrice: null,
+    proposedErpItemName: row.proposedErpItemName || undefined,
+    proposedQty: row.proposedQty || undefined,
+    statusCategory: undefined,
+    itemCategory: row.itemCategory || null,
+    competitors: null,
+    fileCount: undefined,
+    hasBoqChart: undefined,
+    boqFileId: undefined,
+    bgStatus: null,
+    tenderUpdateStatus: undefined,
+    nextAction: null,
+    cva: null,
+  }));
+}

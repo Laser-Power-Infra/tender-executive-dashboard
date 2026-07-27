@@ -29,6 +29,11 @@ enum TenderType {
   NON_GEM
 }
 
+enum PriceType {
+  FIRM
+  VARIABLE
+}
+
 model User {
   id           String        @id @default(uuid())
   name         String?
@@ -484,7 +489,7 @@ model ExlusionKeywords {
 model Association {
   id        Int      @id @default(autoincrement())
   name      String
-  email     String
+  email     String @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -506,7 +511,7 @@ model TenderAssociation {
   tenderMerged   TenderMerged? @relation(fields: [tenderMergedId], references: [id], onDelete: Cascade)
 
   associationId Int
-  association   Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  association   Association @relation(fields: [associationId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -674,6 +679,7 @@ model TenderMerged {
   emdValidity              DateTime?
   loiPoNoAndDate           String?
   bidValidityExpired       Boolean?
+  price                    PriceType?
   diffPercentFromL1        Float?
   diffPercentFromL2        Float?
   reason                   String?
@@ -733,6 +739,8 @@ model TenderMerged {
   parseError                              String?
   resultAutomationStatus                  String?
   resultAutomationError                   String?
+
+  proposedErpItemName String?
 
   fileId Int
   file   File @relation(fields: [fileId], references: [id], onDelete: Cascade)

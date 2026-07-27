@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
       console.error("[API:GET /api/supply-history] DB upsert error:", err.message);
     }
     const withDocs = DatabaseSupplyService.enrichWithDocumentStatus(records);
+    console.log(`[API:GET /api/supply-history] Fetched ${withDocs.length} records from Google Sheets`);
     return NextResponse.json({ success: true, data: withDocs });
   } catch (err: any) {
     console.error("[API:GET /api/supply-history] Google Sheets fetch failed:", err.message);

@@ -6,16 +6,35 @@ import {
   updateTenderAssignmentsAction,
   updateTenderUtilityMapping,
   bulkAssignUtilityMappingAction,
+  updateDocketNumber,
+  updateBgNoUtrNo,
 } from "@/actions/tender";
 import { importEpcTendersAction } from "@/actions/importEpcTenders";
 import { analyzeTenderValidity, saveAiRelevance } from "@/actions/ai-analysis";
 import { filtersSlice } from "./filtersSlice";
 import { uploadFiles } from "./uploadSlice";
+import type { TenderMergedMinAggregateOutputType } from "@/generated/prisma/models/TenderMerged";
+
+type StringifyFields<T> = { [K in keyof T]: string };
+
+export type TenderMergedRow =
+  & Partial<StringifyFields<TenderMergedMinAggregateOutputType>>
+  & {
+    type: string;
+    id: string;
+    tenderFiles?: string;
+    reportings?: string;
+    evaluations?: string;
+    aiFeedbackCorrected?: string;
+    aiFeedbackReason?: string;
+    fileId?: string;
+    [key: string]: string | undefined;
+  };
 
 export interface TenderData {
   fileName: string;
   columns: string[];
-  rows: Record<string, string>[];
+  rows: TenderMergedRow[];
   associations: { id: number; name: string; email: string }[];
   totalGem: number;
   totalNonGem: number;
@@ -97,10 +116,40 @@ export const updateTenderCell = createAsyncThunk(
   }) => {
     const result = await updateTenderDecision({
       tenderMergedId: params.tenderMergedId,
-      field: params.field as "app" | "aps" | "apm",
-      value: params.value as "YES" | "NO" | "NOT_DECIDED",
+      field: params.field as "app" | "aps" | "apm" | "participated",
+      value: params.value as "YES" | "NO" | "NOT_DECIDED" | "true" | "false",
     });
     return result;
+  },
+);
+
+export const updateTenderDocketNo = createAsyncThunk(
+  "tenders/updateDocketNo",
+  async (params: {
+    tenderMergedId: number;
+    docketNo: string;
+    oldDocketNo: string;
+  }) => {
+    await updateDocketNumber({
+      tenderMergedId: params.tenderMergedId,
+      docketNo: params.docketNo,
+    });
+    return params;
+  },
+);
+
+export const updateTenderBgNoUtrNo = createAsyncThunk(
+  "tenders/updateBgNoUtrNo",
+  async (params: {
+    tenderMergedId: number;
+    bgNoUtrNo: string;
+    oldBgNoUtrNo: string;
+  }) => {
+    await updateBgNoUtrNo({
+      tenderMergedId: params.tenderMergedId,
+      bgNoUtrNo: params.bgNoUtrNo,
+    });
+    return params;
   },
 );
 
@@ -119,6 +168,7 @@ export const fetchTendersIncremental = createAsyncThunk(
           const res = await fetch(`/api/tenders?fileId=${id}`);
           if (!res.ok) return null;
           const data: TenderData = await res.json();
+          data.rows = data.rows.map((r) => ({ ...r, fileId: String(id) }));
           dispatch(mergeFile(data));
           return data;
         } catch {
@@ -194,12 +244,11 @@ export const downloadTenderPdf = createAsyncThunk(
       }),
     });
     const data = await res.json();
-    const detail = data.results?.[0];
-    if (!detail?.success) throw new Error(detail?.error || "Download failed");
+    if (!data.success) throw new Error(data.error || "Download failed");
     return {
       tenderMergedId: params.tenderMergedId,
-      tenderFileUrl: detail.pdfPath ?? "",
-      captchaDetected: detail.captchaDetected,
+      tenderFileUrl: "",
+      captchaDetected: false,
     };
   },
 );
@@ -257,6 +306,18 @@ export const saveFeedbackAndReanalyze = createAsyncThunk(
   },
 );
 
+export const syncSheetToMerged = createAsyncThunk(
+  "tenders/syncSheetToMerged",
+  async (_, { rejectWithValue }) => {
+    const res = await fetch("/api/sync-to-merged", { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json();
+      return rejectWithValue(body.error || "Sync failed");
+    }
+    return await res.json();
+  },
+);
+
 export const importEpcGoTenders = createAsyncThunk(
   "tenders/importEpcGoTenders",
   async (_, { dispatch }) => {
@@ -281,6 +342,7 @@ export const appendTenders = createAsyncThunk(
           const res = await fetch(`/api/tenders?fileId=${id}`);
           if (!res.ok) return null;
           const data: TenderData = await res.json();
+          data.rows = data.rows.map((r) => ({ ...r, fileId: String(id) }));
           dispatch(mergeFile(data));
           return data;
         } catch {
@@ -385,6 +447,40 @@ export const tendersSlice = createSlice({
       if (state.data?.rows[rowIndex]) {
         state.data.rows[rowIndex][field] = oldValue;
       }
+    });
+    // updateTenderDocketNo
+    builder.addCase(updateTenderDocketNo.pending, (state, action) => {
+      const { tenderMergedId } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-docketNo`] = true;
+    });
+    builder.addCase(updateTenderDocketNo.fulfilled, (state, action) => {
+      const { tenderMergedId, docketNo } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-docketNo`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.docketNo = docketNo;
+      }
+    });
+    builder.addCase(updateTenderDocketNo.rejected, (state, action) => {
+      const { tenderMergedId } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-docketNo`] = false;
+    });
+    // updateTenderBgNoUtrNo
+    builder.addCase(updateTenderBgNoUtrNo.pending, (state, action) => {
+      const { tenderMergedId } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-bgNoUtrNo`] = true;
+    });
+    builder.addCase(updateTenderBgNoUtrNo.fulfilled, (state, action) => {
+      const { tenderMergedId, bgNoUtrNo } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-bgNoUtrNo`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.bgNoUtrNo = bgNoUtrNo;
+      }
+    });
+    builder.addCase(updateTenderBgNoUtrNo.rejected, (state, action) => {
+      const { tenderMergedId } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-bgNoUtrNo`] = false;
     });
     builder.addCase(updateTenderAssignments.pending, (state, action) => {
       const { rowIndex, associationIds } = action.meta.arg;
@@ -545,6 +641,34 @@ export const tendersSlice = createSlice({
     builder.addCase(saveFeedbackAndReanalyze.rejected, (state, action) => {
       const key = `${action.meta.arg.tenderMergedId}-reanalyze`;
       state.feedbackSaving[key] = false;
+    });
+
+    // syncSheetToMerged
+    builder.addCase(syncSheetToMerged.pending, (state) => {
+      state.loading = true;
+    });
+    builder.addCase(syncSheetToMerged.fulfilled, (state, action) => {
+      state.loading = false;
+      const { tenders } = action.payload;
+      if (!state.data || !tenders) return;
+
+      for (const row of tenders.rows) {
+        const idx = state.data.rows.findIndex((r) => r.referenceNo === row.referenceNo);
+        if (idx >= 0) {
+          state.data.rows[idx] = { ...state.data.rows[idx], ...row };
+        } else {
+          state.data.rows.push(row);
+        }
+      }
+
+      for (const col of tenders.columns) {
+        if (!state.data.columns.includes(col)) {
+          state.data.columns.push(col);
+        }
+      }
+    });
+    builder.addCase(syncSheetToMerged.rejected, (state) => {
+      state.loading = false;
     });
   },
 });

@@ -7,24 +7,24 @@
   --color-bg-light: #f4f6f8;
   --color-bg-white: #ffffff;
   --color-border: #e1e6eb;
-  
+
   /* Status Badge Colors */
   --status-won-bg: #e6f7ed;
   --status-won-text: #137333;
   --status-won-border: #c3e6cb;
-  
+
   --status-lost-bg: #fce8e6;
   --status-lost-text: #c5221f;
   --status-lost-border: #fad2cf;
-  
+
   --status-eval-bg: #fef7e0;
   --status-eval-text: #b06000;
   --status-eval-border: #ffe89e;
-  
+
   --status-sub-bg: #e8f0fe;
   --status-sub-text: #1a73e8;
   --status-sub-border: #d2e3fc;
-  
+
   --status-loi-bg: #e2f0d9;
   --status-loi-text: #385723;
   --status-loi-border: #c5e0b4;
@@ -39,7 +39,13 @@
   border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(10, 37, 64, 0.05);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   color: #333333;
   overflow: hidden;
 }
@@ -178,7 +184,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  
 }
 
 .optimized-tender-data-table th:last-child {
@@ -200,18 +205,18 @@
   background-color: inherit;
 }
 
-/* Sticky referenceNo column */
-.optimized-tender-data-table th.sticky-first-column {
+/* Sticky frozen columns (referenceNo, type, org+dept) */
+.optimized-tender-data-table th.sticky-column {
   position: sticky;
-  left: 0px;
   z-index: 3;
+  left: 0px;
   background-color: var(--color-bg-light);
 }
 
-.optimized-tender-data-table td.sticky-first-column {
+.optimized-tender-data-table td.sticky-column {
   position: sticky;
-  left: 0px;
   z-index: 1;
+  left : 0px;
   background-color: inherit;
 }
 
@@ -275,10 +280,23 @@
 }
 
 /* Column Specific Alignments & Typography */
-.col-docket { font-family: monospace; font-weight: 600; color: var(--color-primary); }
-.col-currency { text-align: right; font-variant-numeric: tabular-nums; }
-.col-percentage { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-.col-center { text-align: center; }
+.col-docket {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.col-currency {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.col-percentage {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.col-center {
+  text-align: center;
+}
 
 /* Status Badges */
 .status-badge {
@@ -398,8 +416,14 @@
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .details-grid {
@@ -493,7 +517,7 @@
 
 .page-btn:hover:not(:disabled) {
   background-color: var(--color-border);
-  border-color: rgba(0,0,0,0.2);
+  border-color: rgba(0, 0, 0, 0.2);
 }
 
 .page-btn.active {
@@ -526,7 +550,7 @@
 .table-attachment-link:hover {
   background-color: #d2e3fc;
   color: #0056b3;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 /* Price Basis Badges */

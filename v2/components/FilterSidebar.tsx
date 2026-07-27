@@ -28,7 +28,7 @@ interface FilterSidebarProps {
   setCopperMax: (val: string) => void;
   priceBasisFilter: string;
   setPriceBasisFilter: (val: string) => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
 
 export const FilterSidebar: React.FC<FilterSidebarProps> = ({
@@ -116,9 +116,11 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           </div>
         </div>
       </div>
-      <div className="sidebar-footer">
-        <button className="refresh-btn" onClick={onRefresh}>Refresh Dashboard</button>
-      </div>
+      {onRefresh && (
+        <div className="sidebar-footer">
+          <button className="refresh-btn" onClick={onRefresh}>Refresh Dashboard</button>
+        </div>
+      )}
     </div>
   );
 };

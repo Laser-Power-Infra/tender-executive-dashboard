@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { format, subDays } from "date-fns";
+import { subDays } from "date-fns";
 
 interface FileItem {
   id: number;
@@ -7,6 +7,7 @@ interface FileItem {
   totalCount: number | null;
   excludedCount: number | null;
   status: string | null;
+  updatedAt: string;
 }
 
 interface FilesState {
@@ -37,10 +38,8 @@ const initialState: FilesState = {
 
 export const fetchFiles = createAsyncThunk(
   "files/fetchFiles",
-  async ({ from, to }: { from: Date; to: Date }) => {
-    const fromStr = format(from, "yyyy-MM-dd");
-    const toStr = format(to, "yyyy-MM-dd");
-    const res = await fetch(`/api/files?from=${fromStr}&to=${toStr}`);
+  async () => {
+    const res = await fetch("/api/files");
     if (!res.ok) {
       throw new Error("Failed to fetch files");
     }
@@ -56,7 +55,6 @@ export const filesSlice = createSlice({
     setSelectedDateRange(state, action) {
       state.selectedDateFrom = action.payload.from;
       state.selectedDateTo = action.payload.to;
-      state.items = [];
     },
     clearState() {
       return initialState;
@@ -66,7 +64,6 @@ export const filesSlice = createSlice({
     builder
       .addCase(fetchFiles.pending, (state) => {
         state.loading = true;
-        state.items = [];
       })
       .addCase(fetchFiles.fulfilled, (state, action) => {
         state.loading = false;
@@ -74,7 +71,6 @@ export const filesSlice = createSlice({
       })
       .addCase(fetchFiles.rejected, (state) => {
         state.loading = false;
-        state.items = [];
       });
   },
 });

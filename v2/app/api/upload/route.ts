@@ -216,6 +216,7 @@ async function insertTenderMerged(
 
   const toCreate: Record<string, unknown>[] = [];
   const webhookQueue: string[] = [];
+  const seenRefs = new Set<string>();
 
   for (const p of prepared) {
     const old = existingMap.get(p.refNo);
@@ -244,6 +245,9 @@ async function insertTenderMerged(
           where: { id: old.id },
           data: updateData as any,
         });
+        // console.log(`[UPDATE] ${p.refNo} -> fields: ${Object.keys(updateData).join(", ")}`);
+      } else {
+        console.log(`[SKIP] ${p.refNo} - no changes`);
       }
 
       const addedAssociations = p.createData.tenderAssociations && old.tenderAssociations.length === 0;
@@ -265,6 +269,12 @@ async function insertTenderMerged(
         webhookQueue.push(old.referenceNo);
       }
     } else {
+      if (seenRefs.has(p.refNo)) {
+        console.log(`[SKIP] Duplicate refNo in same batch: ${p.refNo}`);
+        continue;
+      }
+      seenRefs.add(p.refNo);
+      // console.log(`[INSERT] ${p.refNo}`);
       toCreate.push({ ...p.createData, fileId });
       if (p.createData.apm === "YES" && p.createData.tenderAssociations) {
         webhookQueue.push(p.refNo);

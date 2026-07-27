@@ -117,6 +117,36 @@
   margin-top: 2px;
 }
 
+.file-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.file-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.file-tag--networkFiles {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.file-tag--costingAttachment {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.file-tag--tenderDocument {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
 .file-actions {
   display: flex;
   align-items: center;

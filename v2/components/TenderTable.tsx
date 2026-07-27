@@ -1,11 +1,13 @@
 "use client";
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   EpcTenderRecord,
   ManagementDecision,
   EMDExchangeMode,
 } from "@/types/tender";
 import { AttachmentModal } from "./AttachmentModal";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderCell } from "@/lib/slices/tendersSlice";
 import {
   Search,
   X,
@@ -22,6 +24,7 @@ import {
   Check,
   Circle,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import "./TenderTable.css";
 
@@ -100,43 +103,21 @@ const matchesErpItemCategory = (
 };
 
 const FilesCell: React.FC<{
-  docketNo: string;
-  onOpenModal: (docket: string) => void;
-}> = ({ docketNo, onOpenModal }) => {
-  const [files, setFiles] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  tenderFilesJson: string;
+  onOpenModal: (files: any[]) => void;
+}> = ({ tenderFilesJson, onOpenModal }) => {
+  let files: any[] = [];
+  try {
+    files = JSON.parse(tenderFilesJson || "[]");
+  } catch {}
 
-  useEffect(() => {
-    if (!docketNo || docketNo === "-") return;
-
-    console.log(`[DEBUG FilesCell] MOUNTED for docketNo=${docketNo}`);
-    let isMounted = true;
-    setLoading(true);
-    fetchDocketFiles(docketNo).then((data) => {
-      console.log(`[DEBUG FilesCell] ${docketNo} got data, length=${data?.length}, isMounted=${isMounted}`);
-      if (isMounted) {
-        setFiles(data);
-        setLoading(false);
-      }
-    });
-    return () => {
-      console.log(`[DEBUG FilesCell] UNMOUNTED for docketNo=${docketNo}`);
-      isMounted = false;
-    };
-  }, [docketNo]);
-
-  console.log(`[DEBUG FilesCell] RENDER docketNo=${docketNo}, loading=${loading}, files=${files ? files.length : null}`);
-  if (loading || !files || files.length === 0) {
-    if (!loading && !files) console.log(`[DEBUG FilesCell] ${docketNo} -> NULL (files not loaded yet)`);
-    else if (!loading && files?.length === 0) console.log(`[DEBUG FilesCell] ${docketNo} -> NULL (empty files array)`);
-    return null; // Empty
-  }
+  if (files.length === 0) return null;
 
   return (
     <button
       className="table-attachment-btn"
-      onClick={() => onOpenModal(docketNo)}
-      title="View files in folder"
+      onClick={() => onOpenModal(files)}
+      title="View files"
       style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
     >
       <Paperclip size={14} /> {files.length}{" "}
@@ -215,6 +196,7 @@ interface TenderTableProps {
   copperMax?: string;
   setCopperMax?: (val: string) => void;
   clearTrigger?: number;
+  readOnly?: boolean;
 }
 
 interface ColumnDef {
@@ -247,6 +229,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   copperMax,
   setCopperMax,
   clearTrigger,
+  readOnly = false,
 }) => {
   // 1. Column Definitions
   const columns: ColumnDef[] = [
@@ -300,11 +283,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "custom",
     },
     {
-      header: "Attachment",
+      header: "Costing File",
       accessor: "attachmentUrl",
       defaultWidth: 115,
       align: "center",
-      type: "string",
+      type: "custom",
     },
     {
       header: "Files",
@@ -484,6 +467,100 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     field: "diffPercentFromL1" | "diffPercentFromL2";
   } | null>(null);
   const [editingDiffValue, setEditingDiffValue] = useState<string>("");
+  const [editingDocketId, setEditingDocketId] = useState<string | null>(null);
+  const [docketEditValue, setDocketEditValue] = useState<string>("");
+  const [editingBgUtrId, setEditingBgUtrId] = useState<string | null>(null);
+  const [bgUtrEditValue, setBgUtrEditValue] = useState<string>("");
+
+  const dispatch = useAppDispatch();
+  const tenderData = useAppSelector((s) => s.tenders.data);
+  const updatingCells = useAppSelector((s) => s.tenders.updatingCells);
+
+  const handleDocketSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        showToast("Database record ID not found. Please refresh.", "error");
+        return;
+      }
+      const newVal = docketEditValue.trim();
+      const oldVal = record.docketNo;
+      if (newVal === oldVal) {
+        setEditingDocketId(null);
+        return;
+      }
+      const key = `${record.id}-docket`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      dispatch(
+        updateTenderDocketNo({
+          tenderMergedId: Number(record.id),
+          docketNo: newVal,
+          oldDocketNo: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          showToast(`Docket ${newVal} updated successfully!`, "success");
+        })
+        .catch((err) => {
+          showToast(
+            err?.message || "Failed to update docket number.",
+            "error",
+          );
+        })
+        .finally(() => {
+          setEditingDocketId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, docketEditValue],
+  );
+
+  const handleBgUtrSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        showToast("Database record ID not found. Please refresh.", "error");
+        return;
+      }
+      const newVal = bgUtrEditValue.trim();
+      const oldVal = record.bgNoUtrNo ?? "";
+      if (newVal === oldVal) {
+        setEditingBgUtrId(null);
+        return;
+      }
+      const key = `${record.id}-bgUtr`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      dispatch(
+        updateTenderBgNoUtrNo({
+          tenderMergedId: Number(record.id),
+          bgNoUtrNo: newVal,
+          oldBgNoUtrNo: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          showToast(`BG/UTR No updated successfully!`, "success");
+        })
+        .catch((err) => {
+          showToast(
+            err?.message || "Failed to update BG/UTR number.",
+            "error",
+          );
+        })
+        .finally(() => {
+          setEditingBgUtrId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, bgUtrEditValue],
+  );
 
   const showToast = (
     message: string,
@@ -683,7 +760,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(50);
 
-  const [selectedDocketNo, setSelectedDocketNo] = useState<string>("");
+  const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] =
     useState<boolean>(false);
   const [statusHeaderFilter, setStatusHeaderFilter] = useState<string>("All");
@@ -704,6 +781,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [itemCategoryHeaderFilter, setItemCategoryHeaderFilter] =
     useState<string>("All");
   const [bgStatusHeaderFilter, setBgStatusHeaderFilter] =
+    useState<string>("All");
+  const [priceBasisHeaderFilter, setPriceBasisHeaderFilter] =
     useState<string>("All");
   const [remarksTextFilter, setRemarksTextFilter] = useState<string>("");
   const [remarksDropdownFilter, setRemarksDropdownFilter] =
@@ -729,6 +808,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       setStatusCategoryHeaderFilter("All");
       setItemCategoryHeaderFilter("All");
       setBgStatusHeaderFilter("All");
+      setPriceBasisHeaderFilter("All");
       setRemarksTextFilter("");
       setRemarksDropdownFilter("All");
       setProposedErpItemTextFilter("");
@@ -777,35 +857,65 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     }
 
     if (excludeAccessor !== "currentStatus" && statusHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.currentStatus === statusHeaderFilter,
-      );
+      if (statusHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.currentStatus || record.currentStatus.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.currentStatus === statusHeaderFilter,
+        );
+      }
     }
     if (
       excludeAccessor !== "managementDecision" &&
       decisionHeaderFilter !== "All"
     ) {
-      result = result.filter(
-        (record) => record.managementDecision === decisionHeaderFilter,
-      );
+      if (decisionHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.managementDecision || record.managementDecision.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.managementDecision === decisionHeaderFilter,
+        );
+      }
     }
     if (
       excludeAccessor !== "emdPaymentMode" &&
       emdPaymentHeaderFilter !== "All"
     ) {
-      result = result.filter(
-        (record) => record.emdPaymentMode === emdPaymentHeaderFilter,
-      );
+      if (emdPaymentHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.emdPaymentMode,
+        );
+      } else {
+        result = result.filter(
+          (record) => record.emdPaymentMode === emdPaymentHeaderFilter,
+        );
+      }
     }
     if (excludeAccessor !== "tenderFor" && tenderForHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.tenderFor === tenderForHeaderFilter,
-      );
+      if (tenderForHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.tenderFor || record.tenderFor.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.tenderFor === tenderForHeaderFilter,
+        );
+      }
     }
     if (excludeAccessor !== "typeOfTender" && typeHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.typeOfTender === typeHeaderFilter,
-      );
+      if (typeHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.typeOfTender || record.typeOfTender.toString().trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.typeOfTender === typeHeaderFilter,
+        );
+      }
     }
     if (
       excludeAccessor !== "tenderPrepareBy" &&
@@ -864,9 +974,26 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       excludeAccessor !== "itemCategory" &&
       itemCategoryHeaderFilter !== "All"
     ) {
-      result = result.filter(
-        (record) => record.itemCategory === itemCategoryHeaderFilter,
-      );
+      if (itemCategoryHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.itemCategory || record.itemCategory.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.itemCategory === itemCategoryHeaderFilter,
+        );
+      }
+    }
+    if (excludeAccessor !== "priceBasis" && priceBasisHeaderFilter !== "All") {
+      if (priceBasisHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.priceBasis || record.priceBasis.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.priceBasis === priceBasisHeaderFilter,
+        );
+      }
     }
     if (excludeAccessor !== "remarks" && remarksDropdownFilter !== "All") {
       result = result.filter(
@@ -1146,8 +1273,62 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     proposedErpItemCategoryFilter,
   ]);
 
-  const handleOpenAttachmentModal = (docketNo: string) => {
-    setSelectedDocketNo(docketNo);
+  const uniqueDecisions = useMemo(() => {
+    const filtered = getFilteredRecordsExcept("managementDecision");
+    const list = filtered
+      .map((r) => r.managementDecision)
+      .filter((s) => s && s.trim() !== "");
+    return Array.from(new Set(list)).sort();
+  }, [
+    records,
+    globalSearch,
+    startDate,
+    endDate,
+    statusHeaderFilter,
+    emdPaymentHeaderFilter,
+    tenderForHeaderFilter,
+    typeHeaderFilter,
+    prepareByHeaderFilter,
+    raHeaderFilter,
+    participatedHeaderFilter,
+    statusCategoryHeaderFilter,
+    itemCategoryHeaderFilter,
+    remarksDropdownFilter,
+    bgStatusHeaderFilter,
+    priceBasisHeaderFilter,
+    proposedErpItemTextFilter,
+    proposedErpItemCategoryFilter,
+  ]);
+
+  const uniquePriceBasis = useMemo(() => {
+    const filtered = getFilteredRecordsExcept("priceBasis");
+    const list = filtered
+      .map((r) => r.priceBasis)
+      .filter((s): s is string => !!s && s.trim() !== "");
+    return Array.from(new Set(list)).sort();
+  }, [
+    records,
+    globalSearch,
+    startDate,
+    endDate,
+    statusHeaderFilter,
+    decisionHeaderFilter,
+    emdPaymentHeaderFilter,
+    tenderForHeaderFilter,
+    typeHeaderFilter,
+    prepareByHeaderFilter,
+    raHeaderFilter,
+    participatedHeaderFilter,
+    statusCategoryHeaderFilter,
+    itemCategoryHeaderFilter,
+    remarksDropdownFilter,
+    bgStatusHeaderFilter,
+    proposedErpItemTextFilter,
+    proposedErpItemCategoryFilter,
+  ]);
+
+  const handleOpenAttachmentModal = (files: any[]) => {
+    setSelectedFiles(files);
     setIsAttachmentModalOpen(true);
   };
 
@@ -1302,6 +1483,16 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         } else if (sortColumn === "boqChart") {
           valA = a.hasBoqChart ? 1 : 0;
           valB = b.hasBoqChart ? 1 : 0;
+        } else if (sortColumn === "attachmentUrl") {
+          const getHasCosting = (r: EpcTenderRecord) => {
+            if (!r.tenderFiles) return 0;
+            try {
+              const files: Array<{ tags: string[] }> = JSON.parse(r.tenderFiles);
+              return files.some((f) => f.tags?.includes("costingAttachment")) ? 1 : 0;
+            } catch { return 0; }
+          };
+          valA = getHasCosting(a);
+          valB = getHasCosting(b);
         } else {
           valA = a[sortColumn as keyof EpcTenderRecord];
           valB = b[sortColumn as keyof EpcTenderRecord];
@@ -1332,37 +1523,67 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
     // Column Status Header Filter
     if (statusHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.currentStatus === statusHeaderFilter,
-      );
+      if (statusHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.currentStatus || record.currentStatus.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.currentStatus === statusHeaderFilter,
+        );
+      }
     }
 
     // Column Management Decision Header Filter
     if (decisionHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.managementDecision === decisionHeaderFilter,
-      );
+      if (decisionHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.managementDecision || record.managementDecision.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.managementDecision === decisionHeaderFilter,
+        );
+      }
     }
 
     // Column EMD Payment Mode Header Filter
     if (emdPaymentHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.emdPaymentMode === emdPaymentHeaderFilter,
-      );
+      if (emdPaymentHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.emdPaymentMode,
+        );
+      } else {
+        result = result.filter(
+          (record) => record.emdPaymentMode === emdPaymentHeaderFilter,
+        );
+      }
     }
 
     // Column Tender For Header Filter
     if (tenderForHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.tenderFor === tenderForHeaderFilter,
-      );
+      if (tenderForHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.tenderFor || record.tenderFor.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.tenderFor === tenderForHeaderFilter,
+        );
+      }
     }
 
     // Column Type Header Filter
     if (typeHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.typeOfTender === typeHeaderFilter,
-      );
+      if (typeHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.typeOfTender || record.typeOfTender.toString().trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.typeOfTender === typeHeaderFilter,
+        );
+      }
     }
 
     // Column Prepare By Header Filter
@@ -1424,9 +1645,28 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
     // Column Item Category Header Filter
     if (itemCategoryHeaderFilter !== "All") {
-      result = result.filter(
-        (record) => record.itemCategory === itemCategoryHeaderFilter,
-      );
+      if (itemCategoryHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.itemCategory || record.itemCategory.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.itemCategory === itemCategoryHeaderFilter,
+        );
+      }
+    }
+
+    // Column Price Basis Header Filter
+    if (priceBasisHeaderFilter !== "All") {
+      if (priceBasisHeaderFilter === "BLANK") {
+        result = result.filter(
+          (record) => !record.priceBasis || record.priceBasis.trim() === "",
+        );
+      } else {
+        result = result.filter(
+          (record) => record.priceBasis === priceBasisHeaderFilter,
+        );
+      }
     }
 
     // Column BG Status Header Filter
@@ -1874,7 +2114,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         )}
                       </div>
                     )}
-                    {col.accessor === "priceBasis" && setPriceBasisFilter && (
+                    {col.accessor === "priceBasis" && (
                       <div
                         className="column-price-basis-filter"
                         onClick={(e) => e.stopPropagation()}
@@ -1882,12 +2122,17 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                       >
                         <select
                           className="price-basis-filter-select"
-                          value={priceBasisFilter || "All"}
-                          onChange={(e) => setPriceBasisFilter(e.target.value)}
+                          value={priceBasisHeaderFilter}
+                          onChange={(e) => {
+                            setPriceBasisHeaderFilter(e.target.value);
+                            setCurrentPage(1);
+                          }}
                         >
                           <option value="All">All</option>
-                          <option value="Firm">Firm</option>
-                          <option value="Variable">Variable</option>
+                          <option value="BLANK">(Blank)</option>
+                          {uniquePriceBasis.map((pb) => (
+                            <option key={pb} value={pb}>{pb}</option>
+                          ))}
                         </select>
                       </div>
                     )}
@@ -1930,6 +2175,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           }}
                         >
                           <option value="All">All Statuses</option>
+                          <option value="BLANK">(Blank)</option>
                           {uniqueStatuses.map((status) => (
                             <option key={status} value={status}>
                               {status}
@@ -1977,8 +2223,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           }}
                         >
                           <option value="All">All</option>
-                          <option value="YES">YES</option>
-                          <option value="NO">NO</option>
+                          <option value="BLANK">(Blank)</option>
+                          {uniqueDecisions.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
                         </select>
                       </div>
                     )}
@@ -1997,6 +2245,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           }}
                         >
                           <option value="All">All</option>
+                          <option value="BLANK">(Blank)</option>
                           {uniqueEmdPaymentModes.map((mode) => (
                             <option key={mode} value={mode}>
                               {mode}
@@ -2020,6 +2269,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           }}
                         >
                           <option value="All">All</option>
+                          <option value="BLANK">(Blank)</option>
                           {uniqueTenderFor.map((tf) => (
                             <option key={tf} value={tf}>
                               {tf}
@@ -2043,6 +2293,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           }}
                         >
                           <option value="All">All</option>
+                          <option value="BLANK">(Blank)</option>
                           {uniqueItemCategories.map((ic) => (
                             <option key={ic} value={ic}>
                               {ic}
@@ -2101,6 +2352,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           }}
                         >
                           <option value="All">All</option>
+                          <option value="BLANK">(Blank)</option>
                           {uniqueTypes.map((t) => (
                             <option key={t} value={t}>
                               {t}
@@ -2325,6 +2577,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         let cellVal: any;
                         let cellContent: React.ReactNode = "-";
                         let cellClass = "";
+                        let canEditDocket = false;
 
                         if (col.accessor === "rawMaterials") {
                           const activeRates = [
@@ -2373,7 +2626,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         } else if (col.accessor === "files") {
                           cellContent = (
                             <FilesCell
-                              docketNo={record.docketNo}
+                              tenderFilesJson={record.tenderFiles || ""}
                               onOpenModal={handleOpenAttachmentModal}
                             />
                           );
@@ -2424,7 +2677,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               ? parseFloat((currentVal * 100).toFixed(4))
                               : null;
 
-                          if (isEditing) {
+                          if (readOnly) {
+                            const displayVal =
+                              pctVal !== null
+                                ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%`
+                                : "—";
+                            cellContent = (
+                              <span className={`diff-value-text ${pctVal !== null && pctVal < 0 ? "diff-negative" : pctVal !== null ? "diff-positive" : ""}`}>
+                                {displayVal}
+                              </span>
+                            );
+                            cellClass = `col-right diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
+                          } else if (isEditing) {
                             cellContent = (
                               <div className="diff-edit-wrapper">
                                 {/* ± toggle button to flip the sign */}
@@ -2521,7 +2785,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               </div>
                             );
                           }
-                          cellClass = `col-right col-editable diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
+                          if (!cellClass) {
+                            cellClass = `col-right col-editable diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
+                          }
                         } else if (col.accessor === "competitors") {
                           const text =
                             (record[
@@ -2553,24 +2819,33 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             "OPEN";
                           const isSaving =
                             !!savingKeys[`${record.id}::tenderUpdateStatus`];
-                          cellContent = (
-                            <select
-                              value={statusValue}
-                              disabled={isSaving}
-                              onChange={(e) =>
-                                handleUpdate(
-                                  record,
-                                  "tenderUpdateStatus",
-                                  e.target.value,
-                                )
-                              }
-                              className="table-editable-select status-select"
-                            >
-                              <option value="OPEN">Open</option>
-                              <option value="CLOSED">Closed</option>
-                            </select>
-                          );
-                          cellClass = "col-center col-editable";
+                          if (readOnly) {
+                            cellContent = (
+                              <span className={`status-badge ${statusValue === "CLOSED" ? "won" : "eval"}`}>
+                                {statusValue}
+                              </span>
+                            );
+                            cellClass = "col-center";
+                          } else {
+                            cellContent = (
+                              <select
+                                value={statusValue}
+                                disabled={isSaving}
+                                onChange={(e) =>
+                                  handleUpdate(
+                                    record,
+                                    "tenderUpdateStatus",
+                                    e.target.value,
+                                  )
+                                }
+                                className="table-editable-select status-select"
+                              >
+                                <option value="OPEN">Open</option>
+                                <option value="CLOSED">Closed</option>
+                              </select>
+                            );
+                            cellClass = "col-center col-editable";
+                          }
                         } else if (col.accessor === "nextAction") {
                           const actionValue =
                             overrides[record.id!]?.nextAction !== undefined
@@ -2578,41 +2853,62 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               : (record.nextAction ?? "");
                           const isSaving =
                             !!savingKeys[`${record.id}::nextAction`];
-                          cellContent = (
-                            <select
-                              value={actionValue || ""}
-                              disabled={isSaving}
-                              onChange={(e) =>
-                                handleUpdate(
-                                  record,
-                                  "nextAction",
-                                  e.target.value || null,
-                                )
-                              }
-                              className="table-editable-select action-select"
-                            >
-                              <option value="">None</option>
-                              <option value="UPDATE_FROM_AB_LETTER">
-                                Update from AB letter
-                              </option>
-                              <option value="BG_REFUND_LETTER_TO_BE_SENT">
-                                BG refund letter to be sent
-                              </option>
-                              <option value="FOLLOW_UP_FOR_FINANCIAL_STATUS">
-                                Follow up for financial status
-                              </option>
-                              <option value="REVERSE_AUCTION_PENDING">
-                                Reverse auction pending
-                              </option>
-                            </select>
-                          );
-                          cellClass = "col-left col-editable";
+                          if (readOnly) {
+                            const actionLabels: Record<string, string> = {
+                              "UPDATE_FROM_AB_LETTER": "Update from AB letter",
+                              "BG_REFUND_LETTER_TO_BE_SENT": "BG refund letter to be sent",
+                              "FOLLOW_UP_FOR_FINANCIAL_STATUS": "Follow up for financial status",
+                              "REVERSE_AUCTION_PENDING": "Reverse auction pending",
+                            };
+                            cellContent = (
+                              <span>{actionValue ? actionLabels[actionValue] || actionValue : "-"}</span>
+                            );
+                            cellClass = "col-left";
+                          } else {
+                            cellContent = (
+                              <select
+                                value={actionValue || ""}
+                                disabled={isSaving}
+                                onChange={(e) =>
+                                  handleUpdate(
+                                    record,
+                                    "nextAction",
+                                    e.target.value || null,
+                                  )
+                                }
+                                className="table-editable-select action-select"
+                              >
+                                <option value="">None</option>
+                                <option value="UPDATE_FROM_AB_LETTER">
+                                  Update from AB letter
+                                </option>
+                                <option value="BG_REFUND_LETTER_TO_BE_SENT">
+                                  BG refund letter to be sent
+                                </option>
+                                <option value="FOLLOW_UP_FOR_FINANCIAL_STATUS">
+                                  Follow up for financial status
+                                </option>
+                                <option value="REVERSE_AUCTION_PENDING">
+                                  Reverse auction pending
+                                </option>
+                              </select>
+                            );
+                            cellClass = "col-left col-editable";
+                          }
                         } else {
                           cellVal =
                             record[col.accessor as keyof EpcTenderRecord];
 
                           if (col.accessor === "attachmentUrl") {
-                            const url = cellVal as string | null;
+                            const filesRaw = record.tenderFiles as string | undefined;
+                            let url = "";
+                            if (filesRaw) {
+                              try {
+                                const files: Array<{ url: string; tags: string[] }> = JSON.parse(filesRaw);
+                                const costingFile = files.find((f) => f.tags?.includes("costingAttachment"));
+                                url = costingFile?.url ?? "";
+                              } catch {}
+                            }
                             cellContent = url ? (
                               <a
                                 href={url}
@@ -2671,40 +2967,126 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                   `${record.id}::reverseAuctionApplicable`
                                 ];
 
-                              let selectVal = "BLANK";
-                              if (raVal === true) selectVal = "YES";
-                              else if (raVal === false) selectVal = "NO";
+                              if (readOnly) {
+                                const raDisplay = raVal === true ? "Yes" : raVal === false ? "No" : "-";
+                                cellContent = <span>{raDisplay}</span>;
+                                cellClass = "col-center";
+                              } else {
+                                let selectVal = "BLANK";
+                                if (raVal === true) selectVal = "YES";
+                                else if (raVal === false) selectVal = "NO";
 
-                              cellContent = (
-                                <select
-                                  value={selectVal}
-                                  disabled={isSaving}
-                                  onChange={(e) => {
-                                    const val =
-                                      e.target.value === "YES"
-                                        ? true
-                                        : e.target.value === "NO"
-                                          ? false
-                                          : null;
-                                    handleUpdate(
-                                      record,
-                                      "reverseAuctionApplicable",
-                                      val,
-                                    );
-                                  }}
-                                  className="table-editable-select status-select"
-                                  style={{
-                                    minWidth: "60px",
-                                    padding: "2px 4px",
-                                    fontSize: "11px",
-                                  }}
-                                >
-                                  <option value="BLANK">(Blank)</option>
-                                  <option value="YES">Yes</option>
-                                  <option value="NO">No</option>
-                                </select>
-                              );
-                              cellClass = "col-center col-editable";
+                                cellContent = (
+                                  <select
+                                    value={selectVal}
+                                    disabled={isSaving}
+                                    onChange={(e) => {
+                                      const val =
+                                        e.target.value === "YES"
+                                          ? true
+                                          : e.target.value === "NO"
+                                            ? false
+                                            : null;
+                                      handleUpdate(
+                                        record,
+                                        "reverseAuctionApplicable",
+                                        val,
+                                      );
+                                    }}
+                                    className="table-editable-select status-select"
+                                    style={{
+                                      minWidth: "60px",
+                                      padding: "2px 4px",
+                                      fontSize: "11px",
+                                    }}
+                                  >
+                                    <option value="BLANK">(Blank)</option>
+                                    <option value="YES">Yes</option>
+                                    <option value="NO">No</option>
+                                  </select>
+                                );
+                                cellClass = "col-center col-editable";
+                              }
+                            } else if (col.accessor === "participated") {
+                              const participatedVal = cellVal as boolean | null;
+                              const isYes = participatedVal === true;
+                              const isNo = participatedVal === false;
+
+                              if (readOnly) {
+                                cellContent = isYes ? (
+                                  <span className="status-badge won" style={{ fontSize: "11px", padding: "2px 8px" }}>Yes</span>
+                                ) : isNo ? (
+                                  <span className="status-badge lost" style={{ fontSize: "11px", padding: "2px 8px" }}>No</span>
+                                ) : (
+                                  <span>-</span>
+                                );
+                                cellClass = "col-center";
+                              } else {
+                                const reduxRow = tenderData?.rows.find(r => String(r.id) === String(record.id));
+                                const reduxIndex = reduxRow != null ? tenderData!.rows.indexOf(reduxRow) : -1;
+                                const updKey = `${reduxIndex}-participated`;
+                                const isUpdating = !!updatingCells[updKey];
+
+                                cellContent = (
+                                  <div style={{ display: "flex", gap: "4px", padding: "4px 0" }}>
+                                    <button
+                                      type="button"
+                                      disabled={isUpdating}
+                                      onClick={() => {
+                                        if (reduxIndex < 0 || !record.id) return;
+                                        const oldVal = String(tenderData!.rows[reduxIndex]?.participated ?? "");
+                                        dispatch(updateTenderCell({
+                                          rowIndex: reduxIndex,
+                                          field: "participated",
+                                          value: "true",
+                                          tenderMergedId: Number(record.id),
+                                          oldValue: oldVal,
+                                        }));
+                                      }}
+                                      style={{
+                                        width: "28px", height: "28px", borderRadius: "4px",
+                                        fontSize: "11px", fontWeight: 700, border: "2px solid",
+                                        cursor: isUpdating ? "not-allowed" : "pointer",
+                                        opacity: isUpdating ? 0.5 : 1,
+                                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                        backgroundColor: isUpdating ? "#e2e8f0" : isYes ? "#22c55e" : "#ffffff",
+                                        color: isUpdating ? "#94a3b8" : isYes ? "#ffffff" : "#94a3b8",
+                                        borderColor: isUpdating ? "#cbd5e1" : isYes ? "#16a34a" : "#cbd5e1",
+                                      }}
+                                    >
+                                      {isUpdating ? "..." : "Y"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isUpdating}
+                                      onClick={() => {
+                                        if (reduxIndex < 0 || !record.id) return;
+                                        const oldVal = String(tenderData!.rows[reduxIndex]?.participated ?? "");
+                                        dispatch(updateTenderCell({
+                                          rowIndex: reduxIndex,
+                                          field: "participated",
+                                          value: "false",
+                                          tenderMergedId: Number(record.id),
+                                          oldValue: oldVal,
+                                        }));
+                                      }}
+                                      style={{
+                                        width: "28px", height: "28px", borderRadius: "4px",
+                                        fontSize: "11px", fontWeight: 700, border: "2px solid",
+                                        cursor: isUpdating ? "not-allowed" : "pointer",
+                                        opacity: isUpdating ? 0.5 : 1,
+                                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                        backgroundColor: isUpdating ? "#e2e8f0" : isNo ? "#ef4444" : "#ffffff",
+                                        color: isUpdating ? "#94a3b8" : isNo ? "#ffffff" : "#94a3b8",
+                                        borderColor: isUpdating ? "#cbd5e1" : isNo ? "#dc2626" : "#cbd5e1",
+                                      }}
+                                    >
+                                      {isUpdating ? "..." : "N"}
+                                    </button>
+                                  </div>
+                                );
+                                cellClass = "col-center";
+                              }
                             } else {
                               const isApp = cellVal as boolean | null;
                               cellContent =
@@ -2760,14 +3142,104 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 "-"
                               );
                               cellClass = "col-center";
+                            } else if (col.accessor === "docketNo") {
+                              const docketVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditing = editingDocketId === record.id;
+                              const isSaving = !!savingKeys[`${record.id}-docket`];
+                              canEditDocket = !readOnly || !docketVal;
+                              if (!canEditDocket) {
+                                cellContent = (
+                                  <span className="docket-display">{docketVal || "-"}</span>
+                                );
+                                cellClass = "col-docket";
+                              } else if (isEditing) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input
+                                      type="text"
+                                      value={docketEditValue}
+                                      onChange={(e) => setDocketEditValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          handleDocketSave(record);
+                                        } else if (e.key === "Escape") {
+                                          setEditingDocketId(null);
+                                        }
+                                      }}
+                                      autoFocus
+                                      disabled={isSaving}
+                                      className="docket-edit-input"
+                                    />
+                                    <button
+                                      onClick={() => handleDocketSave(record)}
+                                      disabled={isSaving}
+                                      className="docket-save-btn"
+                                      title="Save"
+                                    >
+                                      <Check size={14} />
+                                    </button>
+                                  </div>
+                                );
+                              } else {
+                                cellContent = (
+                                  <span className="docket-display">
+                                    {docketVal || "-"}
+                                    {isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                                  </span>
+                                );
+                              }
+                              cellClass = !canEditDocket ? "col-docket" : "col-docket col-editable";
+                            } else if (col.accessor === "bgNoUtrNo") {
+                              const bgUtrVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditingBg = editingBgUtrId === record.id;
+                              const isSavingBg = !!savingKeys[`${record.id}-bgUtr`];
+                              if (readOnly) {
+                                cellContent = (
+                                  <span>{bgUtrVal || "-"}</span>
+                                );
+                                cellClass = "";
+                              } else if (isEditingBg) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input
+                                      type="text"
+                                      value={bgUtrEditValue}
+                                      onChange={(e) => setBgUtrEditValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          handleBgUtrSave(record);
+                                        } else if (e.key === "Escape") {
+                                          setEditingBgUtrId(null);
+                                        }
+                                      }}
+                                      autoFocus
+                                      disabled={isSavingBg}
+                                      className="docket-edit-input"
+                                    />
+                                    <button
+                                      onClick={() => handleBgUtrSave(record)}
+                                      disabled={isSavingBg}
+                                      className="docket-save-btn"
+                                      title="Save"
+                                    >
+                                      <Check size={14} />
+                                    </button>
+                                  </div>
+                                );
+                              } else {
+                                cellContent = (
+                                  <span className="docket-display">
+                                    {bgUtrVal || "-"}
+                                    {isSavingBg && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                                  </span>
+                                );
+                              }
+                              cellClass = readOnly ? "" : "col-editable";
                             } else {
                               cellContent =
                                 cellVal !== null && cellVal !== undefined
                                   ? String(cellVal)
                                   : "-";
-                              if (col.accessor === "docketNo") {
-                                cellClass = "col-docket";
-                              }
                             }
                           }
                         }
@@ -2777,6 +3249,23 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             key={col.accessor}
                             className={cellClass}
                             style={{ width: `${columnWidths[col.accessor]}px` }}
+                            onClick={
+                              col.accessor === "docketNo" && canEditDocket && editingDocketId !== record.id
+                                ? () => {
+                                    if (!savingKeys[`${record.id}-docket`]) {
+                                      setEditingDocketId(record.id!);
+                                      setDocketEditValue(cellVal != null ? String(cellVal) : "");
+                                    }
+                                  }
+                                : col.accessor === "bgNoUtrNo" && !readOnly && editingBgUtrId !== record.id
+                                  ? () => {
+                                      if (!savingKeys[`${record.id}-bgUtr`]) {
+                                        setEditingBgUtrId(record.id!);
+                                        setBgUtrEditValue(cellVal != null ? String(cellVal) : "");
+                                      }
+                                    }
+                                  : undefined
+                            }
                             title={
                               col.accessor !== "rawMaterials" &&
                               col.type !== "boolean" &&
@@ -3052,7 +3541,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       <AttachmentModal
         isOpen={isAttachmentModalOpen}
         onClose={() => setIsAttachmentModalOpen(false)}
-        docketNo={selectedDocketNo}
+        files={selectedFiles}
       />
 
       {/* Premium Toast Overlay */}

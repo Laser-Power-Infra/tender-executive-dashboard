@@ -2,33 +2,27 @@
 import React, { useState, useMemo } from "react";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { TenderTable } from "@/components/TenderTable";
-import { AlertPanel } from "@/components/AlertPanel";
-import { useAppSelector, useAppDispatch } from "@/lib/hooks";
+import { useAppSelector } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
-import { syncSheetToMerged } from "@/lib/slices/tendersSlice";
-import { Eraser, ExternalLink, Database, RefreshCw, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { debugParseAllAttachments } from "@/actions/debugParseAttachments";
-import "./Dashboard.css";
+import { Eraser, ExternalLink } from "lucide-react";
+import "../Dashboard.css";
 
-export default function Home() {
+export default function PostParticipation() {
   const referenceDate = useMemo(() => new Date("2026-06-25T12:00:00"), []);
-  const dispatch = useAppDispatch();
   const tenderSliceData = useAppSelector((s) => s.tenders.data);
   const loadingTenders = useAppSelector((s) => s.tenders.loading);
-  const preFilteredData = useMemo(() => {
+  const postFilteredData = useMemo(() => {
     if (!tenderSliceData) return null;
     return {
       ...tenderSliceData,
       rows: tenderSliceData.rows.filter(
-        (r) => (r.apm === "YES" || r.apm === "NO") && r.participated !== "true",
+        (r) => (r.apm === "YES" || r.apm === "NO") && r.participated === "true",
       ),
     };
   }, [tenderSliceData]);
-  const mappedRecords = useMemo(() => mapTenderSliceToEpcRecords(preFilteredData), [preFilteredData]);
+  const mappedRecords = useMemo(() => mapTenderSliceToEpcRecords(postFilteredData), [postFilteredData]);
   const [clearTrigger, setClearTrigger] = useState<number>(0);
-  const [cvaLoading, setCvaLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState<string>("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedEngineer, setSelectedEngineer] = useState<string>("All");
@@ -98,46 +92,6 @@ export default function Home() {
     });
   }, [primaryDataset, clientSearch, selectedStatuses, selectedEngineer, selectedDecision, valueMin, valueMax, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax]);
 
-  const alertData = useMemo(() => calculations.generateAlerts(activeDataset), [calculations, activeDataset]);
-
-  const handleRefresh = async () => {
-    const result = await dispatch(syncSheetToMerged());
-    if (syncSheetToMerged.rejected.match(result)) {
-      console.warn("[Sync] Failed:", result.payload);
-    }
-  };
-  const handleEnrichCva = async () => {
-    setCvaLoading(true);
-    try {
-      const results = await debugParseAllAttachments();
-      const total = results.length;
-      const withError = results.filter((r) => r.error);
-      const mfgFound = results.filter((r) => r.sheets?.some((s) => s.mfgPercentFound));
-      const lines = [
-        `Processed ${total} attachment(s)`,
-        mfgFound.length > 0 ? `MFG% found in ${mfgFound.length} file(s)` : "No MFG% header found",
-        withError.length > 0 ? `${withError.length} failed` : "",
-      ]
-        .filter(Boolean)
-        .join(" | ");
-      toast.success(lines);
-      results.forEach((r) => {
-        if (r.error) {
-          console.warn(`[Parse] ${r.docketNo}: ${r.error}`);
-        } else {
-          const mfgSheets = r.sheets?.filter((s) => s.mfgPercentFound).map((s) => s.name) || [];
-          console.log(
-            `[Parse] ${r.docketNo}: sheets=${r.sheets?.length}, MFG% in=[${mfgSheets.join(", ")}]`,
-            r.sheets?.map((s) => ({ sheet: s.name, headers: s.headers })),
-          );
-        }
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Parsing failed");
-    } finally {
-      setCvaLoading(false);
-    }
-  };
   const handleClearAllFilters = () => {
     setClientSearch("");
     setSelectedStatuses([]);
@@ -162,35 +116,23 @@ export default function Home() {
           priceBasisFilter={priceBasisFilter} setPriceBasisFilter={setPriceBasisFilter}
           aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
           copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
-          onRefresh={handleRefresh}
         />
       </div>
       <div className="dashboard-workspace">
         <header className="dashboard-top-header">
           <div className="header-brand">
-            <h1 className="brand-logo-text">LASERPOWER <span>PARTICIPATION</span></h1>
+            <h1 className="brand-logo-text">LASERPOWER <span>POST PARTICIPATION</span></h1>
             <div className="brand-divider"></div>
-            <span className="brand-title">Executive Tender Dashboard</span>
+            <span className="brand-title">Post Participation Dashboard</span>
           </div>
           <div className="header-actions">
             <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Eraser size={14} /> Clear Filters</button>
-            <button className="erp-sync-btn" onClick={handleRefresh} disabled={loadingTenders} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              {loadingTenders ? <><RefreshCw size={14} /> Syncing...</> : <><RefreshCw size={14} /> Sync Sheet Data</>}
-            </button>
             <button
               className="erp-sync-btn"
               onClick={() => window.open("https://docs.google.com/spreadsheets/d/1GTwzxMgViohbCimXqfiBZBJsKbCSr7hCgbcHF_En1VE", "_blank", "noopener,noreferrer")}
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
               <ExternalLink size={14} /> Open Sheet
-            </button>
-            <button
-              className="erp-sync-btn"
-              onClick={handleEnrichCva}
-              disabled={cvaLoading}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-            >
-              {cvaLoading ? <><RefreshCw size={14} className="spin" /> Parsing CVA...</> : <><Database size={14} /> Parse CVA</>}
             </button>
           </div>
         </header>
@@ -203,8 +145,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {/* <AlertPanel alerts={alertData} /> */}
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger} />
+              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} />
             </>
           )}
         </main>

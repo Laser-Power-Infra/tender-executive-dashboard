@@ -8,7 +8,7 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  await prisma.exlusionKeywords.deleteMany();
+  // await prisma.exlusionKeywords.deleteMany();
   // await prisma.exlusionKeywords.deleteMany();
   await prisma.exlusionKeywords.createMany({
     data: [
@@ -26,9 +26,8 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // await prisma.association.deleteMany();
-  await prisma.association.createMany({
-    data: [
+  
+  const Associates = [
       {
         name: "Sandip Das",
         email: "sandip.das@laserpowerinfra.com",
@@ -50,7 +49,7 @@ async function main() {
         email: "sales@laserpowerinfra.com",
       },
       {
-        name: "Test User",
+        name: "Test User(AI TEAM)",
         email: "bidyutdas.laserpowerinfra@gmail.com",
       },
       {
@@ -59,11 +58,39 @@ async function main() {
       },
       {
         name: "Ashik Mandal",
-        email: "ashikmandal1@gmail.com",
+        email: "lasertender.four@gmail.com",
       },
-    ],
-    skipDuplicates: true,
-  });
+      {
+        name: "Pritikana Maity",
+        email:"laserentry.eight@gmail.com"
+      },
+      {
+        name: "Ritwick Dutta",
+        email:"laserentery.two@gmail.com"
+      }
+    ]
+
+    
+  Associates.map(async (a)=>{
+
+    await prisma.association.upsert({
+      where: {
+        email: a.email
+      },
+      create:{
+        email: a.email,
+        name: a.name,
+      },
+      update:{
+        email: a.email,
+        name: a.name
+      }
+      // skipDuplicates: true,
+    });
+  })
+
+
+
 
   // const result = await syncMasterWebsites();
   // if (result.errors.length) {

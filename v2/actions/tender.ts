@@ -124,10 +124,15 @@ export async function bulkAssignUtilityMappingAction(params: {
 
 export async function updateTenderDecision(params: {
   tenderMergedId: number;
-  field: "app" | "aps" | "apm";
-  value: "YES" | "NO" | "NOT_DECIDED";
+  field: "app" | "aps" | "apm" | "participated";
+  value: "YES" | "NO" | "NOT_DECIDED" | "true" | "false";
 }) {
-  const data = { [params.field]: params.value };
+  let data: Record<string, unknown>;
+  if (params.field === "participated") {
+    data = { participated: params.value === "true" };
+  } else {
+    data = { [params.field]: params.value };
+  }
   try {
     await prisma.tenderMerged.update({ where: { id: params.tenderMergedId }, data });
     if (params.field === "apm" && params.value === "YES") {
@@ -153,4 +158,46 @@ export async function updateTenderDecision(params: {
     console.error(error);
   }
   return { webhookTriggered: false };
+}
+
+export async function updateDocketNumber(params: {
+  tenderMergedId: number;
+  docketNo: string;
+}) {
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { docketNo: params.docketNo },
+    });
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated docketNo to "${params.docketNo}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(error);
+    throw new Error(error.message ?? "Failed to update docket number");
+  }
+}
+
+export async function updateBgNoUtrNo(params: {
+  tenderMergedId: number;
+  bgNoUtrNo: string;
+}) {
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { bgNoUtrNo: params.bgNoUtrNo },
+    });
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated bgNoUtrNo to "${params.bgNoUtrNo}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(error);
+    throw new Error(error.message ?? "Failed to update BG/UTR number");
+  }
 }

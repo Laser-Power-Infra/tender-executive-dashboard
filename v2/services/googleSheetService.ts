@@ -296,9 +296,9 @@ export class GoogleSheetService {
       }
 
       // Rule 2: Ignore rows without Docket No (missing or empty)
-      if (docketIndex >= row.length || !row[docketIndex] || row[docketIndex].trim() === "") {
-        continue;
-      }
+      // if (docketIndex >= row.length || !row[docketIndex] || row[docketIndex].trim() === "") {
+      //   continue;
+      // }
       
       const record = this.parseRow(row, headerIndexMap, i + 1);
       records.push(record);
@@ -356,7 +356,8 @@ export class GoogleSheetService {
       "Diff % from L1",
       "Diff % from L2",
       "Reason",
-      "Final Remarks"
+      "Final Remarks",
+      "PRICE"
     ];
 
     const headerIndexMap = new Map<string, number>();
@@ -572,7 +573,8 @@ export class GoogleSheetService {
       diffPercentFromL1: parsePercent(getValue("Diff % from L1")),
       diffPercentFromL2: parsePercent(getValue("Diff % from L2")),
       reason: getValue("Reason") || null,
-      finalRemarks: getValue("Final Remarks") || null
+      finalRemarks: getValue("Final Remarks") || null,
+      price: getValue("PRICE") || null
     };
   }
 }

@@ -65,6 +65,7 @@ export interface EpcTenderRecord {
   reason: string | null;
   finalRemarks: string | null;
   attachmentUrl?: string | null;
+  tenderFiles?: string;
   priceBasis?: string | null;
   aluminiumPrice?: number | null;
   aluminiumAlloyPrice?: number | null;
@@ -83,6 +84,7 @@ export interface EpcTenderRecord {
   hasBoqChart?: boolean;
   boqFileId?: string;
   bgStatus?: string | null;
+  price?: string | null;
   tenderUpdateStatus?: TenderUpdateStatus;
   nextAction?: NextAction | null;
   cva?: string | null;

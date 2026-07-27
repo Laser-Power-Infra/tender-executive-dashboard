@@ -879,5 +879,63 @@
   transform: translateY(0);
 }
 
+/* ── Certificate PDF Column ───────────────────────────────────────────────── */
+.generate-pdf-btn,
+.retry-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  color: #0a2540;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
 
+.generate-pdf-btn:hover {
+  background: #f0f4ff;
+  border-color: #0070f3;
+  color: #0070f3;
+}
+
+.generate-pdf-btn:active {
+  transform: translateY(0);
+}
+
+.retry-pdf-btn {
+  background: #fff3e0;
+  border-color: #ff9800;
+  color: #e65100;
+}
+
+.retry-pdf-btn:hover {
+  background: #ffe0b2;
+}
+
+.supply-generating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #666;
+}
+
+.supply-spinner-sm {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #0070f3;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 

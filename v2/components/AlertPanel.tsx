@@ -28,18 +28,18 @@ export const AlertPanel: React.FC<AlertPanelProps> = ({ alerts }) => {
     alerts.underEvalGreater90DCount > 0 ||
     alerts.loiReceivedPoPendingValueRs > 0;
 
-  if (!hasAlerts) {
-    return (
-      <div className="alert-panel-container">
-        <span className="alert-action-badge" style={{ backgroundColor: "#137333", animation: "none" }}>
-          <Check size={14} /> No Actions
-        </span>
-        <span className="alert-pill" style={{ fontSize: "11px", opacity: 0.8 }}>
-          All tender metrics and deadlines are currently up to date.
-        </span>
-      </div>
-    );
-  }
+  // if (!hasAlerts) {
+  //   return (
+  //     <div className="alert-panel-container">
+  //       <span className="alert-action-badge" style={{ backgroundColor: "#137333", animation: "none" }}>
+  //         <Check size={14} /> No Actions
+  //       </span>
+  //       <span className="alert-pill" style={{ fontSize: "11px", opacity: 0.8 }}>
+  //         All tender metrics and deadlines are currently up to date.
+  //       </span>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="alert-panel-container">

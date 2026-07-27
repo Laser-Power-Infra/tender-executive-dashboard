@@ -17,9 +17,10 @@ import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import { clearFiles, clearResults } from "@/lib/slices/uploadSlice";
 import { setSelectedDateRange } from "@/lib/slices/filesSlice";
 import { importEpcGoTenders } from "@/lib/slices/tendersSlice";
+import type { TenderMergedRow } from "@/lib/slices/tendersSlice";
 
 interface TenderSidebarProps {
-  rows?: Record<string, string>[];
+  rows?: TenderMergedRow[];
   associations?: { id: number; name: string; email: string }[];
 }
 

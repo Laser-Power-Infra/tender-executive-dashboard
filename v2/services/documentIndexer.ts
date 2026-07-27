@@ -255,3 +255,12 @@ export function stopScheduling(): void {
     console.log("[Scheduler] Indexer schedule stopped.");
   }
 }
+
+export async function getNetworkFolderIndex(): Promise<Map<string, { folderPath: string; folderName: string }>> {
+  const scanned = await scanNetworkLocation();
+  const result = new Map<string, { folderPath: string; folderName: string }>();
+  for (const [docketNo, record] of scanned) {
+    result.set(docketNo, { folderPath: record.folderPath, folderName: record.folderName });
+  }
+  return result;
+}

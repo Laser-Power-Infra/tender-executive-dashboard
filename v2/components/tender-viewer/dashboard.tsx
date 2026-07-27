@@ -8,7 +8,6 @@ import React, {
   useRef,
 } from "react";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
-import { fetchFiles } from "@/lib/slices/filesSlice";
 import {
   fetchTendersIncremental,
   appendTenders,
@@ -108,22 +107,21 @@ export default function Dashboard() {
     }
   }, [files, dispatch]);
 
-  useEffect(() => {
-    dispatch(
-      fetchFiles({
-        from: new Date(selectedDateFrom),
-        to: new Date(selectedDateTo),
-      }),
+  const dateFilteredRows = useMemo(() => {
+    if (!tenderData) return [];
+    const selectedFileIds = new Set(
+      files
+        .filter((f) => {
+          const updatedAt = new Date(f.updatedAt);
+          const from = new Date(selectedDateFrom);
+          const to = new Date(selectedDateTo);
+          to.setHours(23, 59, 59, 999);
+          return updatedAt >= from && updatedAt <= to;
+        })
+        .map((f) => String(f.id)),
     );
-  }, [selectedDateFrom, selectedDateTo, dispatch]);
-
-  useEffect(() => {
-    if (files.length > 0) {
-      dispatch(fetchTendersIncremental(files.map((f) => f.id)));
-    } else {
-      dispatch(fetchTendersIncremental([]));
-    }
-  }, [files, dispatch]);
+    return tenderData.rows.filter((r) => r.fileId && selectedFileIds.has(r.fileId));
+  }, [tenderData, files, selectedDateFrom, selectedDateTo]);
 
   useEffect(() => {
     if (uploadResults && uploadResults.length > 0) {
@@ -373,8 +371,8 @@ export default function Dashboard() {
 
   const excludedRows = useMemo(() => {
     if (!tenderData) return [];
-    if (!exclusionFilter) return tenderData.rows;
-    return tenderData.rows.filter((row) => {
+    if (!exclusionFilter) return dateFilteredRows;
+    return dateFilteredRows.filter((row) => {
       const cat = row.excludedCategory;
       if (!cat) return true;
       if (exclusionFilter === "cable" && cat.includes("cable")) return false;
@@ -387,7 +385,7 @@ export default function Dashboard() {
         return false;
       return true;
     });
-  }, [tenderData, exclusionFilter]);
+  }, [tenderData, exclusionFilter, dateFilteredRows]);
 
   const rowsWithMergedValues = useMemo(() => {
     return excludedRows.map((row) => {
@@ -958,6 +956,64 @@ export default function Dashboard() {
         };
       }
 
+      if (col === "referenceNo") {
+        return {
+          header: displayNameMap[col] ?? "Reference No",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 170,
+          searchable: false,
+          frozen: true,
+          renderCell: (value: unknown) => {
+            const val = String(value ?? "");
+            return val ? (
+              <span className="text-xs font-mono">{val}</span>
+            ) : (
+              <span className="text-slate-300">-</span>
+            );
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
+      if (col === "type") {
+        return {
+          header: "Type",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 100,
+          searchable: false,
+          frozen: true,
+          renderCell: (value: unknown) => {
+            const val = String(value ?? "");
+            if (!val) return <span className="text-slate-300">-</span>;
+            const isGem = val === "Gem";
+            return (
+              <Badge
+                className={`text-[10px] font-medium ${
+                  isGem
+                    ? "bg-blue-100 text-blue-800 border-blue-200"
+                    : "bg-slate-100 text-slate-600 border-slate-200"
+                }`}
+              >
+                {val}
+              </Badge>
+            );
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
       let filterType: "select" | "dateRange" | undefined;
 
       if (
@@ -985,7 +1041,8 @@ export default function Dashboard() {
           col === "deadline" || col === "organization" || col === "type"
             ? false
             : undefined,
-        hidden: colIndex !== undefined ? !colIndex.visible : col === "id" ? true : undefined,
+        hidden: colIndex !== undefined ? !colIndex.visible : true,
+        frozen: col === "organization" || col === "tenderBrief" || col === "itemCategory" || col === "size" ? true : undefined,
         type: filterType === "dateRange" ? "date" : undefined,
         filter:
           filterType === "select"
@@ -1021,12 +1078,19 @@ export default function Dashboard() {
       .map((g) => {
         const firstField = g.fields[0];
         const isConcatenated = g.separator.trim().length > 0;
+        const isOrgDeptGroup =
+          g.fields.includes("organization") &&
+          g.fields.includes("departmentName");
+        const isBriefCatGroup =
+          g.fields.includes("tenderBrief") &&
+          g.fields.includes("itemCategory");
         return {
           header: isConcatenated
             ? (displayNameMap[g.label] ?? g.label)
             : (displayNameMap[firstField] ?? firstField),
           accessor: g.label as keyof Record<string, unknown>,
           defaultWidth: 250,
+          frozen: isOrgDeptGroup || isBriefCatGroup || g.fields.includes("size") ? true : undefined,
           filter: {
             type: "select" as const,
             options: [{ value: "__blank__", label: "Blank" }],
@@ -1041,6 +1105,19 @@ export default function Dashboard() {
             return String(row[firstField as keyof typeof row] ?? "");
           },
           renderCell: (_: unknown, row: Record<string, unknown>) => {
+            if (isOrgDeptGroup) {
+              const org = String(row.organization ?? "");
+              const dept = String(row.departmentName ?? "");
+              if (!org && !dept) return <span className="text-slate-300">-</span>;
+              return (
+                <div className="flex flex-col leading-tight">
+                  <span className="text-xs font-medium">{org || "-"}</span>
+                  {dept && (
+                    <span className="text-[11px] text-slate-500">{dept}</span>
+                  )}
+                </div>
+              );
+            }
             if (isConcatenated) {
               const parts = g.fields
                 .map((f) => String(row[f as keyof typeof row] ?? ""))
@@ -1107,7 +1184,7 @@ export default function Dashboard() {
   return (
     <div className="flex flex-1 overflow-hidden bg-[#f4f6f8]">
       <TenderSidebar
-        rows={tenderData?.rows ?? []}
+        rows={dateFilteredRows}
         associations={tenderData?.associations ?? []}
       />
 

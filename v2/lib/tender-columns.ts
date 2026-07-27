@@ -361,6 +361,11 @@ function findReferenceNoColumn(
   headers: string[],
   customColumnMap?: ColumnMap,
 ): string | undefined {
+  for (const h of headers) {
+    if (isIgnoredHeader(h)) continue;
+    if (normalizeHeader(h) === "referenceno") return h;
+  }
+
   const columnMap = customColumnMap ?? NORMALIZED_COLUMN_MAP;
   for (const h of headers) {
     if (isIgnoredHeader(h)) continue;
