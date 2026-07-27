@@ -23,9 +23,23 @@ if (process.env.INDEXER_NETWORK_PATH) {
   ALLOWED_ROOTS.unshift(path.resolve(process.env.INDEXER_NETWORK_PATH));
 }
 
+if (process.env.SUPPLY_NETWORK_PATH) {
+  ALLOWED_ROOTS.push(path.resolve(process.env.SUPPLY_NETWORK_PATH));
+}
+
+if (process.env.CONDUTOR_PATH) {
+  ALLOWED_ROOTS.push(path.resolve(process.env.CONDUTOR_PATH));
+}
+
+function normalizeDrive(p: string): string {
+  return p.replace(/^[a-zA-Z]:\\/, (m) => m.toUpperCase());
+}
+
 function verifyPathSafety(absolutePath: string): void {
-  const resolvedPath = path.resolve(absolutePath);
-  const isSafe = ALLOWED_ROOTS.some((root) => resolvedPath.startsWith(root));
+  const resolvedPath = normalizeDrive(path.resolve(absolutePath));
+  const isSafe = ALLOWED_ROOTS.some((root) =>
+    resolvedPath.startsWith(normalizeDrive(path.resolve(root)))
+  );
   if (!isSafe) {
     throw new Error("Path traversal violation: Access denied.");
   }
@@ -251,7 +265,6 @@ export class TenderAttachmentController {
     try {
       const dbPath = path.resolve(
         process.cwd(),
-        "..",
         "data",
         "supply_document_index.json",
       );

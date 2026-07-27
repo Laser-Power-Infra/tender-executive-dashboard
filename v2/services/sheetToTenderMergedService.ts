@@ -45,7 +45,7 @@ export interface SyncResult {
 
 const SKIP_RELATION_FIELDS = new Set([
   "extraFields", "tenderAssociations", "reportings", "evaluations",
-  "tenderFiles", "file", "tenderStatus", "utilityMapping",
+  "file", "tenderStatus", "utilityMapping",
 ]);
 
 function flattenTender(
@@ -62,6 +62,12 @@ function flattenTender(
     } else {
       row[field] = val == null ? "" : String(val);
     }
+  }
+  const tenderFilesVal = tender["tenderFiles"];
+  if (Array.isArray(tenderFilesVal) && tenderFilesVal.length > 0) {
+    row.tenderFiles = JSON.stringify(tenderFilesVal);
+  } else {
+    row.tenderFiles = "";
   }
   return row;
 }
@@ -404,6 +410,90 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
     }
   } catch (e) {
     console.warn("[SheetSync] Network folder scan failed:", (e as Error).message);
+  }
+
+  // ── Condutor BoQ comparative chart files ──
+  try {
+    const condutorPath = process.env.CONDUTOR_PATH;
+    if (!condutorPath) {
+      console.warn("[SheetSync] CONDUTOR_PATH not set, skipping BoQ comparative chart sync");
+    } else {
+      const resolvedCondutorPath = path.resolve(condutorPath);
+      if (!fs.existsSync(resolvedCondutorPath)) {
+        console.warn("[SheetSync] CONDUTOR_PATH not found:", resolvedCondutorPath);
+      } else {
+        const tenderIdPattern = /(\d{4}_[A-Z]+_\d+_\d+)/;
+        const condutorMap = new Map<string, string>();
+        const condutorFiles = fs.readdirSync(resolvedCondutorPath);
+        for (const filename of condutorFiles) {
+          if (!filename.toLowerCase().endsWith(".xlsx")) continue;
+          const match = filename.match(tenderIdPattern);
+          if (!match) continue;
+          const tenderId = match[1];
+          const cleanId = tenderId.toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (!cleanId) continue;
+          const filePath = path.join(resolvedCondutorPath, filename);
+          if (!condutorMap.has(cleanId)) {
+            condutorMap.set(cleanId, filePath);
+          } else if (!/\(\d+\)/.test(filename)) {
+            condutorMap.set(cleanId, filePath);
+          }
+        }
+
+        if (condutorMap.size > 0) {
+          const condutorTenders = await prisma.tenderMerged.findMany({
+            where: { referenceNo: { in: affectedRefNos } },
+            select: { id: true, referenceNo: true },
+          });
+
+          let matchedCount = 0;
+          for (const tm of condutorTenders) {
+            if (!tm.referenceNo) continue;
+            const cleanRefNo = tm.referenceNo.toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (!cleanRefNo) continue;
+
+            let matchedPath: string | undefined;
+            for (const [condutorCleanId, condutorFilePath] of condutorMap) {
+              if (
+                cleanRefNo.includes(condutorCleanId) ||
+                condutorCleanId.includes(cleanRefNo)
+              ) {
+                matchedPath = condutorFilePath;
+                break;
+              }
+            }
+
+            if (!matchedPath) continue;
+            matchedCount++;
+
+            await prisma.tenderFile.deleteMany({
+              where: {
+                tenderMergedId: tm.id,
+                tags: { has: TENDER_FILE_TYPES.BOQ_COMPARATIVE_CHART },
+              },
+            });
+
+            const filename = path.basename(matchedPath);
+            const ext = path.extname(filename);
+            const name = ext ? filename.slice(0, -ext.length) : filename;
+            await prisma.tenderFile.create({
+              data: {
+                name,
+                extension: ext.replace(".", ""),
+                url: matchedPath,
+                source: encryptPath(matchedPath),
+                tags: [TENDER_FILE_TYPES.BOQ_COMPARATIVE_CHART],
+                tenderMergedId: tm.id,
+              },
+            });
+          }
+
+          console.log(`[SheetSync] BoQ comparative chart synced for ${matchedCount} tenders from Condutor`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[SheetSync] Condutor BoQ scan failed:", (e as Error).message);
   }
 
   // Backfill blank docket numbers from Smartsheet

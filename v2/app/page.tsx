@@ -22,7 +22,7 @@ export default function Home() {
     return {
       ...tenderSliceData,
       rows: tenderSliceData.rows.filter(
-        (r) => (r.apm === "YES" || r.apm === "NO") && r.participated !== "true",
+        (r) => (r.apm === "YES" ) && r.participated !== "true",
       ),
     };
   }, [tenderSliceData]);

@@ -7,7 +7,7 @@ import {
 } from "@/types/tender";
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
-import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderCell } from "@/lib/slices/tendersSlice";
+import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell } from "@/lib/slices/tendersSlice";
 import {
   Search,
   X,
@@ -130,12 +130,26 @@ const FilesCell: React.FC<{
 const BOQChartCell: React.FC<{
   docketNo: string;
   boqFileId?: string | null;
-}> = ({ docketNo, boqFileId }) => {
+  tenderFilesJson?: string;
+}> = ({ docketNo, boqFileId, tenderFilesJson }) => {
   const [boqFile, setBoqFile] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  const tenderFilesSource = useMemo(() => {
+    if (!tenderFilesJson) return null;
+    try {
+      const files = JSON.parse(tenderFilesJson);
+      const boqFileEntry = files.find(
+        (f: any) => f.tags?.includes("boqComparativeChart"),
+      );
+      return boqFileEntry?.source || null;
+    } catch {
+      return null;
+    }
+  }, [tenderFilesJson]);
+
   useEffect(() => {
-    if (boqFileId) return;
+    if (boqFileId || tenderFilesSource) return;
     if (!docketNo || docketNo === "-") return;
 
     let isMounted = true;
@@ -157,11 +171,11 @@ const BOQChartCell: React.FC<{
     return () => {
       isMounted = false;
     };
-  }, [docketNo, boqFileId]);
+  }, [docketNo, boqFileId, tenderFilesSource]);
 
   if (loading) return null;
 
-  const effectiveFileId = boqFileId || boqFile?.fileId;
+  const effectiveFileId = boqFileId || tenderFilesSource || boqFile?.fileId;
   if (!effectiveFileId) return null;
 
   const handleDownload = () => {
@@ -198,6 +212,8 @@ interface TenderTableProps {
   setCopperMax?: (val: string) => void;
   clearTrigger?: number;
   readOnly?: boolean;
+  showPostParticipationColumns?: boolean;
+  editableColumns?: string[];
 }
 
 interface ColumnDef {
@@ -231,6 +247,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   setCopperMax,
   clearTrigger,
   readOnly = false,
+  showPostParticipationColumns = false,
+  editableColumns = [],
 }) => {
   // 1. Column Definitions
   const columns: ColumnDef[] = [
@@ -375,6 +393,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "boolean",
     },
     {
+      header: "Reason for not participation",
+      accessor: "reason",
+      defaultWidth: 250,
+      align: "left",
+      type: "string",
+    },
+    {
       header: "Prep By",
       accessor: "tenderPrepareBy",
       defaultWidth: 120,
@@ -446,6 +471,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     },
   ];
 
+  const postParticipationAccessors = new Set([
+    "bgNoUtrNo", "remarks", "loiPoNoAndDate",
+    "competitors", "diffPercentFromL1", "diffPercentFromL2",
+    "nextAction",
+  ]);
+  const visibleColumns = showPostParticipationColumns
+    ? columns
+    : columns.filter((col) => !postParticipationAccessors.has(col.accessor));
+
   // 2. States
   const [overrides, setOverrides] = useState<
     Record<
@@ -454,8 +488,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         tenderUpdateStatus?: string;
         nextAction?: string | null;
         reverseAuctionApplicable?: boolean | null;
-        diffPercentFromL1?: number | null;
-        diffPercentFromL2?: number | null;
       }
     >
   >({});
@@ -463,15 +495,22 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [toasts, setToasts] = useState<
     Array<{ id: string; message: string; type: "success" | "error" }>
   >([]);
-  const [editingDiffCell, setEditingDiffCell] = useState<{
-    recordId: string;
-    field: "diffPercentFromL1" | "diffPercentFromL2";
-  } | null>(null);
-  const [editingDiffValue, setEditingDiffValue] = useState<string>("");
   const [editingDocketId, setEditingDocketId] = useState<string | null>(null);
   const [docketEditValue, setDocketEditValue] = useState<string>("");
   const [editingBgUtrId, setEditingBgUtrId] = useState<string | null>(null);
   const [bgUtrEditValue, setBgUtrEditValue] = useState<string>("");
+  const [editingRemarksId, setEditingRemarksId] = useState<string | null>(null);
+  const [remarksEditValue, setRemarksEditValue] = useState<string>("");
+  const [editingDiffL1Id, setEditingDiffL1Id] = useState<string | null>(null);
+  const [diffL1EditValue, setDiffL1EditValue] = useState<string>("");
+  const [editingDiffL2Id, setEditingDiffL2Id] = useState<string | null>(null);
+  const [diffL2EditValue, setDiffL2EditValue] = useState<string>("");
+  const [editingLoiPoId, setEditingLoiPoId] = useState<string | null>(null);
+  const [loiPoEditValue, setLoiPoEditValue] = useState<string>("");
+  const [editingCompetitorsId, setEditingCompetitorsId] = useState<string | null>(null);
+  const [competitorsEditValue, setCompetitorsEditValue] = useState<string>("");
+  const [editingReasonId, setEditingReasonId] = useState<string | null>(null);
+  const [reasonEditValue, setReasonEditValue] = useState<string>("");
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -491,6 +530,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       }
       const key = `${record.id}-docket`;
       setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      console.log(`[save:docket] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
       dispatch(
         updateTenderDocketNo({
           tenderMergedId: Number(record.id),
@@ -534,6 +574,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       }
       const key = `${record.id}-bgUtr`;
       setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      console.log(`[save:bgUtr] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
       dispatch(
         updateTenderBgNoUtrNo({
           tenderMergedId: Number(record.id),
@@ -561,6 +602,229 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         });
     },
     [dispatch, bgUtrEditValue],
+  );
+
+  const handleRemarksSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        showToast("Database record ID not found. Please refresh.", "error");
+        return;
+      }
+      const newVal = remarksEditValue.trim();
+      const oldVal = record.remarks ?? "";
+      if (newVal === oldVal) {
+        setEditingRemarksId(null);
+        return;
+      }
+      const key = `${record.id}-remarks`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      console.log(`[save:remarks] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
+      dispatch(
+        updateTenderRemarks({
+          tenderMergedId: Number(record.id),
+          remarks: newVal,
+          oldRemarks: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          showToast(`Remarks updated successfully!`, "success");
+        })
+        .catch((err: any) => {
+          showToast(
+            err?.message || "Failed to update remarks.",
+            "error",
+          );
+        })
+        .finally(() => {
+          setEditingRemarksId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, remarksEditValue],
+  );
+
+  const handleDiffSave = async (
+    record: EpcTenderRecord,
+    field: "diffPercentFromL1" | "diffPercentFromL2",
+    rawValue: string,
+    setEditingId: (id: string | null) => void,
+    setEditValue: (v: string) => void,
+  ) => {
+    if (!record.id) {
+      showToast("Database record ID not found. Please refresh.", "error");
+      return;
+    }
+    const trimmed = rawValue.trim();
+    const parsedNum = trimmed === "" ? null : parseFloat(trimmed);
+    if (parsedNum !== null && isNaN(parsedNum)) {
+      showToast("Please enter a valid number.", "error");
+      return;
+    }
+    const oldVal = (record[field] as number | null) ?? null;
+    const storedVal = parsedNum !== null ? parseFloat((parsedNum / 100).toFixed(6)) : null;
+    if (storedVal === oldVal) {
+      setEditingId(null);
+      return;
+    }
+    const key = `${record.id}-${field === "diffPercentFromL1" ? "diffL1" : "diffL2"}`;
+    setSavingKeys((prev) => ({ ...prev, [key]: true }));
+    console.log(`[save:diff] dispatching: id=${record.id} field=${field} storedVal=${storedVal}`);
+    const dispatchAction = field === "diffPercentFromL1"
+      ? dispatch(updateTenderDiffPercentFromL1({
+          tenderMergedId: Number(record.id),
+          diffPercentFromL1: storedVal,
+          oldDiffPercentFromL1: String(oldVal ?? ""),
+        }))
+      : dispatch(updateTenderDiffPercentFromL2({
+          tenderMergedId: Number(record.id),
+          diffPercentFromL2: storedVal,
+          oldDiffPercentFromL2: String(oldVal ?? ""),
+        }));
+    dispatchAction
+      .unwrap()
+      .then(() => {
+        const label = field === "diffPercentFromL1" ? "Diff L1" : "Diff L2";
+        showToast(`${label} saved!`, "success");
+      })
+      .catch((err: any) => {
+        showToast(err?.message || "Failed to save diff value.", "error");
+      })
+      .finally(() => {
+        setEditingId(null);
+        setEditValue("");
+        setSavingKeys((prev) => {
+          const copy = { ...prev };
+          delete copy[key];
+          return copy;
+        });
+      });
+  };
+
+  const handleLoiPoSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        showToast("Database record ID not found. Please refresh.", "error");
+        return;
+      }
+      const newVal = loiPoEditValue.trim();
+      const oldVal = record.loiPoNoAndDate ?? "";
+      if (newVal === oldVal) {
+        setEditingLoiPoId(null);
+        return;
+      }
+      const key = `${record.id}-loiPo`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      console.log(`[save:loiPo] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
+      dispatch(
+        updateTenderLoiPoNoAndDate({
+          tenderMergedId: Number(record.id),
+          loiPoNoAndDate: newVal,
+          oldLoiPoNoAndDate: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          showToast("LOI/PO No updated!", "success");
+        })
+        .catch((err: any) => {
+          showToast(err?.message || "Failed to update LOI/PO No.", "error");
+        })
+        .finally(() => {
+          setEditingLoiPoId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, loiPoEditValue],
+  );
+
+  const handleCompetitorsSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        showToast("Database record ID not found. Please refresh.", "error");
+        return;
+      }
+      const newVal = competitorsEditValue.trim();
+      const oldVal = record.competitors ?? "";
+      if (newVal === oldVal) {
+        setEditingCompetitorsId(null);
+        return;
+      }
+      const key = `${record.id}-competitors`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      console.log(`[save:competitors] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
+      dispatch(
+        updateTenderCompetitors({
+          tenderMergedId: Number(record.id),
+          competitors: newVal,
+          oldCompetitors: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          showToast("Competitors updated!", "success");
+        })
+        .catch((err: any) => {
+          showToast(err?.message || "Failed to update competitors.", "error");
+        })
+        .finally(() => {
+          setEditingCompetitorsId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, competitorsEditValue],
+  );
+
+  const handleReasonSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        showToast("Database record ID not found. Please refresh.", "error");
+        return;
+      }
+      const newVal = reasonEditValue.trim();
+      const oldVal = record.reason ?? "";
+      if (newVal === oldVal) {
+        setEditingReasonId(null);
+        return;
+      }
+      const key = `${record.id}-reason`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      dispatch(
+        updateTenderReason({
+          tenderMergedId: Number(record.id),
+          reason: newVal,
+          oldReason: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          showToast("Reason updated!", "success");
+        })
+        .catch((err: any) => {
+          showToast(err?.message || "Failed to update reason.", "error");
+        })
+        .finally(() => {
+          setEditingReasonId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, reasonEditValue],
   );
 
   const showToast = (
@@ -651,94 +915,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       }));
       showToast(
         err.message || "Failed to save tender updates. Reverting changes.",
-        "error",
-      );
-    } finally {
-      setSavingKeys((prev) => {
-        const copy = { ...prev };
-        delete copy[key];
-        return copy;
-      });
-    }
-  };
-
-  /**
-   * Saves a manually-entered Diff L1 or Diff L2 value to the database.
-   * The user enters values in % units (e.g. "6.5" means 6.5%).
-   * Values are stored as decimal fractions (0.065 = 6.5%) to match the import format.
-   * Uses optimistic update: applies the change locally immediately, reverts on failure.
-   */
-  const handleDiffUpdate = async (
-    record: EpcTenderRecord,
-    field: "diffPercentFromL1" | "diffPercentFromL2",
-    rawValue: string,
-  ) => {
-    if (!record.id) {
-      showToast(
-        "Database record ID not found. Please refresh and try again.",
-        "error",
-      );
-      return;
-    }
-
-    // User enters in % units — convert to decimal fraction for storage (e.g. 6.5 → 0.065)
-    // Empty string means clear the value (null)
-    const enteredPct = rawValue.trim() === "" ? null : parseFloat(rawValue);
-    if (enteredPct !== null && isNaN(enteredPct)) {
-      showToast("Please enter a valid number.", "error");
-      return;
-    }
-    const parsedFraction =
-      enteredPct === null ? null : parseFloat((enteredPct / 100).toFixed(6));
-
-    // Retrieve the previous stored fraction value for rollback on failure
-    const previousValue =
-      overrides[record.id]?.[field] !== undefined
-        ? overrides[record.id]![field]
-        : (record[field as keyof EpcTenderRecord] as number | null);
-
-    // Skip no-op saves (compare fractions)
-    if (parsedFraction === previousValue) {
-      setEditingDiffCell(null);
-      return;
-    }
-
-    const key = `${record.id}::${field}`;
-    setSavingKeys((prev) => ({ ...prev, [key]: true }));
-
-    // Optimistic update — store the fraction locally
-    setOverrides((prev) => ({
-      ...prev,
-      [record.id!]: { ...prev[record.id!], [field]: parsedFraction },
-    }));
-    setEditingDiffCell(null);
-
-    const body: Record<string, number | null> = {};
-    body[field] = parsedFraction;
-
-    try {
-      const response = await fetch(`/api/executive-tenders/${record.id}/diff`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to update diff value");
-      }
-
-      const label = field === "diffPercentFromL1" ? "Diff L1" : "Diff L2";
-      showToast(`${label} for ${record.docketNo} saved!`, "success");
-    } catch (err: any) {
-      console.error(err);
-      // Rollback on failure
-      setOverrides((prev) => ({
-        ...prev,
-        [record.id!]: { ...prev[record.id!], [field]: previousValue },
-      }));
-      showToast(
-        err.message || "Failed to save diff value. Reverting.",
         "error",
       );
     } finally {
@@ -992,7 +1168,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
     () => {
       const initialWidths: Record<string, number> = {};
-      columns.forEach((col) => {
+      visibleColumns.forEach((col) => {
         initialWidths[col.accessor] = col.defaultWidth;
       });
       return initialWidths;
@@ -1302,9 +1478,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   // 8. Export Data Exporters
   const getCSVData = () => {
-    const headers = columns.map((c) => c.header).join(",");
+    const headers = visibleColumns.map((c) => c.header).join(",");
     const rows = processedRecords.map((rec) => {
-      return columns
+      return visibleColumns
         .map((col) => {
           let val: any;
           if (col.accessor === "rawMaterials") {
@@ -1360,7 +1536,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   const handleExportExcel = () => {
     // Generates a well-formed HTML Table formatted spreadsheet that Microsoft Excel parses cleanly
-    const tableHeader = columns
+    const tableHeader = visibleColumns
       .map(
         (c) =>
           `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;">${c.header}</th>`,
@@ -1368,7 +1544,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       .join("");
     const tableRows = processedRecords
       .map((rec) => {
-        const cells = columns
+        const cells = visibleColumns
           .map((col) => {
             let val: any;
             if (col.accessor === "rawMaterials") {
@@ -1604,7 +1780,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                   style={{ width: "40px" }}
                   className="col-center"
                 ></th>,
-                ...columns.map((col) => (
+                ...visibleColumns.map((col) => (
                   <th
                     key={col.accessor}
                     style={{
@@ -1941,7 +2117,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
             {paginatedRecords.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length + 1}
+                  colSpan={visibleColumns.length + 1}
                   style={{
                     textAlign: "center",
                     padding: "40px",
@@ -1978,7 +2154,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         </button>
                       </td>
 
-                      {columns.map((col) => {
+                      {visibleColumns.map((col) => {
                         let cellVal: any;
                         let cellContent: React.ReactNode = "-";
                         let cellClass = "";
@@ -2038,7 +2214,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           cellClass = "col-center";
                         } else if (col.accessor === "boqChart") {
                           cellContent = (
-                            <BOQChartCell docketNo={record.docketNo} boqFileId={record.boqFileId} />
+                            <BOQChartCell docketNo={record.docketNo} boqFileId={record.boqFileId} tenderFilesJson={record.tenderFiles} />
                           );
                           cellClass = "col-center";
                         } else if (
@@ -2058,165 +2234,248 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           );
                           cellClass = "col-left text-pre-line";
                         } else if (
-                          col.accessor === "diffPercentFromL1" ||
-                          col.accessor === "diffPercentFromL2"
+                          col.accessor === "diffPercentFromL1"
                         ) {
-                          const diffField = col.accessor as
-                            | "diffPercentFromL1"
-                            | "diffPercentFromL2";
-                          const isSaving =
-                            !!savingKeys[`${record.id}::${diffField}`];
-                          const isEditing =
-                            editingDiffCell?.recordId === record.id &&
-                            editingDiffCell?.field === diffField;
-
-                          // Resolve current stored fraction (e.g. 0.065 = 6.5%). Normalise undefined → null.
-                          const currentVal: number | null =
-                            (overrides[record.id!]?.[diffField] !== undefined
-                              ? overrides[record.id!]![diffField]
-                              : (record[diffField] as number | null)) ?? null;
-
-                          // Display value in % units — multiply by 100 to match formatPercentage
-                          const pctVal =
-                            currentVal !== null
-                              ? parseFloat((currentVal * 100).toFixed(4))
-                              : null;
-
-                          if (readOnly) {
-                            const displayVal =
-                              pctVal !== null
-                                ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%`
-                                : "—";
+                          const isEditing = editingDiffL1Id === record.id;
+                          const isSaving = !!savingKeys[`${record.id}-diffL1`];
+                          const storedVal = record.diffPercentFromL1 as number | null;
+                          const pctVal = storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
+                          if (isEditing) {
                             cellContent = (
-                              <span className={`diff-value-text ${pctVal !== null && pctVal < 0 ? "diff-negative" : pctVal !== null ? "diff-positive" : ""}`}>
-                                {displayVal}
-                              </span>
-                            );
-                            cellClass = `col-right diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
-                          } else if (isEditing) {
-                            cellContent = (
-                              <div className="diff-edit-wrapper">
-                                {/* ± toggle button to flip the sign */}
-                                <button
-                                  type="button"
-                                  className="diff-sign-toggle"
-                                  title="Toggle positive / negative"
-                                  onMouseDown={(e) => {
-                                    // Use mousedown so it fires before input blur
-                                    e.preventDefault();
-                                    setEditingDiffValue((prev) => {
-                                      if (
-                                        prev.trim() === "" ||
-                                        prev.trim() === "-"
-                                      )
-                                        return prev;
-                                      return prev.startsWith("-")
-                                        ? prev.slice(1)
-                                        : "-" + prev;
-                                    });
-                                  }}
-                                >
-                                  ±
-                                </button>
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                                 <input
                                   type="number"
-                                  step="0.01"
-                                  className="diff-edit-input"
-                                  value={editingDiffValue}
+                                  step="any"
+                                  className="docket-edit-input"
+                                  value={diffL1EditValue}
                                   autoFocus
                                   placeholder="e.g. -6.5"
-                                  onChange={(e) =>
-                                    setEditingDiffValue(e.target.value)
-                                  }
-                                  onBlur={() =>
-                                    handleDiffUpdate(
-                                      record,
-                                      diffField,
-                                      editingDiffValue,
-                                    )
-                                  }
+                                  onChange={(e) => setDiffL1EditValue(e.target.value)}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") {
                                       e.preventDefault();
-                                      handleDiffUpdate(
-                                        record,
-                                        diffField,
-                                        editingDiffValue,
-                                      );
+                                      handleDiffSave(record, "diffPercentFromL1", diffL1EditValue, setEditingDiffL1Id, setDiffL1EditValue);
                                     } else if (e.key === "Escape") {
-                                      setEditingDiffCell(null);
+                                      setEditingDiffL1Id(null);
                                     }
                                   }}
                                 />
+                                <button
+                                  onClick={() => handleDiffSave(record, "diffPercentFromL1", diffL1EditValue, setEditingDiffL1Id, setDiffL1EditValue)}
+                                  disabled={isSaving}
+                                  className="docket-save-btn"
+                                  title="Save"
+                                >
+                                  <Check size={14} />
+                                </button>
                               </div>
                             );
+                            cellClass = "col-right col-editable diff-col";
                           } else {
-                            // Format: match formatPercentage — val*100 with 1 decimal place, + prefix for positives
-                            const displayVal =
-                              pctVal !== null
-                                ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%`
-                                : "—";
+                            const displayVal = pctVal !== null ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%` : "—";
                             cellContent = (
-                              <div
-                                className={`diff-cell-display ${isSaving ? "diff-saving" : ""} ${pctVal !== null && pctVal < 0 ? "diff-negative" : pctVal !== null ? "diff-positive" : ""}`}
-                                title={
-                                  !record.id
-                                    ? "No DB record ID — refresh to enable editing"
-                                    : `Click to edit (enter value in % e.g. ${pctVal !== null ? pctVal.toFixed(1) : "6.5"})`
-                                }
-                                onClick={() => {
-                                  if (!record.id || isSaving) return;
-                                  setEditingDiffCell({
-                                    recordId: record.id,
-                                    field: diffField,
-                                  });
-                                  // Seed input in % units, rounded to 4 decimal places to avoid float noise
-                                  setEditingDiffValue(
-                                    pctVal !== null ? String(pctVal) : "",
-                                  );
-                                }}
-                              >
-                                <span className="diff-value-text">
-                                  {isSaving ? "…" : displayVal}
-                                </span>
-                                {!isSaving && record.id && (
-                                  <span
-                                    className="diff-edit-pencil"
-                                    aria-hidden="true"
-                                  >
-                                    <Pencil size={12} />
-                                  </span>
-                                )}
+                              <span className="docket-display">
+                                {displayVal}
+                                {isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                              </span>
+                            );
+                            cellClass = `col-right col-editable diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
+                          }
+                        } else if (
+                          col.accessor === "diffPercentFromL2"
+                        ) {
+                          const isEditing = editingDiffL2Id === record.id;
+                          const isSaving = !!savingKeys[`${record.id}-diffL2`];
+                          const storedVal = record.diffPercentFromL2 as number | null;
+                          const pctVal = storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
+                          if (isEditing) {
+                            cellContent = (
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  className="docket-edit-input"
+                                  value={diffL2EditValue}
+                                  autoFocus
+                                  placeholder="e.g. -6.5"
+                                  onChange={(e) => setDiffL2EditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleDiffSave(record, "diffPercentFromL2", diffL2EditValue, setEditingDiffL2Id, setDiffL2EditValue);
+                                    } else if (e.key === "Escape") {
+                                      setEditingDiffL2Id(null);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => handleDiffSave(record, "diffPercentFromL2", diffL2EditValue, setEditingDiffL2Id, setDiffL2EditValue)}
+                                  disabled={isSaving}
+                                  className="docket-save-btn"
+                                  title="Save"
+                                >
+                                  <Check size={14} />
+                                </button>
                               </div>
                             );
-                          }
-                          if (!cellClass) {
+                            cellClass = "col-right col-editable diff-col";
+                          } else {
+                            const displayVal = pctVal !== null ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%` : "—";
+                            cellContent = (
+                              <span className="docket-display">
+                                {displayVal}
+                                {isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                              </span>
+                            );
                             cellClass = `col-right col-editable diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
                           }
                         } else if (col.accessor === "competitors") {
-                          const text =
+                          const compVal =
                             (record[
                               col.accessor as keyof EpcTenderRecord
                             ] as string) || "";
-                          cellContent = text ? (
-                            <div className="competitors-scroll-cell">
-                              {text}
-                            </div>
-                          ) : (
-                            <span>-</span>
-                          );
-                          cellClass = "col-left";
+                          const isEditingComp = editingCompetitorsId === record.id;
+                          const isSavingComp = !!savingKeys[`${record.id}-competitors`];
+                          if (isEditingComp) {
+                            cellContent = (
+                              <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}>
+                                <textarea
+                                  value={competitorsEditValue}
+                                  onChange={(e) => setCompetitorsEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && e.shiftKey) return;
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleCompetitorsSave(record);
+                                    } else if (e.key === "Escape") {
+                                      setEditingCompetitorsId(null);
+                                    }
+                                  }}
+                                  autoFocus
+                                  disabled={isSavingComp}
+                                  className="remarks-edit-textarea"
+                                  rows={3}
+                                  style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
+                                />
+                                <button
+                                  onClick={() => handleCompetitorsSave(record)}
+                                  disabled={isSavingComp}
+                                  className="docket-save-btn"
+                                  title="Save"
+                                  style={{ flexShrink: 0, marginTop: 2 }}
+                                >
+                                  <Check size={14} />
+                                </button>
+                              </div>
+                            );
+                            cellClass = "col-left col-editable";
+                          } else {
+                            cellContent = (
+                              <span className="docket-display" style={{ display: "block", width: "100%" }}>
+                                {compVal || "-"}
+                                {isSavingComp && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                              </span>
+                            );
+                            cellClass = "col-left col-editable";
+                          }
                         } else if (col.accessor === "remarks") {
-                          const text =
+                          const remarksVal =
                             (record[
                               col.accessor as keyof EpcTenderRecord
                             ] as string) || "";
-                          cellContent = text ? (
-                            <div className="remarks-scroll-cell">{text}</div>
-                          ) : (
-                            <span>-</span>
-                          );
-                          cellClass = "col-left";
+                          const isEditingRem = editingRemarksId === record.id;
+                          const isSavingRem = !!savingKeys[`${record.id}-remarks`];
+                          if (isEditingRem) {
+                            cellContent = (
+                              <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}>
+                                <textarea
+                                  value={remarksEditValue}
+                                  onChange={(e) => setRemarksEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && e.shiftKey) return;
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleRemarksSave(record);
+                                    } else if (e.key === "Escape") {
+                                      setEditingRemarksId(null);
+                                    }
+                                  }}
+                                  autoFocus
+                                  disabled={isSavingRem}
+                                  className="remarks-edit-textarea"
+                                  rows={3}
+                                  style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
+                                />
+                                <button
+                                  onClick={() => handleRemarksSave(record)}
+                                  disabled={isSavingRem}
+                                  className="docket-save-btn"
+                                  title="Save"
+                                  style={{ flexShrink: 0, marginTop: 2 }}
+                                >
+                                  <Check size={14} />
+                                </button>
+                              </div>
+                            );
+                            cellClass = "col-left col-editable";
+                          } else {
+                            cellContent = (
+                              <span className="docket-display" style={{ display: "block", width: "100%" }}>
+                                {remarksVal || "-"}
+                                {isSavingRem && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                              </span>
+                            );
+                            cellClass = "col-left col-editable";
+                          }
+                        } else if (col.accessor === "reason") {
+                          const reasonVal =
+                            (record[
+                              col.accessor as keyof EpcTenderRecord
+                            ] as string) || "";
+                          const isEditingReason = editingReasonId === record.id;
+                          const isSavingReason = !!savingKeys[`${record.id}-reason`];
+                          if (isEditingReason) {
+                            cellContent = (
+                              <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}>
+                                <textarea
+                                  value={reasonEditValue}
+                                  onChange={(e) => setReasonEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && e.shiftKey) return;
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleReasonSave(record);
+                                    } else if (e.key === "Escape") {
+                                      setEditingReasonId(null);
+                                    }
+                                  }}
+                                  autoFocus
+                                  disabled={isSavingReason}
+                                  className="remarks-edit-textarea"
+                                  rows={3}
+                                  style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
+                                />
+                                <button
+                                  onClick={() => handleReasonSave(record)}
+                                  disabled={isSavingReason}
+                                  className="docket-save-btn"
+                                  title="Save"
+                                  style={{ flexShrink: 0, marginTop: 2 }}
+                                >
+                                  <Check size={14} />
+                                </button>
+                              </div>
+                            );
+                            cellClass = "col-left col-editable";
+                          } else {
+                            cellContent = (
+                              <span className="docket-display" style={{ display: "block", width: "100%" }}>
+                                {reasonVal || "-"}
+                                {isSavingReason && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                              </span>
+                            );
+                            cellClass = "col-left col-editable";
+                          }
                         } else if (col.accessor === "tenderUpdateStatus") {
                           const statusValue =
                             overrides[record.id!]?.tenderUpdateStatus ??
@@ -2417,7 +2676,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               const isYes = participatedVal === true;
                               const isNo = participatedVal === false;
 
-                              if (readOnly) {
+                              if (readOnly && !editableColumns.includes("participated")) {
                                 cellContent = isYes ? (
                                   <span className="status-badge won" style={{ fontSize: "11px", padding: "2px 8px" }}>Yes</span>
                                 ) : isNo ? (
@@ -2598,12 +2857,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               const bgUtrVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
                               const isEditingBg = editingBgUtrId === record.id;
                               const isSavingBg = !!savingKeys[`${record.id}-bgUtr`];
-                              if (readOnly) {
-                                cellContent = (
-                                  <span>{bgUtrVal || "-"}</span>
-                                );
-                                cellClass = "";
-                              } else if (isEditingBg) {
+                              if (isEditingBg) {
                                 cellContent = (
                                   <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                                     <input
@@ -2639,7 +2893,39 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                   </span>
                                 );
                               }
-                              cellClass = readOnly ? "" : "col-editable";
+                              cellClass = "col-editable";
+                            } else if (col.accessor === "loiPoNoAndDate") {
+                              const loiPoVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditingLoi = editingLoiPoId === record.id;
+                              const isSavingLoi = !!savingKeys[`${record.id}-loiPo`];
+                              if (isEditingLoi) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input
+                                      type="text"
+                                      value={loiPoEditValue}
+                                      onChange={(e) => setLoiPoEditValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") { handleLoiPoSave(record); }
+                                        else if (e.key === "Escape") { setEditingLoiPoId(null); }
+                                      }}
+                                      autoFocus
+                                      disabled={isSavingLoi}
+                                      className="docket-edit-input"
+                                    />
+                                    <button onClick={() => handleLoiPoSave(record)} disabled={isSavingLoi} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                  </div>
+                                );
+                                cellClass = "col-editable";
+                              } else {
+                                cellContent = (
+                                  <span className="docket-display">
+                                    {loiPoVal || "-"}
+                                    {isSavingLoi && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                                  </span>
+                                );
+                                cellClass = "col-editable";
+                              }
                             } else {
                               cellContent =
                                 cellVal !== null && cellVal !== undefined
@@ -2662,14 +2948,60 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                       setDocketEditValue(cellVal != null ? String(cellVal) : "");
                                     }
                                   }
-                                : col.accessor === "bgNoUtrNo" && !readOnly && editingBgUtrId !== record.id
+                                : col.accessor === "bgNoUtrNo" && editingBgUtrId !== record.id
                                   ? () => {
                                       if (!savingKeys[`${record.id}-bgUtr`]) {
                                         setEditingBgUtrId(record.id!);
                                         setBgUtrEditValue(cellVal != null ? String(cellVal) : "");
                                       }
                                     }
-                                  : undefined
+                                  : col.accessor === "remarks" && editingRemarksId !== record.id
+                                    ? () => {
+                                        if (!savingKeys[`${record.id}-remarks`]) {
+                                          setEditingRemarksId(record.id!);
+                                          setRemarksEditValue(cellVal != null ? String(cellVal) : "");
+                                        }
+                                      }
+                                    : col.accessor === "diffPercentFromL1" && editingDiffL1Id !== record.id
+                                      ? () => {
+                                          if (!savingKeys[`${record.id}-diffL1`]) {
+                                            setEditingDiffL1Id(record.id!);
+                                            const storedL1 = record.diffPercentFromL1 as number | null;
+                                            const pct = storedL1 !== null ? parseFloat((storedL1 * 100).toFixed(4)) : null;
+                                            setDiffL1EditValue(pct !== null ? String(pct) : "");
+                                          }
+                                        }
+                                      : col.accessor === "diffPercentFromL2" && editingDiffL2Id !== record.id
+                                        ? () => {
+                                            if (!savingKeys[`${record.id}-diffL2`]) {
+                                              setEditingDiffL2Id(record.id!);
+                                              const storedL2 = record.diffPercentFromL2 as number | null;
+                                              const pct = storedL2 !== null ? parseFloat((storedL2 * 100).toFixed(4)) : null;
+                                              setDiffL2EditValue(pct !== null ? String(pct) : "");
+                                            }
+                                          }
+                                        : col.accessor === "loiPoNoAndDate" && editingLoiPoId !== record.id
+                                          ? () => {
+                                              if (!savingKeys[`${record.id}-loiPo`]) {
+                                                setEditingLoiPoId(record.id!);
+                                                setLoiPoEditValue(cellVal != null ? String(cellVal) : "");
+                                              }
+                                            }
+                                          : col.accessor === "competitors" && editingCompetitorsId !== record.id
+                                            ? () => {
+                                                if (!savingKeys[`${record.id}-competitors`]) {
+                                                  setEditingCompetitorsId(record.id!);
+                                                  setCompetitorsEditValue(cellVal != null ? String(cellVal) : "");
+                                                }
+                                              }
+                                            : col.accessor === "reason" && editingReasonId !== record.id
+                                              ? () => {
+                                                  if (!savingKeys[`${record.id}-reason`]) {
+                                                    setEditingReasonId(record.id!);
+                                                    setReasonEditValue(cellVal != null ? String(cellVal) : "");
+                                                  }
+                                                }
+                                              : undefined
                             }
                             title={
                               col.accessor !== "rawMaterials" &&
@@ -2689,7 +3021,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                     {/* Expandable Details Row */}
                     {isExpanded && (
                       <tr className="details-panel-row">
-                        <td colSpan={columns.length + 1}>
+                        <td colSpan={visibleColumns.length + 1}>
                           <div className="details-panel-content">
                             <div className="details-grid">
                               {/* 1. Name of Work / Item Description */}

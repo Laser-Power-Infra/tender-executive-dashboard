@@ -8,8 +8,8 @@ import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
 import { Eraser, ExternalLink } from "lucide-react";
 import "../Dashboard.css";
 
-export default function PostParticipation() {
-  const referenceDate = useMemo(() => new Date("2026-06-25T12:00:00"), []);
+export default function ParticipationDeadlineOver() {
+  const referenceDate = useMemo(() => new Date(), []);
   const tenderSliceData = useAppSelector((s) => s.tenders.data);
   const loadingTenders = useAppSelector((s) => s.tenders.loading);
   const postFilteredData = useMemo(() => {
@@ -17,7 +17,13 @@ export default function PostParticipation() {
     return {
       ...tenderSliceData,
       rows: tenderSliceData.rows.filter(
-        (r) => (r.apm === "YES") && r.participated === "true",
+        (r) => {
+          
+          const isNotParticipated = r.participated === "false";
+          const deadlineDate = r.deadline ? new Date(r.deadline) : null;
+          const isDeadlineOver = deadlineDate && deadlineDate < referenceDate;
+          return r.apm === "YES" &&isNotParticipated && !!isDeadlineOver;
+        },
       ),
     };
   }, [tenderSliceData]);
@@ -121,9 +127,9 @@ export default function PostParticipation() {
       <div className="dashboard-workspace">
         <header className="dashboard-top-header">
           <div className="header-brand">
-            <h1 className="brand-logo-text">LASERPOWER <span>POST PARTICIPATION</span></h1>
+            <h1 className="brand-logo-text">PARTICIPATION DEADLINE OVER</h1>
             <div className="brand-divider"></div>
-            <span className="brand-title">Post Participation Dashboard</span>
+            <span className="brand-title">Participation Deadline Over Dashboard</span>
           </div>
           <div className="header-actions">
             <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Eraser size={14} /> Clear Filters</button>

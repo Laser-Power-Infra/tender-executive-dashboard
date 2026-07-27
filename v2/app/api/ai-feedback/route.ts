@@ -21,6 +21,14 @@ export async function POST(request: NextRequest) {
     const { tenderId, tenderType, briefText, originalAi, correctedAi, feedbackReason } = body;
 
     if (!tenderId || !tenderType || !briefText || !originalAi || !correctedAi || !feedbackReason) {
+      console.log({
+        tenderId,
+        tenderType,
+        briefText,
+        originalAi,
+        correctedAi,
+        feedbackReason
+      })
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },
@@ -51,7 +59,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(feedback);
-  } catch {
+  } catch(error) {
+    console.error(error)
     return NextResponse.json(
       { error: "Failed to save feedback" },
       { status: 500 },

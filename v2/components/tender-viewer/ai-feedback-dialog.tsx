@@ -10,6 +10,7 @@ interface AiFeedbackDialogProps {
   isSaving: boolean;
   onSave: (params: {
     tenderMergedId: number;
+    tenderType: string;
     briefText: string;
     originalAi: string;
     correctedAi: string;
@@ -37,6 +38,7 @@ export default function AiFeedbackDialog({
     if (!feedbackReason.trim()) return;
     onSave({
       tenderMergedId: tenderId,
+      tenderType,
       briefText: tenderBrief,
       originalAi: isYes ? "YES" : "NO",
       correctedAi,
