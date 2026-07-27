@@ -741,6 +741,7 @@ model TenderMerged {
   resultAutomationError                   String?
 
   proposedErpItemName String?
+  competitors String?
 
   fileId Int
   file   File @relation(fields: [fileId], references: [id], onDelete: Cascade)
