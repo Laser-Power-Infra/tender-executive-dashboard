@@ -47,7 +47,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     bidValidityExpired: false,
     diffPercentFromL1: parseFloatOrNull(row.diffPercentFromL1),
     diffPercentFromL2: parseFloatOrNull(row.diffPercentFromL2),
-    reason: null,
+    reason: row.reason || null,
     finalRemarks: null,
     attachmentUrl: null,
     tenderFiles: row.tenderFiles || "",

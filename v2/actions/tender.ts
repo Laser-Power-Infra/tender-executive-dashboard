@@ -229,6 +229,29 @@ export async function updateRemarks(params: {
   }
 }
 
+export async function updateReason(params: {
+  tenderMergedId: number;
+  reason: string;
+}) {
+  console.log(`[action:updateReason] called with:`, params);
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { reason: params.reason },
+    });
+    console.log(`[action:updateReason] success for id=${params.tenderMergedId}`);
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated reason to "${params.reason}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(`[action:updateReason] ERROR for id=${params.tenderMergedId}:`, error);
+    throw new Error(error.message ?? "Failed to update reason");
+  }
+}
+
 export async function updateLoiPoNoAndDate(params: {
   tenderMergedId: number;
   loiPoNoAndDate: string;

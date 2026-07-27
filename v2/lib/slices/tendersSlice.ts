@@ -9,6 +9,7 @@ import {
   updateDocketNumber,
   updateBgNoUtrNo,
   updateRemarks,
+  updateReason,
   updateLoiPoNoAndDate,
   updateCompetitors,
   updateDiffPercentFromL1,
@@ -162,6 +163,14 @@ export const updateTenderRemarks = createAsyncThunk(
   "tenders/updateRemarks",
   async (params: { tenderMergedId: number; remarks: string; oldRemarks: string }) => {
     await updateRemarks({ tenderMergedId: params.tenderMergedId, remarks: params.remarks });
+    return params;
+  },
+);
+
+export const updateTenderReason = createAsyncThunk(
+  "tenders/updateReason",
+  async (params: { tenderMergedId: number; reason: string; oldReason: string }) => {
+    await updateReason({ tenderMergedId: params.tenderMergedId, reason: params.reason });
     return params;
   },
 );
@@ -577,6 +586,21 @@ export const tendersSlice = createSlice({
     builder.addCase(updateTenderCompetitors.rejected, (state, action) => {
       console.warn(`[redux] updateTenderCompetitors.rejected:`, action.error);
       state.updatingCells[`${action.meta.arg.tenderMergedId}-competitors`] = false;
+    });
+    // updateTenderReason
+    builder.addCase(updateTenderReason.pending, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-reason`] = true;
+    });
+    builder.addCase(updateTenderReason.fulfilled, (state, action) => {
+      const { tenderMergedId, reason } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-reason`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.reason = reason;
+      }
+    });
+    builder.addCase(updateTenderReason.rejected, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-reason`] = false;
     });
     // updateTenderDiffPercentFromL1
     builder.addCase(updateTenderDiffPercentFromL1.pending, (state, action) => {

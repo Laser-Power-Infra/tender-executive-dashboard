@@ -419,6 +419,12 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
             : Number(valB) - Number(valA);
         }
 
+        const numA = typeof valA === "string" ? parseFloat(valA) : NaN;
+        const numB = typeof valB === "string" ? parseFloat(valB) : NaN;
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return sortDirection === "asc" ? numA - numB : numB - numA;
+        }
+
         return sortDirection === "asc"
           ? String(valA).localeCompare(String(valB))
           : String(valB).localeCompare(String(valA));

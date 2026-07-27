@@ -510,6 +510,10 @@ export default function Dashboard() {
           header: "Size",
           accessor: col as keyof Record<string, unknown>,
           defaultWidth: 120,
+          sortValue: (value: unknown) => {
+            const num = parseFloat(String(value ?? ""));
+            return isNaN(num) ? String(value ?? "") : num;
+          },
           filter: {
             type: "select" as const,
             options: [

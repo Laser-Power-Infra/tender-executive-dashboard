@@ -7,7 +7,7 @@ import {
 } from "@/types/tender";
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
-import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell } from "@/lib/slices/tendersSlice";
+import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell } from "@/lib/slices/tendersSlice";
 import {
   Search,
   X,
@@ -25,6 +25,7 @@ import {
   Circle,
   AlertTriangle,
   Loader2,
+  RotateCcw,
 } from "lucide-react";
 import "./TenderTable.css";
 
@@ -198,6 +199,7 @@ interface TenderTableProps {
   clearTrigger?: number;
   readOnly?: boolean;
   showPostParticipationColumns?: boolean;
+  editableColumns?: string[];
 }
 
 interface ColumnDef {
@@ -232,6 +234,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   clearTrigger,
   readOnly = false,
   showPostParticipationColumns = false,
+  editableColumns = [],
 }) => {
   // 1. Column Definitions
   const columns: ColumnDef[] = [
@@ -376,6 +379,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "boolean",
     },
     {
+      header: "Reason for not participation",
+      accessor: "reason",
+      defaultWidth: 250,
+      align: "left",
+      type: "string",
+    },
+    {
       header: "Prep By",
       accessor: "tenderPrepareBy",
       defaultWidth: 120,
@@ -485,6 +495,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [loiPoEditValue, setLoiPoEditValue] = useState<string>("");
   const [editingCompetitorsId, setEditingCompetitorsId] = useState<string | null>(null);
   const [competitorsEditValue, setCompetitorsEditValue] = useState<string>("");
+  const [editingReasonId, setEditingReasonId] = useState<string | null>(null);
+  const [reasonEditValue, setReasonEditValue] = useState<string>("");
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -759,6 +771,46 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         });
     },
     [dispatch, competitorsEditValue],
+  );
+
+  const handleReasonSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        showToast("Database record ID not found. Please refresh.", "error");
+        return;
+      }
+      const newVal = reasonEditValue.trim();
+      const oldVal = record.reason ?? "";
+      if (newVal === oldVal) {
+        setEditingReasonId(null);
+        return;
+      }
+      const key = `${record.id}-reason`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      dispatch(
+        updateTenderReason({
+          tenderMergedId: Number(record.id),
+          reason: newVal,
+          oldReason: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          showToast("Reason updated!", "success");
+        })
+        .catch((err: any) => {
+          showToast(err?.message || "Failed to update reason.", "error");
+        })
+        .finally(() => {
+          setEditingReasonId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, reasonEditValue],
   );
 
   const showToast = (
@@ -1509,6 +1561,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     setCurrentPage(1); // Reset to first page when sorting changes
   };
 
+  const handleClearSort = () => {
+    setSortColumn(null);
+    setSortDirection("desc");
+    setCurrentPage(1);
+  };
+
   // Toggle Row Expansion
   const toggleRowExpansion = (slNo: number) => {
     setExpandedRows((prev) => ({
@@ -1567,68 +1625,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         }
 
         return true;
-      });
-    }
-
-    // Sorting
-    if (sortColumn) {
-      result.sort((a, b) => {
-        let valA: any;
-        let valB: any;
-
-        if (sortColumn === "rawMaterials") {
-          const materialFields = [
-            "aluminiumPrice", "aluminiumAlloyPrice", "copperTapePrice",
-            "extrudedSemiconductivePrice", "htXlpePrice", "pvcTypeSt2Price",
-            "galvanisedSteelFlatStripPrice", "fillerPrice",
-          ] as const;
-          valA = materialFields.reduce(
-            (sum, f) => sum + (typeof a[f as keyof EpcTenderRecord] === "number" ? (a[f as keyof EpcTenderRecord] as number) : 0), 0,
-          );
-          valB = materialFields.reduce(
-            (sum, f) => sum + (typeof b[f as keyof EpcTenderRecord] === "number" ? (b[f as keyof EpcTenderRecord] as number) : 0), 0,
-          );
-        } else if (sortColumn === "files") {
-          valA = a.fileCount !== undefined ? a.fileCount : 0;
-          valB = b.fileCount !== undefined ? b.fileCount : 0;
-        } else if (sortColumn === "boqChart") {
-          valA = a.hasBoqChart ? 1 : 0;
-          valB = b.hasBoqChart ? 1 : 0;
-        } else if (sortColumn === "attachmentUrl") {
-          const getHasCosting = (r: EpcTenderRecord) => {
-            if (!r.tenderFiles) return 0;
-            try {
-              const files: Array<{ tags: string[] }> = JSON.parse(r.tenderFiles);
-              return files.some((f) => f.tags?.includes("costingAttachment")) ? 1 : 0;
-            } catch { return 0; }
-          };
-          valA = getHasCosting(a);
-          valB = getHasCosting(b);
-        } else {
-          valA = a[sortColumn as keyof EpcTenderRecord];
-          valB = b[sortColumn as keyof EpcTenderRecord];
-        }
-
-        if (valA === valB) return 0;
-        if (valA === null || valA === undefined)
-          return sortDirection === "asc" ? -1 : 1;
-        if (valB === null || valB === undefined)
-          return sortDirection === "asc" ? 1 : -1;
-
-        if (valA instanceof Date && valB instanceof Date) {
-          return sortDirection === "asc"
-            ? valA.getTime() - valB.getTime()
-            : valB.getTime() - valA.getTime();
-        }
-
-        if (typeof valA === "number" && typeof valB === "number") {
-          return sortDirection === "asc" ? valA - valB : valB - valA;
-        }
-
-        // Default String compare
-        return sortDirection === "asc"
-          ? String(valA).localeCompare(String(valB))
-          : String(valB).localeCompare(String(valA));
       });
     }
 
@@ -1825,6 +1821,88 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       );
     }
 
+    // Sorting — applied last on the fully filtered set so order is definitive
+    if (sortColumn) {
+      result.sort((a, b) => {
+        let valA: any;
+        let valB: any;
+
+        if (sortColumn === "rawMaterials") {
+          const materialFields = [
+            "aluminiumPrice", "aluminiumAlloyPrice", "copperTapePrice",
+            "extrudedSemiconductivePrice", "htXlpePrice", "pvcTypeSt2Price",
+            "galvanisedSteelFlatStripPrice", "fillerPrice",
+          ] as const;
+          valA = materialFields.reduce(
+            (sum, f) => sum + (typeof a[f as keyof EpcTenderRecord] === "number" ? (a[f as keyof EpcTenderRecord] as number) : 0), 0,
+          );
+          valB = materialFields.reduce(
+            (sum, f) => sum + (typeof b[f as keyof EpcTenderRecord] === "number" ? (b[f as keyof EpcTenderRecord] as number) : 0), 0,
+          );
+        } else if (sortColumn === "files") {
+          const getFileCount = (r: EpcTenderRecord) => {
+            if (!r.tenderFiles) return 0;
+            try {
+              const files = JSON.parse(r.tenderFiles);
+              return Array.isArray(files) ? files.length : 0;
+            } catch { return 0; }
+          };
+          valA = getFileCount(a);
+          valB = getFileCount(b);
+        } else if (sortColumn === "boqChart") {
+          const getHasBoq = (r: EpcTenderRecord) => {
+            if (r.boqFileId) return 1;
+            if (!r.tenderFiles) return 0;
+            try {
+              const files: Array<{ name: string; tags: string[] }> = JSON.parse(r.tenderFiles);
+              return files.some((f) => {
+                const lower = (f.name || "").toLowerCase();
+                return lower.includes("boqcomparativechart") ||
+                       lower.includes("boq_comparative") ||
+                       lower.includes("boq comparative") ||
+                       f.tags?.includes("boqComparativeChart");
+              }) ? 1 : 0;
+            } catch { return 0; }
+          };
+          valA = getHasBoq(a);
+          valB = getHasBoq(b);
+        } else if (sortColumn === "attachmentUrl") {
+          const getHasCosting = (r: EpcTenderRecord) => {
+            if (!r.tenderFiles) return 0;
+            try {
+              const files: Array<{ tags: string[] }> = JSON.parse(r.tenderFiles);
+              return files.some((f) => f.tags?.includes("costingAttachment")) ? 1 : 0;
+            } catch { return 0; }
+          };
+          valA = getHasCosting(a);
+          valB = getHasCosting(b);
+        } else {
+          valA = a[sortColumn as keyof EpcTenderRecord];
+          valB = b[sortColumn as keyof EpcTenderRecord];
+        }
+
+        if (valA === valB) return 0;
+        if (valA === null || valA === undefined)
+          return sortDirection === "asc" ? -1 : 1;
+        if (valB === null || valB === undefined)
+          return sortDirection === "asc" ? 1 : -1;
+
+        if (valA instanceof Date && valB instanceof Date) {
+          return sortDirection === "asc"
+            ? valA.getTime() - valB.getTime()
+            : valB.getTime() - valA.getTime();
+        }
+
+        if (typeof valA === "number" && typeof valB === "number") {
+          return sortDirection === "asc" ? valA - valB : valB - valA;
+        }
+
+        return sortDirection === "asc"
+          ? String(valA).localeCompare(String(valB))
+          : String(valB).localeCompare(String(valA));
+      });
+    }
+
     return result;
   }, [
     records,
@@ -1862,10 +1940,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     return processedRecords.slice(startIndex, startIndex + rowsPerPage);
   }, [processedRecords, activePage, rowsPerPage]);
 
-  // Reset page when search, date filters, or row limit changes
+  // Reset page when search, sort, date filters, or row limit changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [globalSearch, rowsPerPage, startDate, endDate]);
+  }, [globalSearch, sortColumn, sortDirection, rowsPerPage, startDate, endDate]);
 
   // 7. Scrolling is managed natively by the browser's layout engine
 
@@ -2136,6 +2214,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           </div>
         </div>
         <div className="toolbar-right">
+          {sortColumn && (
+            <button
+              className="export-btn"
+              onClick={handleClearSort}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <RotateCcw size={14} /> Clear Sort
+            </button>
+          )}
           <button
             className="export-btn"
             onClick={handleExportCSV}
@@ -2957,6 +3044,55 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             );
                             cellClass = "col-left col-editable";
                           }
+                        } else if (col.accessor === "reason") {
+                          const reasonVal =
+                            (record[
+                              col.accessor as keyof EpcTenderRecord
+                            ] as string) || "";
+                          const isEditingReason = editingReasonId === record.id;
+                          const isSavingReason = !!savingKeys[`${record.id}-reason`];
+                          if (isEditingReason) {
+                            cellContent = (
+                              <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}>
+                                <textarea
+                                  value={reasonEditValue}
+                                  onChange={(e) => setReasonEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && e.shiftKey) return;
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleReasonSave(record);
+                                    } else if (e.key === "Escape") {
+                                      setEditingReasonId(null);
+                                    }
+                                  }}
+                                  autoFocus
+                                  disabled={isSavingReason}
+                                  className="remarks-edit-textarea"
+                                  rows={3}
+                                  style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
+                                />
+                                <button
+                                  onClick={() => handleReasonSave(record)}
+                                  disabled={isSavingReason}
+                                  className="docket-save-btn"
+                                  title="Save"
+                                  style={{ flexShrink: 0, marginTop: 2 }}
+                                >
+                                  <Check size={14} />
+                                </button>
+                              </div>
+                            );
+                            cellClass = "col-left col-editable";
+                          } else {
+                            cellContent = (
+                              <span className="docket-display" style={{ display: "block", width: "100%" }}>
+                                {reasonVal || "-"}
+                                {isSavingReason && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                              </span>
+                            );
+                            cellClass = "col-left col-editable";
+                          }
                         } else if (col.accessor === "tenderUpdateStatus") {
                           const statusValue =
                             overrides[record.id!]?.tenderUpdateStatus ??
@@ -3157,7 +3293,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               const isYes = participatedVal === true;
                               const isNo = participatedVal === false;
 
-                              if (readOnly) {
+                              if (readOnly && !editableColumns.includes("participated")) {
                                 cellContent = isYes ? (
                                   <span className="status-badge won" style={{ fontSize: "11px", padding: "2px 8px" }}>Yes</span>
                                 ) : isNo ? (
@@ -3475,7 +3611,14 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                                   setCompetitorsEditValue(cellVal != null ? String(cellVal) : "");
                                                 }
                                               }
-                                            : undefined
+                                            : col.accessor === "reason" && editingReasonId !== record.id
+                                              ? () => {
+                                                  if (!savingKeys[`${record.id}-reason`]) {
+                                                    setEditingReasonId(record.id!);
+                                                    setReasonEditValue(cellVal != null ? String(cellVal) : "");
+                                                  }
+                                                }
+                                              : undefined
                             }
                             title={
                               col.accessor !== "rawMaterials" &&
