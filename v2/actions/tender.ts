@@ -229,6 +229,29 @@ export async function updateRemarks(params: {
   }
 }
 
+export async function updateBeneficiaryBankDetails(params: {
+  tenderMergedId: number;
+  beneficiaryBankDetails: string;
+}) {
+  console.log(`[action:updateBeneficiaryBankDetails] called with:`, params);
+  try {
+    await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { beneficiaryBankDetails: params.beneficiaryBankDetails },
+    });
+    console.log(`[action:updateBeneficiaryBankDetails] success for id=${params.tenderMergedId}`);
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(params.tenderMergedId),
+      details: `Updated beneficiary bank details to "${params.beneficiaryBankDetails}" on tender #${params.tenderMergedId}`,
+    });
+  } catch (error: any) {
+    console.error(`[action:updateBeneficiaryBankDetails] ERROR for id=${params.tenderMergedId}:`, error);
+    throw new Error(error.message ?? "Failed to update beneficiary bank details");
+  }
+}
+
 export async function updateReason(params: {
   tenderMergedId: number;
   reason: string;

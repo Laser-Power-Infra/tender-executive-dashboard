@@ -14,6 +14,7 @@ import {
   updateCompetitors,
   updateDiffPercentFromL1,
   updateDiffPercentFromL2,
+  updateBeneficiaryBankDetails,
 } from "@/actions/tender";
 import { importEpcTendersAction } from "@/actions/importEpcTenders";
 import { analyzeTenderValidity, saveAiRelevance } from "@/actions/ai-analysis";
@@ -163,6 +164,14 @@ export const updateTenderRemarks = createAsyncThunk(
   "tenders/updateRemarks",
   async (params: { tenderMergedId: number; remarks: string; oldRemarks: string }) => {
     await updateRemarks({ tenderMergedId: params.tenderMergedId, remarks: params.remarks });
+    return params;
+  },
+);
+
+export const updateTenderBeneficiaryBankDetails = createAsyncThunk(
+  "tenders/updateBeneficiaryBankDetails",
+  async (params: { tenderMergedId: number; beneficiaryBankDetails: string; oldBeneficiaryBankDetails: string }) => {
+    await updateBeneficiaryBankDetails({ tenderMergedId: params.tenderMergedId, beneficiaryBankDetails: params.beneficiaryBankDetails });
     return params;
   },
 );
@@ -568,6 +577,23 @@ export const tendersSlice = createSlice({
     builder.addCase(updateTenderRemarks.rejected, (state, action) => {
       console.warn(`[redux] updateTenderRemarks.rejected:`, action.error);
       state.updatingCells[`${action.meta.arg.tenderMergedId}-remarks`] = false;
+    });
+    // updateTenderBeneficiaryBankDetails
+    builder.addCase(updateTenderBeneficiaryBankDetails.pending, (state, action) => {
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-beneficiaryBankDetails`] = true;
+    });
+    builder.addCase(updateTenderBeneficiaryBankDetails.fulfilled, (state, action) => {
+      const { tenderMergedId, beneficiaryBankDetails } = action.meta.arg;
+      console.log(`[redux] updateTenderBeneficiaryBankDetails.fulfilled id=${tenderMergedId} value="${beneficiaryBankDetails}"`);
+      state.updatingCells[`${tenderMergedId}-beneficiaryBankDetails`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row.beneficiaryBankDetails = beneficiaryBankDetails;
+      }
+    });
+    builder.addCase(updateTenderBeneficiaryBankDetails.rejected, (state, action) => {
+      console.warn(`[redux] updateTenderBeneficiaryBankDetails.rejected:`, action.error);
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-beneficiaryBankDetails`] = false;
     });
     // updateTenderLoiPoNoAndDate
     builder.addCase(updateTenderLoiPoNoAndDate.pending, (state, action) => {

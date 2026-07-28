@@ -7,7 +7,7 @@ import {
 } from "@/types/tender";
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
-import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell } from "@/lib/slices/tendersSlice";
+import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell } from "@/lib/slices/tendersSlice";
 import { toast } from "sonner";
 import {
   Search,
@@ -516,6 +516,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [competitorsEditValue, setCompetitorsEditValue] = useState<string>("");
   const [editingReasonId, setEditingReasonId] = useState<string | null>(null);
   const [reasonEditValue, setReasonEditValue] = useState<string>("");
+  const [editingBankDetailsId, setEditingBankDetailsId] = useState<string | null>(null);
+  const [bankDetailsEditValue, setBankDetailsEditValue] = useState<string>("");
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -642,6 +644,47 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         });
     },
     [dispatch, remarksEditValue],
+  );
+
+  const handleBankDetailsSave = useCallback(
+    (record: EpcTenderRecord) => {
+      if (!record.id) {
+        toast.error("Database record ID not found. Please refresh.");
+        return;
+      }
+      const newVal = bankDetailsEditValue.trim();
+      const oldVal = record.beneficiaryBankDetails ?? "";
+      if (newVal === oldVal) {
+        setEditingBankDetailsId(null);
+        return;
+      }
+      const key = `${record.id}-bankDetails`;
+      setSavingKeys((prev) => ({ ...prev, [key]: true }));
+      console.log(`[save:bankDetails] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
+      dispatch(
+        updateTenderBeneficiaryBankDetails({
+          tenderMergedId: Number(record.id),
+          beneficiaryBankDetails: newVal,
+          oldBeneficiaryBankDetails: oldVal,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          toast.success("Bank details updated!");
+        })
+        .catch((err: any) => {
+          toast.error(err?.message || "Failed to update bank details.");
+        })
+        .finally(() => {
+          setEditingBankDetailsId(null);
+          setSavingKeys((prev) => {
+            const copy = { ...prev };
+            delete copy[key];
+            return copy;
+          });
+        });
+    },
+    [dispatch, bankDetailsEditValue],
   );
 
   const handleDiffSave = async (
@@ -2905,6 +2948,47 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 );
                                 cellClass = "col-editable";
                               }
+                            } else if (col.accessor === "beneficiaryBankDetails") {
+                              const bankVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditingBank = editingBankDetailsId === record.id;
+                              const isSavingBank = !!savingKeys[`${record.id}-bankDetails`];
+                              if (isEditingBank) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input
+                                      type="text"
+                                      value={bankDetailsEditValue}
+                                      onChange={(e) => setBankDetailsEditValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          handleBankDetailsSave(record);
+                                        } else if (e.key === "Escape") {
+                                          setEditingBankDetailsId(null);
+                                        }
+                                      }}
+                                      autoFocus
+                                      disabled={isSavingBank}
+                                      className="docket-edit-input"
+                                    />
+                                    <button
+                                      onClick={() => handleBankDetailsSave(record)}
+                                      disabled={isSavingBank}
+                                      className="docket-save-btn"
+                                      title="Save"
+                                    >
+                                      <Check size={14} />
+                                    </button>
+                                  </div>
+                                );
+                              } else {
+                                cellContent = (
+                                  <span className="docket-display">
+                                    {bankVal || "-"}
+                                    {isSavingBank && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
+                                  </span>
+                                );
+                              }
+                              cellClass = "col-editable";
                             } else {
                               cellContent =
                                 cellVal !== null && cellVal !== undefined
@@ -2973,14 +3057,21 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                                   setCompetitorsEditValue(cellVal != null ? String(cellVal) : "");
                                                 }
                                               }
-                                            : col.accessor === "reason" && editingReasonId !== record.id
-                                              ? () => {
-                                                  if (!savingKeys[`${record.id}-reason`]) {
-                                                    setEditingReasonId(record.id!);
-                                                    setReasonEditValue(cellVal != null ? String(cellVal) : "");
-                                                  }
-                                                }
-                                              : undefined
+                                             : col.accessor === "reason" && editingReasonId !== record.id
+                                               ? () => {
+                                                   if (!savingKeys[`${record.id}-reason`]) {
+                                                     setEditingReasonId(record.id!);
+                                                     setReasonEditValue(cellVal != null ? String(cellVal) : "");
+                                                   }
+                                                 }
+                                               : col.accessor === "beneficiaryBankDetails" && editingBankDetailsId !== record.id
+                                                 ? () => {
+                                                     if (!savingKeys[`${record.id}-bankDetails`]) {
+                                                       setEditingBankDetailsId(record.id!);
+                                                       setBankDetailsEditValue(cellVal != null ? String(cellVal) : "");
+                                                     }
+                                                   }
+                                                 : undefined
                             }
                             title={
                               col.accessor !== "rawMaterials" &&
