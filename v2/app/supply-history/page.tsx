@@ -4,7 +4,7 @@ import { useSupplyHistory } from "@/hooks/useSupplyHistory";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
 // import { Package, RefreshCw, Eraser, ExternalLink, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
-import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText, ExternalLink } from "lucide-react";
+import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText, ExternalLink, Download } from "lucide-react";
 import { toast } from "sonner";
 import "@/app/SupplyHistory.css";
 
@@ -105,6 +105,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [selectedBillNo, setSelectedBillNo] = useState<string | null>(null);
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [indexing, setIndexing] = useState(false);
+  const [downloadingDocs, setDownloadingDocs] = useState(false);
 
   type CertState =
     | { status: "idle" }
@@ -406,6 +407,43 @@ export const SupplyHistoryDashboard: React.FC = () => {
     }
   };
 
+  const handleDownloadAllDocuments = useCallback(async () => {
+    const withDocs = filtered.filter(r => r.hasDocuments && r.saleBillNumber);
+    if (withDocs.length === 0) {
+      toast.info("No document records found in current view");
+      return;
+    }
+
+    const driveOnly = filtered.filter(r => !r.hasDocuments && r.attachmentUrl);
+    const billNumbers = withDocs.map(r => r.saleBillNumber!).filter(Boolean);
+
+    setDownloadingDocs(true);
+    try {
+      const res = await fetch("/api/supply-history/download-documents-zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE" },
+        body: JSON.stringify({ saleBillNumbers: billNumbers }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Download failed" }));
+        throw new Error(err.error || "Download failed");
+      }
+
+      const blob = await res.blob();
+      const date = new Date().toISOString().split("T")[0];
+      triggerDownload(blob, `Supply_Documents_${date}.zip`);
+
+      if (driveOnly.length > 0) {
+        toast.info(`${driveOnly.length} record(s) with only Google Drive documents were excluded from the zip`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download documents");
+    } finally {
+      setDownloadingDocs(false);
+    }
+  }, [filtered, triggerDownload]);
+
   const handleExportExcel = () => {
     const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
     const tableRows = sorted.map(rec => {
@@ -543,6 +581,14 @@ export const SupplyHistoryDashboard: React.FC = () => {
             </button>
             <button className="export-excel-btn" onClick={handleExportExcel} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
               <FileSpreadsheet size={14} /> Export Excel
+            </button>
+            <button
+              className="export-excel-btn"
+              onClick={handleDownloadAllDocuments}
+              disabled={downloadingDocs}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {downloadingDocs ? <><RefreshCw size={14} /> Zipping...</> : <><Download size={14} /> Download All Docs</>}
             </button>
             <button
               className="clear-filters-btn"

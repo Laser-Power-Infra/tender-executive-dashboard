@@ -3,6 +3,7 @@ import path from "path";
 import { indexFolderFiles } from "@/services/fileIndexer";
 import { encryptPath, decryptPath } from "@/lib/fileCrypto";
 import { extractNumericDocket } from "@/lib/extractNumericDocket";
+import { prisma } from "@/lib/prisma";
 import type {
   FileResponse,
   DocketFilesResponse,
@@ -33,6 +34,15 @@ if (process.env.CONDUTOR_PATH) {
 
 function normalizeDrive(p: string): string {
   return p.replace(/^[a-zA-Z]:\\/, (m) => m.toUpperCase());
+}
+
+function resolveSupplyPath(storedPath: string): string {
+  const supplyRoot = process.env.SUPPLY_NETWORK_PATH;
+  if (!supplyRoot) return storedPath;
+  const driveMatch = storedPath.match(/^[a-zA-Z]:\\/);
+  if (!driveMatch) return storedPath;
+  const normalizedRoot = supplyRoot.replace(/\\+$/, '') + '\\';
+  return normalizedRoot + storedPath.substring(3);
 }
 
 function verifyPathSafety(absolutePath: string): void {
@@ -183,7 +193,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = path.resolve(decryptPath(fileId));
+      const absolutePath = path.resolve(resolveSupplyPath(decryptPath(fileId)));
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {
@@ -221,7 +231,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = path.resolve(decryptPath(fileId));
+      const absolutePath = path.resolve(resolveSupplyPath(decryptPath(fileId)));
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {
@@ -263,45 +273,23 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const dbPath = path.resolve(
-        process.cwd(),
-        "data",
-        "supply_document_index.json",
-      );
-      if (!fs.existsSync(dbPath)) {
-        return { saleBillNumber, files: [] };
-      }
+      const docs = await prisma.supplyDoc.findMany({
+        where: { saleBillNumber: saleBillNumber.trim().toUpperCase() },
+        orderBy: { fileName: "asc" },
+      });
 
-      const index = JSON.parse(await fs.promises.readFile(dbPath, "utf-8"));
-      const match = index[saleBillNumber.trim().toUpperCase()];
-
-      if (!match || !match.folderPath) {
-        return { saleBillNumber, files: [] };
-      }
-
-      verifyPathSafety(match.folderPath);
-
-      const scanResults = await indexFolderFiles(match.folderPath);
-
-      const filesWithSecureIds: FileResponse[] = scanResults.files.map((f) => ({
-        fileId: encryptPath(f.absolutePath),
-        filename: f.filename,
-        extension: f.extension,
-        size: f.size,
-        lastModified: f.modifiedDate,
-        relativePath: f.relativePath,
+      const files: FileResponse[] = docs.map((d) => ({
+        fileId: encryptPath(resolveSupplyPath(d.filePath)),
+        filename: d.fileName,
+        extension: d.extension,
+        size: d.fileSize ?? 0,
+        lastModified: d.lastModified?.getTime() ?? Date.now(),
+        relativePath: "",
       }));
 
-      return {
-        saleBillNumber,
-        folderPath: match.folderPath,
-        files: filesWithSecureIds,
-      };
+      return { saleBillNumber, files };
     } catch (err) {
       if ((err as { status?: number }).status) throw err;
-      // console.error(
-      //   `[API_ERROR] Failed to retrieve supply bill files: ${(err as Error).message}`,
-      // );
       throw { status: 500, error: (err as Error).message };
     }
   }

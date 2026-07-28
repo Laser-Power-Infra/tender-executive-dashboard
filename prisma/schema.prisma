@@ -66,3 +66,18 @@ model Tender {
   diffL1ManuallyEdited  Boolean @default(false)
   diffL2ManuallyEdited  Boolean @default(false)
 }
+model SupplyDoc {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  saleBillNumber String
+  fileName       String
+  extension      String
+  filePath       String        // raw absolute network path, encrypted at response time
+  fileSize       Int?
+  lastModified   DateTime?
+
+  @@index([saleBillNumber])
+  @@map("supply_docs")
+}

@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (!forceFresh) {
     try {
       const dbData = await DatabaseSupplyService.getAllSupplyHistory();
-      const withDocs = DatabaseSupplyService.enrichWithDocumentStatus(dbData);
+      const withDocs = await DatabaseSupplyService.enrichWithDocumentStatus(dbData);
       if (withDocs && withDocs.length > 0) {
         return NextResponse.json({ success: true, data: withDocs });
       }
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     } catch (err: any) {
       console.error("[API:GET /api/supply-history] DB upsert error:", err.message);
     }
-    const withDocs = DatabaseSupplyService.enrichWithDocumentStatus(records);
+    const withDocs = await DatabaseSupplyService.enrichWithDocumentStatus(records);
     console.log(`[API:GET /api/supply-history] Fetched ${withDocs.length} records from Google Sheets`);
     return NextResponse.json({ success: true, data: withDocs });
   } catch (err: any) {
