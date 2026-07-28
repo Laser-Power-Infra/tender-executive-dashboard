@@ -13,6 +13,18 @@ function parseIntOrNull(val: string | undefined | null): number | null {
   return isNaN(n) ? null : n;
 }
 
+function resolveAssociationNames(
+  assignedTo: string | undefined,
+  associations: TenderData["associations"],
+): string {
+  if (!assignedTo) return "";
+  const ids = assignedTo.split(",").filter(Boolean);
+  const names = ids
+    .map((id) => associations.find((a) => a.id === parseInt(id, 10))?.name)
+    .filter(Boolean);
+  return names.join(", ");
+}
+
 export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTenderRecord[] {
   if (!tenderData) return [];
   return tenderData.rows.map((row, index) => ({
@@ -34,7 +46,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     contractPeriodDays: parseIntOrNull(row.contractPeriod),
     managementDecision: (row.apm || "Pending") as ManagementDecision,
     participated: row.participated === "true" ? true : row.participated === "false" ? false : null,
-    tenderPrepareBy: row.tenderPrepareBy || "",
+    tenderPrepareBy: resolveAssociationNames(row.assignedTo, tenderData.associations),
     currentStatus: row.currentStatus || "",
     tenderSubmittedDate: row.scrapedDate ? new Date(row.scrapedDate) : null,
     reverseAuctionApplicable: null,
@@ -73,5 +85,15 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     tenderUpdateStatus: undefined,
     nextAction: (row.nextAction || null) as NextAction | null,
     cva: null,
+    officeName: row.officeName || "",
+    consigneesReportingOfficer: row.consigneesReportingOfficer || "",
+    miiPurchasePreference: row.miiPurchasePreference || null,
+    website: row.website || null,
+    raQualificationRule: row.raQualificationRule || null,
+    startupExemption: row.startupExemption || null,
+    minimumAverageAnnualTurnover: row.minimumAverageAnnualTurnover || null,
+    yearsOfPastExperience: row.yearsOfPastExperience || null,
+    ePbgDurationMonths: row.ePbgDurationMonths || null,
+    reportings: row.reportings || "",
   }));
 }

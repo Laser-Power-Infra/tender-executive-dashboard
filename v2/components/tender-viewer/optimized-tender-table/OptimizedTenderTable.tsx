@@ -1186,7 +1186,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
                           >
                             <div
                               style={{
-                                maxHeight: 80,
+                                maxHeight: 160,
                                 overflowY: "auto",
                                 whiteSpace: "normal",
                               }}

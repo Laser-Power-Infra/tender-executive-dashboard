@@ -3,26 +3,30 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
-interface WebsiteEditDialogProps {
+interface MergedOfficeEditDialogProps {
   row: Record<string, unknown>;
   isSaving: boolean;
   onSave: (params: {
     tenderMergedId: number;
-    website: string;
-    oldValue: string;
+    officeName: string;
+    consigneesReportingOfficer: string;
+    oldOfficeName: string;
+    oldConsignees: string;
   }) => void;
   onClose: () => void;
 }
 
-export default function WebsiteEditDialog({
+export default function MergedOfficeEditDialog({
   row,
   isSaving,
   onSave,
   onClose,
-}: WebsiteEditDialogProps) {
-  const currentWebsite = String(row.website ?? "");
-  const [website, setWebsite] = useState(currentWebsite);
-  const organization = String(row.organization ?? row.nameOfTheClient ?? "");
+}: MergedOfficeEditDialogProps) {
+  const currentOfficeName = String(row.officeName ?? "");
+  const currentConsignees = String(row.consigneesReportingOfficer ?? "");
+  const [officeName, setOfficeName] = useState(currentOfficeName);
+  const [consignees, setConsignees] = useState(currentConsignees);
+  const organization = String(row.organization ?? "");
   const tenderBrief = String(row.tenderBrief ?? "");
 
   const briefPreview =
@@ -31,25 +35,25 @@ export default function WebsiteEditDialog({
       : tenderBrief;
 
   const handleSave = () => {
-    if (!website.trim()) return;
+    if (!officeName.trim() && !consignees.trim()) return;
     onSave({
       tenderMergedId: Number(row.id),
-      website: website.trim(),
-      oldValue: currentWebsite,
+      officeName: officeName.trim(),
+      consigneesReportingOfficer: consignees.trim(),
+      oldOfficeName: currentOfficeName,
+      oldConsignees: currentConsignees,
     });
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div
         className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-slate-800">
-            Edit Website URL
+            Edit Office Name @ Consignees
           </h3>
           <button
             onClick={onClose}
@@ -75,12 +79,23 @@ export default function WebsiteEditDialog({
           </div>
 
           <div>
-            <span className="text-slate-500 text-[11px]">WEBSITE URL</span>
+            <span className="text-slate-500 text-[11px]">OFFICE NAME</span>
             <input
-              type="url"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://example.com"
+              type="text"
+              value={officeName}
+              onChange={(e) => setOfficeName(e.target.value)}
+              placeholder="Office name"
+              className="mt-1 w-full border border-slate-200 rounded-md px-3 py-2 text-[13px] text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+
+          <div>
+            <span className="text-slate-500 text-[11px]">CONSIGNEES / REPORTING OFFICER</span>
+            <input
+              type="text"
+              value={consignees}
+              onChange={(e) => setConsignees(e.target.value)}
+              placeholder="Consignees or reporting officer"
               className="mt-1 w-full border border-slate-200 rounded-md px-3 py-2 text-[13px] text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
           </div>
@@ -95,11 +110,11 @@ export default function WebsiteEditDialog({
           </button>
           <button
             onClick={handleSave}
-            disabled={isSaving || !website.trim()}
+            disabled={isSaving || (!officeName.trim() && !consignees.trim())}
             className="px-4 py-1.5 text-[13px] text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
           >
             {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            Save Website
+            Save
           </button>
         </div>
       </div>
