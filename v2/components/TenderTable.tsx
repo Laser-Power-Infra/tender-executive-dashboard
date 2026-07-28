@@ -8,6 +8,7 @@ import {
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell } from "@/lib/slices/tendersSlice";
+import { toast } from "sonner";
 import {
   Search,
   X,
@@ -492,9 +493,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     >
   >({});
   const [savingKeys, setSavingKeys] = useState<Record<string, boolean>>({});
-  const [toasts, setToasts] = useState<
-    Array<{ id: string; message: string; type: "success" | "error" }>
-  >([]);
   const [editingDocketId, setEditingDocketId] = useState<string | null>(null);
   const [docketEditValue, setDocketEditValue] = useState<string>("");
   const [editingBgUtrId, setEditingBgUtrId] = useState<string | null>(null);
@@ -519,7 +517,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleDocketSave = useCallback(
     (record: EpcTenderRecord) => {
       if (!record.id) {
-        showToast("Database record ID not found. Please refresh.", "error");
+        toast.error("Database record ID not found. Please refresh.");
         return;
       }
       const newVal = docketEditValue.trim();
@@ -540,13 +538,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       )
         .unwrap()
         .then(() => {
-          showToast(`Docket ${newVal} updated successfully!`, "success");
+          toast.success(`Docket ${newVal} updated successfully!`);
         })
         .catch((err) => {
-          showToast(
-            err?.message || "Failed to update docket number.",
-            "error",
-          );
+          toast.error(err?.message || "Failed to update docket number.");
         })
         .finally(() => {
           setEditingDocketId(null);
@@ -563,7 +558,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleBgUtrSave = useCallback(
     (record: EpcTenderRecord) => {
       if (!record.id) {
-        showToast("Database record ID not found. Please refresh.", "error");
+        toast.error("Database record ID not found. Please refresh.");
         return;
       }
       const newVal = bgUtrEditValue.trim();
@@ -584,13 +579,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       )
         .unwrap()
         .then(() => {
-          showToast(`BG/UTR No updated successfully!`, "success");
+          toast.success(`BG/UTR No updated successfully!`);
         })
         .catch((err) => {
-          showToast(
-            err?.message || "Failed to update BG/UTR number.",
-            "error",
-          );
+          toast.error(err?.message || "Failed to update BG/UTR number.");
         })
         .finally(() => {
           setEditingBgUtrId(null);
@@ -607,7 +599,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleRemarksSave = useCallback(
     (record: EpcTenderRecord) => {
       if (!record.id) {
-        showToast("Database record ID not found. Please refresh.", "error");
+        toast.error("Database record ID not found. Please refresh.");
         return;
       }
       const newVal = remarksEditValue.trim();
@@ -628,13 +620,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       )
         .unwrap()
         .then(() => {
-          showToast(`Remarks updated successfully!`, "success");
+          toast.success(`Remarks updated successfully!`);
         })
         .catch((err: any) => {
-          showToast(
-            err?.message || "Failed to update remarks.",
-            "error",
-          );
+          toast.error(err?.message || "Failed to update remarks.");
         })
         .finally(() => {
           setEditingRemarksId(null);
@@ -656,13 +645,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     setEditValue: (v: string) => void,
   ) => {
     if (!record.id) {
-      showToast("Database record ID not found. Please refresh.", "error");
+      toast.error("Database record ID not found. Please refresh.");
       return;
     }
     const trimmed = rawValue.trim();
     const parsedNum = trimmed === "" ? null : parseFloat(trimmed);
     if (parsedNum !== null && isNaN(parsedNum)) {
-      showToast("Please enter a valid number.", "error");
+      toast.error("Please enter a valid number.");
       return;
     }
     const oldVal = (record[field] as number | null) ?? null;
@@ -689,10 +678,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       .unwrap()
       .then(() => {
         const label = field === "diffPercentFromL1" ? "Diff L1" : "Diff L2";
-        showToast(`${label} saved!`, "success");
+        toast.success(`${label} saved!`);
       })
       .catch((err: any) => {
-        showToast(err?.message || "Failed to save diff value.", "error");
+        toast.error(err?.message || "Failed to save diff value.");
       })
       .finally(() => {
         setEditingId(null);
@@ -708,7 +697,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleLoiPoSave = useCallback(
     (record: EpcTenderRecord) => {
       if (!record.id) {
-        showToast("Database record ID not found. Please refresh.", "error");
+        toast.error("Database record ID not found. Please refresh.");
         return;
       }
       const newVal = loiPoEditValue.trim();
@@ -729,10 +718,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       )
         .unwrap()
         .then(() => {
-          showToast("LOI/PO No updated!", "success");
+          toast.success("LOI/PO No updated!");
         })
         .catch((err: any) => {
-          showToast(err?.message || "Failed to update LOI/PO No.", "error");
+          toast.error(err?.message || "Failed to update LOI/PO No.");
         })
         .finally(() => {
           setEditingLoiPoId(null);
@@ -749,7 +738,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleCompetitorsSave = useCallback(
     (record: EpcTenderRecord) => {
       if (!record.id) {
-        showToast("Database record ID not found. Please refresh.", "error");
+        toast.error("Database record ID not found. Please refresh.");
         return;
       }
       const newVal = competitorsEditValue.trim();
@@ -770,10 +759,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       )
         .unwrap()
         .then(() => {
-          showToast("Competitors updated!", "success");
+          toast.success("Competitors updated!");
         })
         .catch((err: any) => {
-          showToast(err?.message || "Failed to update competitors.", "error");
+          toast.error(err?.message || "Failed to update competitors.");
         })
         .finally(() => {
           setEditingCompetitorsId(null);
@@ -790,7 +779,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleReasonSave = useCallback(
     (record: EpcTenderRecord) => {
       if (!record.id) {
-        showToast("Database record ID not found. Please refresh.", "error");
+        toast.error("Database record ID not found. Please refresh.");
         return;
       }
       const newVal = reasonEditValue.trim();
@@ -810,10 +799,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       )
         .unwrap()
         .then(() => {
-          showToast("Reason updated!", "success");
+          toast.success("Reason updated!");
         })
         .catch((err: any) => {
-          showToast(err?.message || "Failed to update reason.", "error");
+          toast.error(err?.message || "Failed to update reason.");
         })
         .finally(() => {
           setEditingReasonId(null);
@@ -827,27 +816,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     [dispatch, reasonEditValue],
   );
 
-  const showToast = (
-    message: string,
-    type: "success" | "error" = "success",
-  ) => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  };
-
   const handleUpdate = async (
     record: EpcTenderRecord,
     field: "tenderUpdateStatus" | "nextAction" | "reverseAuctionApplicable",
     value: any,
   ) => {
     if (!record.id) {
-      showToast(
-        "Database record ID is not found. Please refresh and try again.",
-        "error",
-      );
+      toast.error("Database record ID is not found. Please refresh and try again.");
       return;
     }
     const key = `${record.id}::${field}`;
@@ -903,7 +878,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         throw new Error(errorData.error || "Failed to update tender");
       }
 
-      showToast(`Tender ${record.docketNo} updated successfully!`, "success");
+      toast.success(`Tender ${record.docketNo} updated successfully!`);
     } catch (err: any) {
       console.error(err);
       setOverrides((prev) => ({
@@ -913,10 +888,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           [field]: previousValue,
         },
       }));
-      showToast(
-        err.message || "Failed to save tender updates. Reverting changes.",
-        "error",
-      );
+      toast.error(err.message || "Failed to save tender updates. Reverting changes.");
     } finally {
       setSavingKeys((prev) => {
         const copy = { ...prev };
@@ -3281,33 +3253,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         files={selectedFiles}
       />
 
-      {/* Premium Toast Overlay */}
-      <div className="premium-toast-container">
-        {toasts.map((t) => (
-          <div key={t.id} className={`premium-toast ${t.type}`}>
-            <span
-              className="premium-toast-icon"
-              style={{ display: "inline-flex", alignItems: "center" }}
-            >
-              {t.type === "success" ? (
-                <Check size={16} />
-              ) : (
-                <AlertTriangle size={16} />
-              )}
-            </span>
-            <div className="premium-toast-content">{t.message}</div>
-            <button
-              className="premium-toast-close"
-              onClick={() =>
-                setToasts((prev) => prev.filter((x) => x.id !== t.id))
-              }
-              style={{ display: "inline-flex", alignItems: "center" }}
-            >
-              <X size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
