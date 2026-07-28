@@ -88,6 +88,16 @@ export interface EpcTenderRecord {
   tenderUpdateStatus?: TenderUpdateStatus;
   nextAction?: NextAction | null;
   cva?: string | null;
+  officeName?: string;
+  consigneesReportingOfficer?: string;
+  miiPurchasePreference?: string | null;
+  website?: string | null;
+  raQualificationRule?: string | null;
+  startupExemption?: string | null;
+  minimumAverageAnnualTurnover?: string | null;
+  yearsOfPastExperience?: string | null;
+  ePbgDurationMonths?: string | null;
+  reportings?: string;
 }
 
 export enum TenderUpdateStatus {

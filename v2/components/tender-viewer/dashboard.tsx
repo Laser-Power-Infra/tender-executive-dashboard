@@ -24,6 +24,8 @@ import ConfirmAnalysisDialog from "@/components/tender-viewer/confirm-analysis-d
 import AiFeedbackDialog from "@/components/tender-viewer/ai-feedback-dialog";
 import DashboardSkeleton from "@/components/tender-viewer/dashboard-skeleton";
 import WebsiteEditDialog from "@/components/tender-viewer/website-edit-dialog";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, MessageSquare, Pencil, Check, FileText } from "lucide-react";
 import { getDisplayNameMap } from "@/lib/tender-columns";
@@ -182,20 +184,20 @@ export default function Dashboard() {
     ) => {
       if (!tenderData) return;
       const oldValue = tenderData.rows[rowIndex]?.[col] ?? "";
-      if (oldValue === value) return;
+      const newValue = oldValue === value ? "NOT_DECIDED" : value;
       const toastId = toast.loading(`Updating ${col.toUpperCase()}...`);
       dispatch(
         updateTenderCell({
           rowIndex,
           field: col,
-          value,
+          value: newValue,
           tenderMergedId: parseInt(id, 10),
           oldValue,
         }),
       )
         .unwrap()
         .then((result) => {
-          toast.success(`${col.toUpperCase()} set to ${value}`, {
+          toast.success(`${col.toUpperCase()} set to ${newValue}`, {
             id: toastId,
           });
           if (result?.webhookTriggered) {
@@ -510,7 +512,15 @@ export default function Dashboard() {
         return {
           header: "Size",
           accessor: col as keyof Record<string, unknown>,
-          defaultWidth: 120,
+          defaultWidth: 200,
+          renderCell: (value) => {
+            const str = value != null && value !== "" ? String(value) : "-";
+            return (
+              <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
+              </div>
+            );
+          },
           sortValue: (value: unknown) => {
             const num = parseFloat(String(value ?? ""));
             return isNaN(num) ? String(value ?? "") : num;
@@ -1089,6 +1099,7 @@ export default function Dashboard() {
         const isBriefCatGroup =
           g.fields.includes("tenderBrief") &&
           g.fields.includes("itemCategory");
+        const isSizeGroup = g.fields.includes("size");
         return {
           header: isConcatenated
             ? (displayNameMap[g.label] ?? g.label)
@@ -1120,6 +1131,16 @@ export default function Dashboard() {
                   {dept && (
                     <span className="text-[11px] text-slate-500">{dept}</span>
                   )}
+                </div>
+              );
+            }
+            if (isSizeGroup) {
+              const val = row[firstField as keyof typeof row];
+              const str = val != null && val !== "" ? String(val) : "-";
+              if (str === "-") return str;
+              return (
+                <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
                 </div>
               );
             }

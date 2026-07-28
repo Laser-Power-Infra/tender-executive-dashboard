@@ -14,6 +14,10 @@ import {
   updateCompetitors,
   updateDiffPercentFromL1,
   updateDiffPercentFromL2,
+  updateStatusAndAction,
+  updateTenderMergedStringField,
+  updateTenderMergedDateField,
+  updateTenderMergedBooleanField,
 } from "@/actions/tender";
 import { importEpcTendersAction } from "@/actions/importEpcTenders";
 import { analyzeTenderValidity, saveAiRelevance } from "@/actions/ai-analysis";
@@ -111,6 +115,44 @@ export const bulkAssignUtilityMapping = createAsyncThunk(
   },
 );
 
+export const updateTenderMergedField = createAsyncThunk(
+  "tenders/updateMergedField",
+  async (params: {
+    rowIndex: number;
+    field: string;
+    value: string;
+    tenderMergedId: number;
+    oldValue: string;
+  }) => {
+    if (params.field === "emdPaymentMode") {
+      await updateTenderMergedStringField({
+        tenderMergedId: params.tenderMergedId,
+        field: params.field,
+        value: params.value,
+      });
+    } else if (params.field === "emdValidity" || params.field === "reverseAuctionDate") {
+      await updateTenderMergedDateField({
+        tenderMergedId: params.tenderMergedId,
+        field: params.field,
+        value: params.value || null,
+      });
+    } else if (params.field === "bidValidityExpired") {
+      await updateTenderMergedBooleanField({
+        tenderMergedId: params.tenderMergedId,
+        field: params.field,
+        value: params.value === "true",
+      });
+    } else {
+      await updateTenderMergedStringField({
+        tenderMergedId: params.tenderMergedId,
+        field: params.field,
+        value: params.value,
+      });
+    }
+    return params;
+  },
+);
+
 export const updateTenderCell = createAsyncThunk(
   "tenders/updateCell",
   async (params: {
@@ -203,6 +245,24 @@ export const updateTenderDiffPercentFromL2 = createAsyncThunk(
   "tenders/updateDiffPercentFromL2",
   async (params: { tenderMergedId: number; diffPercentFromL2: number | null; oldDiffPercentFromL2: string }) => {
     await updateDiffPercentFromL2({ tenderMergedId: params.tenderMergedId, diffPercentFromL2: params.diffPercentFromL2 });
+    return params;
+  },
+);
+
+export const updateTenderStatusAndAction = createAsyncThunk(
+  "tenders/updateStatusAndAction",
+  async (params: {
+    tenderMergedId: number;
+    tenderUpdateStatus: string;
+    nextAction: string | null;
+    reverseAuctionApplicable: boolean | null;
+  }) => {
+    await updateStatusAndAction({
+      tenderMergedId: params.tenderMergedId,
+      tenderUpdateStatus: params.tenderUpdateStatus,
+      nextAction: params.nextAction,
+      reverseAuctionApplicable: params.reverseAuctionApplicable,
+    });
     return params;
   },
 );
@@ -652,6 +712,27 @@ export const tendersSlice = createSlice({
       console.warn(`[redux] updateTenderDiffPercentFromL2.rejected:`, action.error);
       state.updatingCells[`${action.meta.arg.tenderMergedId}-diffL2`] = false;
     });
+    // updateTenderStatusAndAction
+    builder.addCase(updateTenderStatusAndAction.pending, (state, action) => {
+      const { tenderMergedId } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-statusAndAction`] = true;
+    });
+    builder.addCase(updateTenderStatusAndAction.fulfilled, (state, action) => {
+      const { tenderMergedId, tenderUpdateStatus, nextAction, reverseAuctionApplicable } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-statusAndAction`] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) {
+          row.tenderUpdateStatus = tenderUpdateStatus;
+          row.nextAction = nextAction ?? "";
+          row.reverseAuctionApplicable = reverseAuctionApplicable ? "true" : "false";
+        }
+      }
+    });
+    builder.addCase(updateTenderStatusAndAction.rejected, (state, action) => {
+      console.warn(`[redux] updateTenderStatusAndAction.rejected:`, action.error);
+      state.updatingCells[`${action.meta.arg.tenderMergedId}-statusAndAction`] = false;
+    });
     builder.addCase(updateTenderAssignments.pending, (state, action) => {
       const { rowIndex, associationIds } = action.meta.arg;
       if (state.data?.rows[rowIndex]) {
@@ -692,6 +773,25 @@ export const tendersSlice = createSlice({
         const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) row.website = oldValue;
       }
+    });
+
+    // updateTenderMergedField (generic)
+    builder.addCase(updateTenderMergedField.pending, (state, action) => {
+      const { tenderMergedId, field } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-${field}`] = true;
+    });
+    builder.addCase(updateTenderMergedField.fulfilled, (state, action) => {
+      const { tenderMergedId, field, value } = action.meta.arg;
+      const key = `${tenderMergedId}-${field}`;
+      state.updatingCells[key] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
+        if (row) row[field] = value;
+      }
+    });
+    builder.addCase(updateTenderMergedField.rejected, (state, action) => {
+      const { tenderMergedId, field } = action.meta.arg;
+      state.updatingCells[`${tenderMergedId}-${field}`] = false;
     });
 
     // bulkAssignUtilityMapping

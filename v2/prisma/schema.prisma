@@ -728,6 +728,7 @@ model TenderMerged {
   itemCategory                            String?
   totalQuantity                           String?
   bidStatus                               String?
+
   differenceBetweenRank1                  String?
   nameOfRank1                             String?
   valueOfRank1                            String?
@@ -740,7 +741,13 @@ model TenderMerged {
   resultAutomationStatus                  String?
   resultAutomationError                   String?
 
+  ourRank String?
+  ourValue String?
+
   proposedErpItemName String?
+  proposedErpQuantity String?
+  contractNo String?
+
   competitors String?
 
   fileId Int

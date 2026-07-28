@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { sendTenderWebhook } from "@/lib/webhook";
-import { logActivity } from "@/lib/activity-logger";
+import { withLog, logActivity } from "@/lib/activity-logger";
 
 export async function updateTenderAssignmentsAction(params: {
   tenderMergedId: number;
@@ -66,6 +66,7 @@ export async function updateTenderUtilityMapping(params: {
         action: "CREATE",
         tableName: "UtilityMapping",
         recordId: String(mapping.id),
+        referenceNo: tender.referenceNo ?? undefined,
         details: `Created utility mapping: "${tender.organization}" → "${website}"`,
       });
     }
@@ -84,43 +85,48 @@ export async function updateTenderUtilityMapping(params: {
   }
 }
 
-export async function bulkAssignUtilityMappingAction(params: {
-  organization: string;
-  website: string;
-  utilityMappingId: number;
-  excludeTenderMergedId: number;
-}) {
-  const website = params.website.toLowerCase().trim();
-  try {
-    const result = await prisma.tenderMerged.updateMany({
-      where: {
-        organization: params.organization,
-        id: { not: params.excludeTenderMergedId },
-        OR: [
-          { website: { not: website } },
-          { website: null },
-        ],
-      },
-      data: { website, utilityMappingId: params.utilityMappingId },
-    });
+export const bulkAssignUtilityMappingAction = withLog(
+  async (params: {
+    organization: string;
+    website: string;
+    utilityMappingId: number;
+    excludeTenderMergedId: number;
+  }) => {
+    const website = params.website.toLowerCase().trim();
+    try {
+      await prisma.tenderMerged.updateMany({
+        where: {
+          organization: params.organization,
+          id: { not: params.excludeTenderMergedId },
+          OR: [
+            { website: { not: website } },
+            { website: null },
+          ],
+        },
+        data: { website, utilityMappingId: params.utilityMappingId },
+      });
 
-    const updatedTenders = await prisma.tenderMerged.findMany({
-      where: { organization: params.organization, website },
-      select: { id: true },
-    });
+      const updatedTenders = await prisma.tenderMerged.findMany({
+        where: { organization: params.organization, website },
+        select: { id: true },
+      });
 
-    const updatedIds = updatedTenders.map((t) => t.id);
-    logActivity({
-      action: "UPDATE",
+      const updatedIds = updatedTenders.map((t) => t.id);
+      return { updatedIds };
+    } catch (error: any) {
+      console.error(error);
+      throw new Error(error.message ?? "Failed to bulk assign utility mapping");
+    }
+  },
+  (result, params) => {
+    const website = params.website.toLowerCase().trim();
+    return {
+      action: "UPDATE" as const,
       tableName: "UtilityMapping",
-      details: `Bulk assigned website "${website}" to organization "${params.organization}": ${updatedIds.length} tenders`,
-    });
-    return { updatedIds };
-  } catch (error: any) {
-    console.error(error);
-    throw new Error(error.message ?? "Failed to bulk assign utility mapping");
-  }
-}
+      details: `Bulk assigned website "${website}" to organization "${params.organization}": ${result.updatedIds.length} tenders`,
+    };
+  },
+);
 
 export async function updateTenderDecision(params: {
   tenderMergedId: number;
@@ -129,7 +135,7 @@ export async function updateTenderDecision(params: {
 }) {
   let data: Record<string, unknown>;
   if (params.field === "participated") {
-    data = { participated: params.value === "true" };
+    data = { participated: params.value === "true" ? true : params.value === "false" ? false : null };
   } else {
     data = { [params.field]: params.value };
   }
@@ -160,186 +166,311 @@ export async function updateTenderDecision(params: {
   return { webhookTriggered: false };
 }
 
-export async function updateDocketNumber(params: {
+export const updateDocketNumber = withLog(
+  async (params: {
+    tenderMergedId: number;
+    docketNo: string;
+  }) => {
+    console.log(`[action:updateDocketNumber] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { docketNo: params.docketNo },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateDocketNumber] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateDocketNumber] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update docket number");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated docketNo to "${params.docketNo}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const updateBgNoUtrNo = withLog(
+  async (params: {
+    tenderMergedId: number;
+    bgNoUtrNo: string;
+  }) => {
+    console.log(`[action:updateBgNoUtrNo] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { bgNoUtrNo: params.bgNoUtrNo },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateBgNoUtrNo] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateBgNoUtrNo] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update BG/UTR number");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated bgNoUtrNo to "${params.bgNoUtrNo}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const updateRemarks = withLog(
+  async (params: {
+    tenderMergedId: number;
+    remarks: string;
+  }) => {
+    console.log(`[action:updateRemarks] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { remarks: params.remarks },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateRemarks] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateRemarks] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update remarks");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated remarks to "${params.remarks}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const updateReason = withLog(
+  async (params: {
+    tenderMergedId: number;
+    reason: string;
+  }) => {
+    console.log(`[action:updateReason] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { reason: params.reason },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateReason] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateReason] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update reason");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated reason to "${params.reason}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const updateLoiPoNoAndDate = withLog(
+  async (params: {
+    tenderMergedId: number;
+    loiPoNoAndDate: string;
+  }) => {
+    console.log(`[action:updateLoiPoNoAndDate] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { loiPoNoAndDate: params.loiPoNoAndDate },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateLoiPoNoAndDate] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateLoiPoNoAndDate] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update LOI/PO No");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated loiPoNoAndDate to "${params.loiPoNoAndDate}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const updateCompetitors = withLog(
+  async (params: {
+    tenderMergedId: number;
+    competitors: string;
+  }) => {
+    console.log(`[action:updateCompetitors] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { competitors: params.competitors },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateCompetitors] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateCompetitors] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update competitors");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated competitors to "${params.competitors}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const updateDiffPercentFromL1 = withLog(
+  async (params: {
+    tenderMergedId: number;
+    diffPercentFromL1: number | null;
+  }) => {
+    console.log(`[action:updateDiffPercentFromL1] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { diffPercentFromL1: params.diffPercentFromL1 },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateDiffPercentFromL1] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateDiffPercentFromL1] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update Diff L1");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated diffPercentFromL1 to "${params.diffPercentFromL1}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const updateDiffPercentFromL2 = withLog(
+  async (params: {
+    tenderMergedId: number;
+    diffPercentFromL2: number | null;
+  }) => {
+    console.log(`[action:updateDiffPercentFromL2] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: { diffPercentFromL2: params.diffPercentFromL2 },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateDiffPercentFromL2] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateDiffPercentFromL2] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update Diff L2");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated diffPercentFromL2 to "${params.diffPercentFromL2}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export async function updateTenderMergedStringField(params: {
   tenderMergedId: number;
-  docketNo: string;
+  field: string;
+  value: string;
 }) {
-  console.log(`[action:updateDocketNumber] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { docketNo: params.docketNo },
-    });
-    console.log(`[action:updateDocketNumber] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated docketNo to "${params.docketNo}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateDocketNumber] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update docket number");
-  }
+  await prisma.tenderMerged.update({
+    where: { id: params.tenderMergedId },
+    data: { [params.field]: params.value },
+  });
+  logActivity({
+    action: "UPDATE",
+    tableName: "TenderMerged",
+    recordId: String(params.tenderMergedId),
+    details: `Updated ${params.field} to "${params.value}" on tender #${params.tenderMergedId}`,
+  });
 }
 
-export async function updateBgNoUtrNo(params: {
+export async function updateTenderMergedDateField(params: {
   tenderMergedId: number;
-  bgNoUtrNo: string;
+  field: string;
+  value: string | null;
 }) {
-  console.log(`[action:updateBgNoUtrNo] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { bgNoUtrNo: params.bgNoUtrNo },
-    });
-    console.log(`[action:updateBgNoUtrNo] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated bgNoUtrNo to "${params.bgNoUtrNo}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateBgNoUtrNo] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update BG/UTR number");
-  }
+  await prisma.tenderMerged.update({
+    where: { id: params.tenderMergedId },
+    data: { [params.field]: params.value ? new Date(params.value) : null },
+  });
+  logActivity({
+    action: "UPDATE",
+    tableName: "TenderMerged",
+    recordId: String(params.tenderMergedId),
+    details: `Updated ${params.field} to "${params.value}" on tender #${params.tenderMergedId}`,
+  });
 }
 
-export async function updateRemarks(params: {
+export async function updateTenderMergedBooleanField(params: {
   tenderMergedId: number;
-  remarks: string;
+  field: string;
+  value: boolean;
 }) {
-  console.log(`[action:updateRemarks] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { remarks: params.remarks },
-    });
-    console.log(`[action:updateRemarks] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated remarks to "${params.remarks}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateRemarks] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update remarks");
-  }
+  await prisma.tenderMerged.update({
+    where: { id: params.tenderMergedId },
+    data: { [params.field]: params.value },
+  });
+  logActivity({
+    action: "UPDATE",
+    tableName: "TenderMerged",
+    recordId: String(params.tenderMergedId),
+    details: `Updated ${params.field} to "${params.value}" on tender #${params.tenderMergedId}`,
+  });
 }
 
-export async function updateReason(params: {
-  tenderMergedId: number;
-  reason: string;
-}) {
-  console.log(`[action:updateReason] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { reason: params.reason },
-    });
-    console.log(`[action:updateReason] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated reason to "${params.reason}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateReason] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update reason");
-  }
-}
-
-export async function updateLoiPoNoAndDate(params: {
-  tenderMergedId: number;
-  loiPoNoAndDate: string;
-}) {
-  console.log(`[action:updateLoiPoNoAndDate] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { loiPoNoAndDate: params.loiPoNoAndDate },
-    });
-    console.log(`[action:updateLoiPoNoAndDate] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated loiPoNoAndDate to "${params.loiPoNoAndDate}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateLoiPoNoAndDate] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update LOI/PO No");
-  }
-}
-
-export async function updateCompetitors(params: {
-  tenderMergedId: number;
-  competitors: string;
-}) {
-  console.log(`[action:updateCompetitors] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { competitors: params.competitors },
-    });
-    console.log(`[action:updateCompetitors] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated competitors to "${params.competitors}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateCompetitors] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update competitors");
-  }
-}
-
-export async function updateDiffPercentFromL1(params: {
-  tenderMergedId: number;
-  diffPercentFromL1: number | null;
-}) {
-  console.log(`[action:updateDiffPercentFromL1] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { diffPercentFromL1: params.diffPercentFromL1 },
-    });
-    console.log(`[action:updateDiffPercentFromL1] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated diffPercentFromL1 to "${params.diffPercentFromL1}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateDiffPercentFromL1] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update Diff L1");
-  }
-}
-
-export async function updateDiffPercentFromL2(params: {
-  tenderMergedId: number;
-  diffPercentFromL2: number | null;
-}) {
-  console.log(`[action:updateDiffPercentFromL2] called with:`, params);
-  try {
-    await prisma.tenderMerged.update({
-      where: { id: params.tenderMergedId },
-      data: { diffPercentFromL2: params.diffPercentFromL2 },
-    });
-    console.log(`[action:updateDiffPercentFromL2] success for id=${params.tenderMergedId}`);
-    logActivity({
-      action: "UPDATE",
-      tableName: "TenderMerged",
-      recordId: String(params.tenderMergedId),
-      details: `Updated diffPercentFromL2 to "${params.diffPercentFromL2}" on tender #${params.tenderMergedId}`,
-    });
-  } catch (error: any) {
-    console.error(`[action:updateDiffPercentFromL2] ERROR for id=${params.tenderMergedId}:`, error);
-    throw new Error(error.message ?? "Failed to update Diff L2");
-  }
-}
+export const updateStatusAndAction = withLog(
+  async (params: {
+    tenderMergedId: number;
+    tenderUpdateStatus: string;
+    nextAction: string | null;
+    reverseAuctionApplicable: boolean | null;
+  }) => {
+    console.log(`[action:updateTenderStatusAndAction] called with:`, params);
+    try {
+      const updated = await prisma.tenderMerged.update({
+        where: { id: params.tenderMergedId },
+        data: {
+          tenderUpdateStatus: params.tenderUpdateStatus as any,
+          nextAction: params.nextAction as any,
+          reverseAuctionApplicable: params.reverseAuctionApplicable,
+        },
+        select: { id: true, referenceNo: true },
+      });
+      console.log(`[action:updateTenderStatusAndAction] success for id=${params.tenderMergedId}`);
+      return updated;
+    } catch (error: any) {
+      console.error(`[action:updateTenderStatusAndAction] ERROR for id=${params.tenderMergedId}:`, error);
+      throw new Error(error.message ?? "Failed to update tender status and action");
+    }
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated tenderUpdateStatus="${params.tenderUpdateStatus}" nextAction="${params.nextAction}" reverseAuctionApplicable="${params.reverseAuctionApplicable}" on tender #${params.tenderMergedId}`,
+  }),
+);
