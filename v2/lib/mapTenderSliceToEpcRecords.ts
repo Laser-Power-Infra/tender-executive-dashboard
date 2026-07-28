@@ -84,6 +84,8 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     beneficiaryBankDetails: row.beneficiaryBankDetails || null,
     tenderUpdateStatus: undefined,
     nextAction: (row.nextAction || null) as NextAction | null,
+    quotationNo: row.quotationNo || null,
+    contractNo: row.contractNo || null,
     cva: null,
     officeName: row.officeName || "",
     consigneesReportingOfficer: row.consigneesReportingOfficer || "",

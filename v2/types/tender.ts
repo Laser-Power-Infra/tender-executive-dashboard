@@ -88,6 +88,8 @@ export interface EpcTenderRecord {
   price?: string | null;
   tenderUpdateStatus?: TenderUpdateStatus;
   nextAction?: NextAction | null;
+  quotationNo?: string | null;
+  contractNo?: string | null;
   cva?: string | null;
   officeName?: string;
   consigneesReportingOfficer?: string;
