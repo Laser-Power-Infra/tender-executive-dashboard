@@ -740,6 +740,7 @@ model TenderMerged {
   parseError                              String?
   resultAutomationStatus                  String?
   resultAutomationError                   String?
+  beneficiaryBankDetails                             String?
 
   ourRank String?
   ourValue String?

@@ -7,7 +7,7 @@ import { useAppSelector, useAppDispatch } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
 import { syncSheetToMerged } from "@/lib/slices/tendersSlice";
-import { Eraser, ExternalLink, Database, RefreshCw, Loader2 } from "lucide-react";
+import { Eraser, ExternalLink, Database, RefreshCw, Loader2, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import { debugParseAllAttachments } from "@/actions/debugParseAttachments";
 import "./Dashboard.css";
@@ -29,6 +29,7 @@ export default function Home() {
   const mappedRecords = useMemo(() => mapTenderSliceToEpcRecords(preFilteredData), [preFilteredData]);
   const [clearTrigger, setClearTrigger] = useState<number>(0);
   const [cvaLoading, setCvaLoading] = useState(false);
+  const [syncBankLoading, setSyncBankLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState<string>("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedEngineer, setSelectedEngineer] = useState<string>("All");
@@ -138,6 +139,22 @@ export default function Home() {
       setCvaLoading(false);
     }
   };
+  const handleSyncBankDetails = async () => {
+    setSyncBankLoading(true);
+    try {
+      const res = await fetch("/api/sync-bank-details", { method: "POST" });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(`Bank sync failed: ${data.error}`);
+      } else {
+        toast.success(`Bank details synced: ${data.updated} updated, ${data.notFound} not found, ${data.errors} errors`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bank sync failed");
+    } finally {
+      setSyncBankLoading(false);
+    }
+  };
   const handleClearAllFilters = () => {
     setClientSearch("");
     setSelectedStatuses([]);
@@ -191,6 +208,14 @@ export default function Home() {
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
               {cvaLoading ? <><RefreshCw size={14} className="spin" /> Parsing CVA...</> : <><Database size={14} /> Parse CVA</>}
+            </button>
+            <button
+              className="erp-sync-btn"
+              onClick={handleSyncBankDetails}
+              disabled={syncBankLoading}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {syncBankLoading ? <><RefreshCw size={14} className="spin" /> Syncing Bank...</> : <><Landmark size={14} /> Sync Bank Details</>}
             </button>
           </div>
         </header>

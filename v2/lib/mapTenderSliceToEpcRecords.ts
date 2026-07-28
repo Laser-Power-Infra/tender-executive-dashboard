@@ -81,6 +81,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     hasBoqChart: undefined,
     boqFileId: undefined,
     bgStatus: null,
+    beneficiaryBankDetails: row.beneficiaryBankDetails || null,
     tenderUpdateStatus: undefined,
     nextAction: (row.nextAction || null) as NextAction | null,
     cva: null,
