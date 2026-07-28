@@ -36,6 +36,15 @@ function normalizeDrive(p: string): string {
   return p.replace(/^[a-zA-Z]:\\/, (m) => m.toUpperCase());
 }
 
+function resolveSupplyPath(storedPath: string): string {
+  const supplyRoot = process.env.SUPPLY_NETWORK_PATH;
+  if (!supplyRoot) return storedPath;
+  const driveMatch = storedPath.match(/^[a-zA-Z]:\\/);
+  if (!driveMatch) return storedPath;
+  const normalizedRoot = supplyRoot.replace(/\\+$/, '') + '\\';
+  return normalizedRoot + storedPath.substring(3);
+}
+
 function verifyPathSafety(absolutePath: string): void {
   const resolvedPath = normalizeDrive(path.resolve(absolutePath));
   const isSafe = ALLOWED_ROOTS.some((root) =>
@@ -184,7 +193,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = path.resolve(decryptPath(fileId));
+      const absolutePath = path.resolve(resolveSupplyPath(decryptPath(fileId)));
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {
@@ -222,7 +231,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = path.resolve(decryptPath(fileId));
+      const absolutePath = path.resolve(resolveSupplyPath(decryptPath(fileId)));
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {
@@ -270,7 +279,7 @@ export class TenderAttachmentController {
       });
 
       const files: FileResponse[] = docs.map((d) => ({
-        fileId: encryptPath(d.filePath),
+        fileId: encryptPath(resolveSupplyPath(d.filePath)),
         filename: d.fileName,
         extension: d.extension,
         size: d.fileSize ?? 0,
