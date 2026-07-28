@@ -13,7 +13,10 @@ export class DatabaseSupplyService {
     const records = await prisma.supplyHistory.findMany({
       orderBy: { createdAt: "desc" },
     });
-    return records.map((r: any) => ({
+    const validFy = /^\d{2}-\d{2}$/;
+    return records
+      .filter((r) => r.fy && validFy.test(r.fy))
+      .map((r: any) => ({
       fy: r.fy,
       saleBillNumber: r.saleBillNumber,
       saleBillDate: r.saleBillDate,
