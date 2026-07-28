@@ -785,3 +785,18 @@ model TenderFile {
   @@index([tenderMergedId])
   @@map("tender_files")
 }
+model SupplyDoc {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  saleBillNumber String
+  fileName       String
+  extension      String
+  filePath       String        // raw absolute network path, encrypted at response time
+  fileSize       Int?
+  lastModified   DateTime?
+
+  @@index([saleBillNumber])
+  @@map("supply_docs")
+}

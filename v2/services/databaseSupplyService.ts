@@ -1,5 +1,3 @@
-import * as fs from "fs";
-import * as path from "path";
 import pLimit from "p-limit";
 import { prisma } from "@/lib/prisma";
 import type { SupplyHistoryRecord } from "@/types/supplyHistory";
@@ -35,22 +33,19 @@ export class DatabaseSupplyService {
     }));
   }
 
-  static enrichWithDocumentStatus(
+  static async enrichWithDocumentStatus(
     records: SupplyHistoryRecord[],
-  ): SupplyHistoryRecord[] {
-    let supplyDocIndex: Record<string, boolean> = {};
+  ): Promise<SupplyHistoryRecord[]> {
+    let billNosWithDocs = new Set<string>();
     try {
-      const dbPath = path.resolve(
-        process.cwd(),
-        "data",
-        "supply_document_index.json",
-      );
-      if (fs.existsSync(dbPath)) {
-        supplyDocIndex = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
-      }
+      const rows = await prisma.supplyDoc.findMany({
+        select: { saleBillNumber: true },
+        distinct: ["saleBillNumber"],
+      });
+      billNosWithDocs = new Set(rows.map(r => r.saleBillNumber.trim().toUpperCase()));
     } catch (err) {
       console.warn(
-        "[DatabaseSupplyService] Failed to load supply document index:",
+        "[DatabaseSupplyService] Failed to query supply docs:",
         (err as Error).message,
       );
     }
@@ -59,7 +54,7 @@ export class DatabaseSupplyService {
       ...r,
       hasDocuments: !!(
         r.saleBillNumber &&
-        supplyDocIndex[r.saleBillNumber.trim().toUpperCase()]
+        billNosWithDocs.has(r.saleBillNumber.trim().toUpperCase())
       ),
     }));
   }

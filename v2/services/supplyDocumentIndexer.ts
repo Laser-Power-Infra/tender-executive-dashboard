@@ -1,55 +1,12 @@
 import fs from "fs";
 import path from "path";
-import type { SupplyIndex, SupplyIndexEntry } from "@/types/indexer";
+import { prisma } from "@/lib/prisma";
+import { indexFolderFiles } from "@/services/fileIndexer";
 
 const CONFIG = {
-  networkPath: process.env.SUPPLY_NETWORK_PATH!, //{asmita:w, bidyut:x}
-  dbFilePath: path.resolve(process.cwd(), "data", "supply_document_index.json"),
+  networkPath: process.env.SUPPLY_NETWORK_PATH!,
   scanIntervalMs: 12 * 60 * 60 * 1000
 };
-
-const dataDir = path.dirname(CONFIG.dbFilePath);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-class IndexDatabase {
-  private filePath: string;
-
-  constructor(filePath: string) {
-    this.filePath = filePath;
-  }
-
-  async load(): Promise<SupplyIndex> {
-    try {
-      if (!fs.existsSync(this.filePath)) {
-        return {};
-      }
-      const raw = await fs.promises.readFile(this.filePath, "utf-8");
-      return JSON.parse(raw || "{}");
-    } catch (err) {
-      console.error(`[SupplyDB_ERROR] Failed to load index: ${(err as Error).message}`);
-      return {};
-    }
-  }
-
-  async save(data: SupplyIndex): Promise<boolean> {
-    const tempPath = `${this.filePath}.tmp`;
-    try {
-      await fs.promises.writeFile(tempPath, JSON.stringify(data, null, 2), "utf-8");
-      await fs.promises.rename(tempPath, this.filePath);
-      return true;
-    } catch (err) {
-      console.error(`[SupplyDB_ERROR] Failed to save index atomically: ${(err as Error).message}`);
-      if (fs.existsSync(tempPath)) {
-        try { fs.unlinkSync(tempPath); } catch { /* ignore */ }
-      }
-      return false;
-    }
-  }
-}
-
-const db = new IndexDatabase(CONFIG.dbFilePath);
 
 interface ScanRecord {
   billNo: string;
@@ -131,22 +88,36 @@ export async function runIndexer(): Promise<void> {
     const indexMap = new Map<string, ScanRecord>();
     await scanDirectory(CONFIG.networkPath, 0, indexMap);
 
-    const currentDb: SupplyIndex = {};
     for (const [billNo, record] of indexMap.entries()) {
-      currentDb[billNo] = {
-        ...record,
-        indexedAt: Date.now()
-      };
+      try {
+        const scanResults = await indexFolderFiles(record.folderPath);
+
+        await prisma.supplyDoc.deleteMany({
+          where: { saleBillNumber: billNo }
+        });
+
+        if (scanResults.files.length > 0) {
+          const records = scanResults.files.map(f => ({
+            saleBillNumber: billNo,
+            fileName: f.filename,
+            extension: f.extension,
+            filePath: f.absolutePath,
+            fileSize: f.size,
+            lastModified: new Date(f.modifiedDate),
+          }));
+
+          await prisma.supplyDoc.createMany({ data: records });
+        }
+      } catch (err) {
+        console.error(`[SupplyIndexer] Failed to index files for bill ${billNo} at ${record.folderPath}: ${(err as Error).message}`);
+      }
     }
 
-    const success = await db.save(currentDb);
-    if (success) {
-      const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log(
-        `[SupplyIndexer] Scan completed in ${durationSec}s.\n` +
-        `  - Total Mapped: ${Object.keys(currentDb).length}`
-      );
-    }
+    const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(
+      `[SupplyIndexer] Scan completed in ${durationSec}s.\n` +
+      `  - Total folders indexed: ${indexMap.size}`
+    );
   } catch (err) {
     console.error(`[SupplyIndexer] Critical indexing failure: ${(err as Error).message}`);
   }
