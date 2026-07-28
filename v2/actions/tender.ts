@@ -390,6 +390,22 @@ export const updateDiffPercentFromL2 = withLog(
   }),
 );
 
+export async function updateBeneficiaryBankDetails(params: {
+  tenderMergedId: number;
+  beneficiaryBankDetails: string;
+}) {
+  await prisma.tenderMerged.update({
+    where: { id: params.tenderMergedId },
+    data: { beneficiaryBankDetails: params.beneficiaryBankDetails },
+  });
+  logActivity({
+    action: "UPDATE",
+    tableName: "TenderMerged",
+    recordId: String(params.tenderMergedId),
+    details: `Updated beneficiary bank details to "${params.beneficiaryBankDetails}" on tender #${params.tenderMergedId}`,
+  });
+}
+
 export async function updateTenderMergedStringField(params: {
   tenderMergedId: number;
   field: string;

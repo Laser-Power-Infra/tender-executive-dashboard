@@ -5,7 +5,8 @@ import { TenderTable } from "@/components/TenderTable";
 import { useAppSelector } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
-import { Eraser, ExternalLink } from "lucide-react";
+import { Eraser, ExternalLink, FileText, RefreshCw, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import "../Dashboard.css";
 
 export default function PostParticipation() {
@@ -34,6 +35,7 @@ export default function PostParticipation() {
   const [aluminiumMax, setAluminiumMax] = useState<string>("");
   const [copperMin, setCopperMin] = useState<string>("");
   const [copperMax, setCopperMax] = useState<string>("");
+  const [syncQuotationLoading, setSyncQuotationLoading] = useState(false);
 
   const calculations = useMemo(() => new TenderCalculations(mappedRecords, referenceDate), [mappedRecords, referenceDate]);
   const primaryDataset = useMemo(() => calculations.getPrimaryDataset(), [calculations]);
@@ -92,6 +94,23 @@ export default function PostParticipation() {
     });
   }, [primaryDataset, clientSearch, selectedStatuses, selectedEngineer, selectedDecision, valueMin, valueMax, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax]);
 
+  const handleSyncQuotation = async () => {
+    setSyncQuotationLoading(true);
+    try {
+      const res = await fetch("/api/sync-quotation", { method: "POST" });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(`Quotation sync failed: ${data.error}`);
+      } else {
+        toast.success(`Quotation synced: ${data.updated} updated, ${data.notFound} not found`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Quotation sync failed");
+    } finally {
+      setSyncQuotationLoading(false);
+    }
+  };
+
   const handleClearAllFilters = () => {
     setClientSearch("");
     setSelectedStatuses([]);
@@ -133,6 +152,14 @@ export default function PostParticipation() {
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
               <ExternalLink size={14} /> Open Sheet
+            </button>
+            <button
+              className="erp-sync-btn"
+              onClick={handleSyncQuotation}
+              disabled={syncQuotationLoading}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {syncQuotationLoading ? <><RefreshCw size={14} className="spin" /> Syncing Quotation...</> : <><FileText size={14} /> Sync Quotation</>}
             </button>
           </div>
         </header>
