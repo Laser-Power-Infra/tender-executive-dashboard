@@ -145,7 +145,7 @@ export default function PostParticipation() {
             </div>
           ) : (
             <>
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated"]} showPostParticipationColumns={true} />
+              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated", "nextAction", "tenderUpdateStatus", "currentStatus"]} showPostParticipationColumns={true} />
             </>
           )}
         </main>

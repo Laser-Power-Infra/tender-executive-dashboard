@@ -560,8 +560,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "competitors", "diffPercentFromL1", "diffPercentFromL2",
     "nextAction",
   ]);
+  const postParticipationExcludeAccessors = new Set([
+    "merged_office_consignees", "miiPurchasePreference", "tenderDocument",
+    "reportings", "website", "raQualificationRule", "startupExemption",
+    "minimumAverageAnnualTurnover", "yearsOfPastExperience", "ePbgDurationMonths",
+  ]);
   const visibleColumns = showPostParticipationColumns
-    ? columns
+    ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor))
     : columns.filter((col) => !postParticipationAccessors.has(col.accessor));
 
   // 2. States
@@ -2802,7 +2807,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             "OPEN";
                           const isSaving =
                             !!savingKeys[`${record.id}::tenderUpdateStatus`];
-                          if (readOnly) {
+                          if (readOnly && !editableColumns.includes("tenderUpdateStatus")) {
                             cellContent = (
                               <span className={`status-badge ${statusValue === "CLOSED" ? "won" : "eval"}`}>
                                 {statusValue}
@@ -2836,7 +2841,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               : (record.nextAction ?? "");
                           const isSaving =
                             !!savingKeys[`${record.id}::nextAction`];
-                          if (readOnly) {
+                          if (readOnly && !editableColumns.includes("nextAction")) {
                             const actionLabels: Record<string, string> = {
                               "UPDATE_FROM_AB_LETTER": "Update from AB letter",
                               "BG_REFUND_LETTER_TO_BE_SENT": "BG refund letter to be sent",
@@ -3198,16 +3203,53 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             }
                           } else if (col.type === "status") {
                             const statusVal = (cellVal as string) || "";
-                            cellContent = statusVal ? (
-                              <span
-                                className={`status-badge ${getStatusClass(statusVal)}`}
-                              >
-                                {statusVal}
-                              </span>
-                            ) : (
-                              <span>-</span>
-                            );
-                            cellClass = "col-center";
+                            if (readOnly && !editableColumns.includes("currentStatus")) {
+                              cellContent = statusVal ? (
+                                <span className={`status-badge ${getStatusClass(statusVal)}`}>{statusVal}</span>
+                              ) : (
+                                <span>-</span>
+                              );
+                              cellClass = "col-center";
+                            } else {
+                              const isSaving = !!savingKeys[`${record.id}::currentStatus`];
+                              cellContent = (
+                                <select
+                                  value={statusVal}
+                                  disabled={isSaving}
+                                  onChange={(e) => {
+                                    const key = `${record.id}::currentStatus`;
+                                    setSavingKeys(prev => ({ ...prev, [key]: true }));
+                                    dispatch(updateTenderMergedField({
+                                      rowIndex: 0,
+                                      field: "currentStatus",
+                                      value: e.target.value,
+                                      tenderMergedId: Number(record.id),
+                                      oldValue: statusVal,
+                                    }))
+                                      .unwrap()
+                                      .then(() => toast.success("Status updated!"))
+                                      .catch((err) => toast.error(err?.message || "Failed to update status."))
+                                      .finally(() => setSavingKeys(prev => { const c = { ...prev }; delete c[key]; return c; }));
+                                  }}
+                                  className="table-editable-select status-select"
+                                >
+                                  <option value="">None</option>
+                                  <option value="we are l1">we are l1</option>
+                                  <option value="submitted">submitted</option>
+                                  <option value="awarded">awarded</option>
+                                  <option value="rejected">rejected</option>
+                                  <option value="technical bid opening">technical bid opening</option>
+                                  <option value="date extended">date extended</option>
+                                  <option value="financial evaluation">financial evaluation</option>
+                                  <option value="counter offer as per l1 price">counter offer as per l1 price</option>
+                                  <option value="bid validity expired">bid validity expired</option>
+                                  <option value="not evaluated">not evaluated</option>
+                                  <option value="not participated">not participated</option>
+                                  <option value="under preparation">under preparation</option>
+                                </select>
+                              );
+                              cellClass = "col-center col-editable";
+                            }
                           } else if (col.type === "decision") {
                             const decVal = cellVal as ManagementDecision;
                             cellContent = (
