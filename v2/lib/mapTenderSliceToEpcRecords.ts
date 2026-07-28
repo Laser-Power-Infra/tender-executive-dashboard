@@ -97,5 +97,13 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     yearsOfPastExperience: row.yearsOfPastExperience || null,
     ePbgDurationMonths: row.ePbgDurationMonths || null,
     reportings: row.reportings || "",
+    ourRank: row.ourRank || null,
+    ourValue: row.ourValue || null,
+    nameOfRank1: row.nameOfRank1 || null,
+    valueOfRank1: row.valueOfRank1 || null,
+    differenceBetweenRank1: row.differenceBetweenRank1 || null,
+    nameOfRank2: row.nameOfRank2 || null,
+    valueOfRank2: row.valueOfRank2 || null,
+    differenceBetweenRank2: row.differenceBetweenRank2 || null,
   }));
 }

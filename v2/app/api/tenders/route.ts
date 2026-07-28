@@ -73,6 +73,9 @@ function flattenTender(
   const docFile = tenderFiles?.find((f) => f.tags.includes("tenderDocument"));
   row.tenderFileUrl = docFile?.url ?? "";
 
+  const costingFile = tenderFiles?.find((f) => f.tags.includes("costingAttachment"));
+  row.costingFileUrl = costingFile?.url ?? "";
+
   if (tenderFiles && tenderFiles.length > 0) {
     row.tenderFiles = JSON.stringify(tenderFiles);
   } else {

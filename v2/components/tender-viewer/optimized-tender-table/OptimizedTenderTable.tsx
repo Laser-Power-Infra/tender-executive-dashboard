@@ -145,6 +145,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [isDownloadingPdfs, setIsDownloadingPdfs] = useState(false);
   const [isParsingPdfs, setIsParsingPdfs] = useState(false);
+  const [isParsingCva, setIsParsingCva] = useState(false);
 
   const dispatch = useAppDispatch();
   const columnFilters = useAppSelector((s) => s.filters.columnFilters);
@@ -481,6 +482,20 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       }));
   }, [processedRows]);
 
+  const tendersForCvaParsing = useMemo(() => {
+    return processedRows
+      .filter((row) => {
+        const type = row["type" as keyof T];
+        const costingUrl = row["costingFileUrl" as keyof T];
+        return type === "Gem" && !!costingUrl;
+      })
+      .map((row) => ({
+        id: parseInt(String(row["id" as keyof T] ?? "0"), 10),
+        referenceNo: String(row["referenceNo" as keyof T] ?? ""),
+        file_link: String(row["costingFileUrl" as keyof T] ?? ""),
+      }));
+  }, [processedRows]);
+
   const totalRecords = processedRows.length;
   const totalPages = Math.ceil(totalRecords / rowsPerPage) || 1;
 
@@ -618,6 +633,29 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       setIsParsingPdfs(false);
     }
   }, [tendersToParse]);
+
+  const handleParseCva = useCallback(async () => {
+    if (tendersForCvaParsing.length === 0) return;
+    setIsParsingCva(true);
+    try {
+      const res = await fetch("/api/parse-cva", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenders: tendersForCvaParsing }),
+      });
+      const data = await res.json();
+      const msg =
+        data.queued > 0
+          ? `Queued ${data.queued} tenders for CVA parsing`
+          : "No tenders queued";
+      alert(msg);
+      onParseCompleteRef.current?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Parse CVA failed");
+    } finally {
+      setIsParsingCva(false);
+    }
+  }, [tendersForCvaParsing]);
 
   const formatCurrency = useCallback(
     (val: number | null | undefined): string => {
@@ -967,6 +1005,15 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
         <div className="toolbar-right">
           <button className="export-btn" onClick={handleExportExcel}>
             <FileSpreadsheet size={14} /> Export Excel
+          </button>
+          <button
+            className="export-btn"
+            onClick={handleParseCva}
+            disabled={isParsingCva || tendersForCvaParsing.length === 0}
+          >
+            {isParsingCva
+              ? <><Loader2 size={14} className="animate-spin" /> Parsing CVA...</>
+              : <><FileText size={14} /> Parse CVA ({tendersForCvaParsing.length})</>}
           </button>
           {/* <button
             className="export-btn"

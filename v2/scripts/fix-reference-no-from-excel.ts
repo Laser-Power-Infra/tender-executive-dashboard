@@ -3,7 +3,7 @@ import path from "path";
 import XLSX from "xlsx";
 import { prisma } from "../lib/prisma";
 
-const EXCEL_FILE_PATH = path.resolve(process.cwd(), "docs", "fix 2.xlsx");
+const EXCEL_FILE_PATH = path.resolve(process.cwd(), "docs", "fix 3.xlsx");
 
 function normalizeHeader(s: string): string {
   return s.replace(/[\s_-]+/g, "").toLowerCase();
@@ -134,7 +134,7 @@ async function main() {
 
   for (const [t247Id, correctRefNo] of mergedMapping) {
     if (t247Id === correctRefNo) {
-      console.log(`  [SKIP] T247 ID "${t247Id}" already matches REFERENCE NO. No change needed.`);
+      // console.log(`  [SKIP] T247 ID "${t247Id}" already matches REFERENCE NO. No change needed.`);
       alreadyCorrectCount++;
       continue;
     }
@@ -145,7 +145,7 @@ async function main() {
     });
 
     if (!record) {
-      console.log(`  [SKIP] No DB record found with referenceNo = "${t247Id}".`);
+      // console.log(`  [SKIP] No DB record found with referenceNo = "${t247Id}".`);
       notFoundCount++;
       continue;
     }
@@ -156,7 +156,7 @@ async function main() {
     });
 
     if (conflictRecord && conflictRecord.id !== record.id) {
-      console.log(`  [SKIP] REFERENCE NO "${correctRefNo}" already exists on a different record (id=${conflictRecord.id}), cannot update id=${record.id}.`);
+      console.log(`  [CONFLICT] REFERENCE NO "${correctRefNo}" already exists on a different record (id=${conflictRecord.id}), cannot update id=${record.id}.`);
       conflictCount++;
       continue;
     }
@@ -169,7 +169,7 @@ async function main() {
       console.log(`  [OK] Record id=${record.id}: "${t247Id}" -> "${correctRefNo}"`);
       updatedCount++;
     } catch (err) {
-      console.error(`  [ERROR] Failed to update record id=${record.id}:`, err);
+      // console.error(`  [ERROR] Failed to update record id=${record.id}:`, err);
       errorCount++;
     }
   }

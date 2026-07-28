@@ -8,10 +8,12 @@ export type TenderTaskPayload = {
 } & (
   | { type: "GEM_DOWNLOAD"; gemId: string }
   | { type: "NON_GEM_DOWNLOAD" }
+  | { type: "COSTING_ATTACHMENT_PARSING"; file_link: string }
 );
 
-export async function publishTenderTask(
-  payload: TenderTaskPayload,
+async function publishToQueue(
+  queue: string,
+  payload: Record<string, unknown>,
 ): Promise<boolean> {
   const ch = await getChannel();
   if (!ch) {
@@ -20,9 +22,9 @@ export async function publishTenderTask(
   }
 
   try {
-    await ch.assertQueue(QUEUES.TENDER_TASKS, { durable: true });
+    await ch.assertQueue(queue, { durable: true });
     const sent = ch.sendToQueue(
-      QUEUES.TENDER_TASKS,
+      queue,
       Buffer.from(JSON.stringify(payload)),
       { persistent: true },
     );
@@ -34,4 +36,16 @@ export async function publishTenderTask(
     console.error("[RabbitMQ] Failed to publish task:", err);
     return false;
   }
+}
+
+export async function publishTenderTask(
+  payload: TenderTaskPayload,
+): Promise<boolean> {
+  return publishToQueue(QUEUES.TENDER_TASKS, payload);
+}
+
+export async function publishTenderParsingTask(
+  payload: TenderTaskPayload & { type: "COSTING_ATTACHMENT_PARSING" },
+): Promise<boolean> {
+  return publishToQueue(QUEUES.TENDER_PARSING, payload);
 }
