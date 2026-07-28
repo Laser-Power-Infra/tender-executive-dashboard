@@ -366,6 +366,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
+      header: "Beneficiary Bank Details",
+      accessor: "beneficiaryBankDetails",
+      defaultWidth: 180,
+      align: "left",
+      type: "string",
+    },
+    {
       header: "Current Status",
       accessor: "currentStatus",
       defaultWidth: 150,

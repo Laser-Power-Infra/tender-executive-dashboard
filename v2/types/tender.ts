@@ -84,6 +84,7 @@ export interface EpcTenderRecord {
   hasBoqChart?: boolean;
   boqFileId?: string;
   bgStatus?: string | null;
+  beneficiaryBankDetails?: string | null;
   price?: string | null;
   tenderUpdateStatus?: TenderUpdateStatus;
   nextAction?: NextAction | null;
