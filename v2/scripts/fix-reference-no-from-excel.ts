@@ -3,7 +3,7 @@ import path from "path";
 import XLSX from "xlsx";
 import { prisma } from "../lib/prisma";
 
-const EXCEL_FILE_PATH = path.resolve(process.cwd(), "docs", "fix.xlsx");
+const EXCEL_FILE_PATH = path.resolve(process.cwd(), "docs", "fix 2.xlsx");
 
 function normalizeHeader(s: string): string {
   return s.replace(/[\s_-]+/g, "").toLowerCase();
