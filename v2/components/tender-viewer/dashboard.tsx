@@ -1058,6 +1058,13 @@ export default function Dashboard() {
             : undefined,
         hidden: colIndex !== undefined ? !colIndex.visible : true,
         frozen: col === "organization" || col === "tenderBrief" || col === "itemCategory" || col === "size" ? true : undefined,
+        sortValue: col === "deadline"
+          ? (value: unknown) => {
+              if (!value) return null;
+              const date = new Date(String(value));
+              return isNaN(date.getTime()) ? String(value) : date.getTime();
+            }
+          : undefined,
         type: filterType === "dateRange" ? "date" : undefined,
         filter:
           filterType === "select"

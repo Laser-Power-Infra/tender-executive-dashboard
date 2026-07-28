@@ -7,7 +7,7 @@ import { useAppSelector, useAppDispatch } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
 import { syncSheetToMerged } from "@/lib/slices/tendersSlice";
-import { Eraser, ExternalLink, Database, RefreshCw, Loader2, Landmark } from "lucide-react";
+import { Eraser, ExternalLink, Database, RefreshCw, Loader2, Landmark, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { debugParseAllAttachments } from "@/actions/debugParseAttachments";
 import "./Dashboard.css";
@@ -30,6 +30,7 @@ export default function Home() {
   const [clearTrigger, setClearTrigger] = useState<number>(0);
   const [cvaLoading, setCvaLoading] = useState(false);
   const [syncBankLoading, setSyncBankLoading] = useState(false);
+  const [syncOrgLoading, setSyncOrgLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState<string>("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedEngineer, setSelectedEngineer] = useState<string>("All");
@@ -155,6 +156,22 @@ export default function Home() {
       setSyncBankLoading(false);
     }
   };
+  const handleSyncOrganization = async () => {
+    setSyncOrgLoading(true);
+    try {
+      const res = await fetch("/api/sync-organization", { method: "POST" });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(`Organization sync failed: ${data.error}`);
+      } else {
+        toast.success(`Organizations synced: ${data.updated} updated, ${data.notFound} not found`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Organization sync failed");
+    } finally {
+      setSyncOrgLoading(false);
+    }
+  };
   const handleClearAllFilters = () => {
     setClientSearch("");
     setSelectedStatuses([]);
@@ -192,7 +209,7 @@ export default function Home() {
           <div className="header-actions">
             <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Eraser size={14} /> Clear Filters</button>
             <button className="erp-sync-btn" onClick={handleRefresh} disabled={loadingTenders} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              {loadingTenders ? <><RefreshCw size={14} /> Syncing...</> : <><RefreshCw size={14} /> Sync Sheet Data</>}
+              {loadingTenders ? <><RefreshCw size={14} /> Refreshing...</> : <><RefreshCw size={14} /> Refresh Dashboard</>}
             </button>
             <button
               className="erp-sync-btn"
@@ -216,6 +233,14 @@ export default function Home() {
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
               {syncBankLoading ? <><RefreshCw size={14} className="spin" /> Syncing Bank...</> : <><Landmark size={14} /> Sync Bank Details</>}
+            </button>
+            <button
+              className="erp-sync-btn"
+              onClick={handleSyncOrganization}
+              disabled={syncOrgLoading}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {syncOrgLoading ? <><RefreshCw size={14} className="spin" /> Syncing Org...</> : <><Building2 size={14} /> Sync Organization</>}
             </button>
           </div>
         </header>

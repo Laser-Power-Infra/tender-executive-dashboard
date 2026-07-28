@@ -224,141 +224,33 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
     findOrCreateSheetSyncFile(),
   ]);
 
-  const sheetService = new GoogleSheetService();
-  let records: EpcTenderRecord[];
-  try {
-    records = await sheetService.fetchTenderRecords();
-  } catch (e) {
-    throw new Error(`Failed to fetch sheet data: ${(e as Error).message}`);
-  }
+  // ── [DISABLED] Tender status sheet sync ──
+  // TenderMerged data updates from the Google Sheet have been disabled.
+  // Existing data is preserved. File scanning and docket backfill below still run.
+  //
+  // const sheetService = new GoogleSheetService();
+  // let records: EpcTenderRecord[];
+  // try {
+  //   records = await sheetService.fetchTenderRecords();
+  // } catch (e) {
+  //   throw new Error(`Failed to fetch sheet data: ${(e as Error).message}`);
+  // }
+  //
+  // console.log("[SheetSync] Fetched", records.length, "records from sheet");
+  // ... (full fetch and upsert loop kept in codebase for reference)
+  //
+  // The loop below used to iterate valid records, create/update TenderMerged,
+  // link associations, and sync costing attachments. Now we only run the
+  // downstream tasks (network file scan, BoQ charts, docket backfill).
 
-  console.log("[SheetSync] Fetched", records.length, "records from sheet");
-  console.log("[SheetSync] Sample (first 10):");
-  for (let i = 0; i < Math.min(records.length, 10); i++) {
-    const r = records[i];
-    console.log("[SheetSync] [" + (i + 1) + "]", JSON.stringify({
-      tenderNoNitNo: r.tenderNoNitNo,
-      docketNo: r.docketNo,
-      typeOfTender: r.typeOfTender,
-      nameOfWorkDescription: r.nameOfWorkDescription,
-      nameOfTheClient: r.nameOfTheClient,
-      lastDateOfSubmission: r.lastDateOfSubmission,
-      tenderSubmittedDate: r.tenderSubmittedDate,
-      managementDecision: r.managementDecision,
-      participated: r.participated,
-      currentStatus: r.currentStatus,
-      price: r.price,
-      attachmentUrl: r.attachmentUrl,
-      itemCategory: r.itemCategory,
-      tenderPrepareBy: r.tenderPrepareBy,
-    }, null, 2));
-  }
-
-  const valid = records.filter((r) => r.tenderNoNitNo?.trim());
-  summary.total = valid.length;
-
-  const affectedRefNos: string[] = [];
-
-  for (const row of valid) {
-    try {
-      const refNo = row.tenderNoNitNo.trim();
-
-      const deadline = deriveDeadline(
-        parseDate(row.lastDateOfSubmission),
-        parseDate(row.tenderSubmittedDate),
-      );
-
-      const participated = parseParticipated(row.participated);
-      const price = parsePrice(row.price);
-      const data = buildTenderData(row, deadline, participated, price);
-
-      const existing = await prisma.tenderMerged.findUnique({
-        where: { referenceNo: refNo },
-        select: { id: true, deadline: true },
-      });
-
-      if (!existing) {
-        await prisma.tenderMerged.create({
-          data: {
-            ...data,
-            referenceNo: refNo,
-            apm: parseApm(row.managementDecision),
-            fileId,
-            app: "NOT_DECIDED",
-            aps: "NOT_DECIDED",
-          },
-        });
-        summary.created++;
-        affectedRefNos.push(refNo);
-      } else {
-        const updateData: Record<string, unknown> = { ...data };
-        if (deadline && (!existing.deadline || deadline > existing.deadline)) {
-          updateData.deadline = deadline;
-        } else {
-          delete updateData.deadline;
-        }
-        if (participated !== null) {
-          updateData.participated = participated;
-        } else {
-          delete updateData.participated;
-        }
-        await prisma.tenderMerged.update({
-          where: { referenceNo: refNo },
-          data: updateData,
-        });
-        summary.updated++;
-        affectedRefNos.push(refNo);
-      }
-
-      // Get TenderMerged id for association linking and TenderFile
-      const merged = await prisma.tenderMerged.findUnique({
-        where: { referenceNo: refNo },
-        select: { id: true },
-      });
-      if (!merged) continue;
-
-      // Association linking
-      const matched = findMatchingAssociation(row.tenderPrepareBy, associations);
-      if (matched) {
-        const already = await prisma.tenderAssociation.findFirst({
-          where: { tenderMergedId: merged.id, associationId: matched.id },
-        });
-        if (!already) {
-          await prisma.tenderAssociation.create({
-            data: { tenderMergedId: merged.id, associationId: matched.id },
-          });
-          summary.linked++;
-        }
-      }
-
-      // Costing attachment - sync as TenderFile
-      if (row.attachmentUrl) {
-        await prisma.tenderFile.deleteMany({
-          where: {
-            tenderMergedId: merged.id,
-            tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT },
-          },
-        });
-        const urlStr = row.attachmentUrl;
-        const urlParts = urlStr.split("/").pop()?.split(".") || [];
-        const name = urlParts.length > 1 ? urlParts.slice(0, -1).join(".") : urlParts[0] || "attachment";
-        const extension = urlParts.length > 1 ? urlParts[urlParts.length - 1] : "";
-        await prisma.tenderFile.create({
-          data: {
-            name,
-            extension,
-            url: urlStr,
-            source: "SHEET_SYNC",
-            tags: [TENDER_FILE_TYPES.COSTING_ATTACHMENT],
-            tenderMergedId: merged.id,
-          },
-        });
-        console.log("[SheetSync] Created TenderFile for", refNo, { name, extension, url: urlStr, tenderMergedId: merged.id });
-      }
-    } catch (e) {
-      summary.errors++;
-    }
-  }
+  // Fetch all existing reference numbers for downstream tasks
+  const allRefs = await prisma.tenderMerged.findMany({
+    select: { referenceNo: true },
+  });
+  const affectedRefNos: string[] = allRefs
+    .map((r) => r.referenceNo)
+    .filter(Boolean) as string[];
+  summary.total = affectedRefNos.length;
 
   // ── Network folder scan → TenderFile entries (parallel with concurrency) ──
   try {
@@ -540,7 +432,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   return {
     summary,
     tenders: {
-      fileName: `Sheet Sync (${summary.created} new, ${summary.updated} updated)`,
+      fileName: `Dashboard Refresh (sheet sync disabled — only files + docket backfill)`,
       columns,
       rows,
       associations: allAssociations,
