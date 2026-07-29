@@ -905,6 +905,70 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
         }
       }
 
+      const parseJsonOrSplit = (raw: unknown, splitBy: RegExp | string, useKeys = false): string[] => {
+        if (raw == null) return [];
+        if (typeof raw === "object" && !(raw instanceof Date)) {
+          if (Array.isArray(raw)) return (raw as any[]).map(String);
+          return (useKeys ? Object.keys(raw as Record<string, unknown>) : Object.values(raw as Record<string, unknown>)).map(String);
+        }
+        if (typeof raw !== "string") return [];
+        if (!raw) return [];
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.map(String);
+          if (typeof parsed === "object" && parsed !== null) return (useKeys ? Object.keys(parsed) : Object.values(parsed)).map(String);
+        } catch {
+          // not JSON, fallback to split
+        }
+        return raw.split(splitBy).map(p => p.trim()).filter(Boolean);
+      };
+
+      const renderStacked = (parts: string[], alignCenter = false) => {
+        if (parts.length === 0) return "-";
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px", ...(alignCenter ? { alignItems: "center" } : {}) }}>
+            {parts.map((part, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>)}
+          </div>
+        );
+      };
+
+      const accStr = String(col.accessor);
+      if (accStr === "proposedErpItemName") {
+        return renderStacked(parseJsonOrSplit(value, /\n+/, true));
+      }
+      if (accStr === "proposedErpQuantity") {
+        return renderStacked(parseJsonOrSplit(value, /[\n,;]+/));
+      }
+      if (accStr === "cva") {
+        return renderStacked(parseJsonOrSplit(value, /@/), true);
+      }
+
+      if (accStr === "rawMaterials") {
+        let entries: [string, unknown][] = [];
+        if (value != null && value !== "") {
+          if (typeof value === "object") {
+            entries = Object.entries(value);
+          } else {
+            try {
+              const parsed = JSON.parse(String(value));
+              if (typeof parsed === "object" && parsed !== null) {
+                entries = Object.entries(parsed);
+              }
+            } catch {}
+          }
+        }
+        if (entries.length === 0) return "-";
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {entries.map(([key, val], i) => (
+              <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>
+                <strong>{key}</strong>: <strong>{String(val)}</strong>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
       if (col.type === "currency") {
         return formatCurrency(value as number | null | undefined);
       }

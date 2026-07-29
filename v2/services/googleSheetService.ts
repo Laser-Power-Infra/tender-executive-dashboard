@@ -6,6 +6,7 @@ import {
   EMDExchangeMode
 } from "@/types/tender";
 import { AttachmentJoinService } from "./attachmentJoinService";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Service responsible for connecting to Google Sheets, fetching rows,
@@ -122,29 +123,20 @@ export class GoogleSheetService {
    * Runs strictly in Node.js server-side environments.
    */
   public async fetchTenderRecords(): Promise<EpcTenderRecord[]> {
-    console.log("[GoogleSheetService] Fetching main tender sheet via Path A (Service Account)...");
-    const accessToken = await this.getAccessToken();
-    const range = `${this.worksheetName}!A1:ZZ`;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${encodeURIComponent(range)}`;
+    console.log("[GoogleSheetService] Fetching tender records from DB (TenderMerged with docketNo)...");
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      }
+    const records = await prisma.tenderMerged.findMany({
+      where: { docketNo: { not: null } },
+      include: {
+        tenderAssociations: { include: { association: true } },
+      },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Google Sheets API fetch failed: ${response.statusText}. Details: ${errorText}`);
-    }
-
-    const data = await response.json() as { values?: string[][] };
-    const tenders = this.processRawRows(data.values || []);
-    console.log(`[GoogleSheetService] Parsed ${tenders.length} tender records from main sheet.`);
+    const tenders: EpcTenderRecord[] = records.map((r) => this.tenderMergedToEpcRecord(r));
+    console.log(`[GoogleSheetService] Mapped ${tenders.length} tender records from DB.`);
 
     // Fetch and join costing attachments from Spreadsheet 2
+    const accessToken = await this.getAccessToken();
     let costingRows: string[][] = [];
     try {
       const costingSpreadsheetId = "1m1ECaxiGYmQrvSPYOBov5YYFq8G-mVNMdPWvGcSfoHs";
@@ -267,6 +259,69 @@ export class GoogleSheetService {
     }
 
     return lines;
+  }
+
+  // =========================================================================
+  // TenderMerged DB → EpcTenderRecord mapping
+  // =========================================================================
+
+  private tenderMergedToEpcRecord(tm: Record<string, any>): EpcTenderRecord {
+    const findAssociationName = (): string => {
+      const assocs = tm.tenderAssociations;
+      if (Array.isArray(assocs) && assocs.length > 0) {
+        return assocs[0]?.association?.name || "";
+      }
+      return "";
+    };
+
+    const parseNum = (val: string | null | undefined): number | null => {
+      if (val == null) return null;
+      const n = parseFloat(val);
+      return isNaN(n) ? null : n;
+    };
+
+    const apmToDecision = (apm: string | null): ManagementDecision => {
+      if (apm === "YES") return ManagementDecision.GO;
+      if (apm === "NO") return ManagementDecision.NO_GO;
+      return ManagementDecision.PENDING;
+    };
+
+    return {
+      slNo: tm.slNo ?? 0,
+      docketNo: tm.docketNo ?? "",
+      tenderFor: tm.tenderFor ?? "",
+      typeOfTender: tm.tenderType === "GEM" ? "GEM" : "NON-GEM",
+      tenderNoNitNo: tm.referenceNo,
+      nameOfWorkDescription: tm.tenderBrief ?? undefined,
+      totalQuantityMeter: parseNum(tm.size),
+      nameOfTheClient: tm.organization ?? "",
+      lastDateOfSubmission: tm.deadline,
+      tenderOpeningDate: tm.tenderOpeningDate,
+      costOfTenderFeeRs: parseNum(tm.documentFees),
+      emdAmountRs: parseNum(tm.emd),
+      estimatedCostRs: parseNum(tm.estimatedBidValue),
+      bidValidityDays: tm.bidValidityDays,
+      contractPeriodDays: tm.contractPeriodDays,
+      managementDecision: apmToDecision(tm.apm),
+      participated: tm.participated,
+      tenderPrepareBy: findAssociationName(),
+      currentStatus: tm.currentStatus ?? "",
+      tenderSubmittedDate: null,
+      reverseAuctionApplicable: tm.reverseAuctionApplicable,
+      reverseAuctionDate: tm.reverseAuctionDate,
+      emdPaymentMode: tm.emdPaymentMode as EMDExchangeMode | null,
+      bgNoUtrNo: tm.bgNoUtrNo,
+      emdValidity: tm.emdValidity,
+      loiPoNoAndDate: tm.loiPoNoAndDate,
+      remarks: tm.remarks,
+      bidValidityExpired: tm.bidValidityExpired ?? false,
+      diffPercentFromL1: tm.diffPercentFromL1,
+      diffPercentFromL2: tm.diffPercentFromL2,
+      reason: tm.reason,
+      finalRemarks: tm.finalRemarks,
+      price: tm.price ?? null,
+      attachmentUrl: null,
+    };
   }
 
   // =========================================================================

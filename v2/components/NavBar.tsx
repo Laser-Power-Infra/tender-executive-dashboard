@@ -16,7 +16,6 @@ import {
 const links = [
   { href: "/tenders", label: "Tenders" },
   { href: "/", label: "Pre Participation" },
-  { href: "/merge-conflict", label: "Merge Conflict" },
   { href: "/post-participation", label: "Post Participation" },
   { href: "/supply-history", label: "Supply History Dashboard" },
   {
@@ -24,6 +23,7 @@ const links = [
     label: "Participation Deadline Over",
   },
   { href: "/activity", label: "Activity" },
+  { href: "/merge-conflict", label: "Merge Conflict" },
 ];
 
 const adminLinks = [

@@ -76,7 +76,8 @@ export interface EpcTenderRecord {
   galvanisedSteelFlatStripPrice?: number | null;
   fillerPrice?: number | null;
   proposedErpItemName?: string;
-  proposedQty?: string;
+  proposedErpQuantity?: string;
+  rawMaterials?: string;
   statusCategory?: string;
   itemCategory?: string | null;
   competitors?: string | null;
@@ -100,6 +101,10 @@ export interface EpcTenderRecord {
   minimumAverageAnnualTurnover?: string | null;
   yearsOfPastExperience?: string | null;
   ePbgDurationMonths?: string | null;
+  emd?: string | null;
+  bgDate?: string | null;
+  bgExpiryDate?: string | null;
+  claimDate?: string | null;
   reportings?: string;
   ourRank?: string | null;
   ourValue?: string | null;

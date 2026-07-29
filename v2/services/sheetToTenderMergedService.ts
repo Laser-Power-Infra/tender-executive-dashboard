@@ -219,10 +219,7 @@ function buildTenderData(
 export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   const summary = { total: 0, created: 0, updated: 0, skipped: 0, linked: 0, errors: 0 };
 
-  const [associations, fileId] = await Promise.all([
-    prisma.association.findMany(),
-    findOrCreateSheetSyncFile(),
-  ]);
+  const associations = await prisma.association.findMany();
 
   const sheetService = new GoogleSheetService();
   let records: EpcTenderRecord[];
@@ -254,117 +251,53 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
     }, null, 2));
   }
 
-  const valid = records.filter((r) => r.tenderNoNitNo?.trim());
-  summary.total = valid.length;
+  summary.total = records.length;
 
-  const affectedRefNos: string[] = [];
+  // ── Costing attachment sync from fetched records ──
+  const allTenders = await prisma.tenderMerged.findMany({
+    select: { id: true, referenceNo: true },
+  });
+  const refToId = new Map(allTenders.map((t) => [t.referenceNo, t.id]));
+  let costingCount = 0;
 
-  for (const row of valid) {
-    try {
-      const refNo = row.tenderNoNitNo.trim();
+  for (const row of records) {
+    const refNo = row.tenderNoNitNo?.trim();
+    if (!refNo) continue;
+    const mergedId = refToId.get(refNo);
+    if (!mergedId) continue;
 
-      const deadline = deriveDeadline(
-        parseDate(row.lastDateOfSubmission),
-        parseDate(row.tenderSubmittedDate),
-      );
-
-      const participated = parseParticipated(row.participated);
-      const price = parsePrice(row.price);
-      const data = buildTenderData(row, deadline, participated, price);
-
-      const existing = await prisma.tenderMerged.findUnique({
-        where: { referenceNo: refNo },
-        select: { id: true, deadline: true },
+    if (row.attachmentUrl) {
+      await prisma.tenderFile.deleteMany({
+        where: {
+          tenderMergedId: mergedId,
+          tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT },
+        },
       });
-
-      if (!existing) {
-        await prisma.tenderMerged.create({
-          data: {
-            ...data,
-            referenceNo: refNo,
-            apm: parseApm(row.managementDecision),
-            fileId,
-            app: "NOT_DECIDED",
-            aps: "NOT_DECIDED",
-          },
-        });
-        summary.created++;
-        affectedRefNos.push(refNo);
-      } else {
-        const updateData: Record<string, unknown> = { ...data };
-        if (deadline && (!existing.deadline || deadline > existing.deadline)) {
-          updateData.deadline = deadline;
-        } else {
-          delete updateData.deadline;
-        }
-        if (participated !== null) {
-          updateData.participated = participated;
-        } else {
-          delete updateData.participated;
-        }
-        await prisma.tenderMerged.update({
-          where: { referenceNo: refNo },
-          data: updateData,
-        });
-        summary.updated++;
-        affectedRefNos.push(refNo);
-      }
-
-      // Get TenderMerged id for association linking and TenderFile
-      const merged = await prisma.tenderMerged.findUnique({
-        where: { referenceNo: refNo },
-        select: { id: true },
+      const urlStr = row.attachmentUrl;
+      const urlParts = urlStr.split("/").pop()?.split(".") || [];
+      const name = urlParts.length > 1 ? urlParts.slice(0, -1).join(".") : urlParts[0] || "attachment";
+      const extension = urlParts.length > 1 ? urlParts[urlParts.length - 1] : "";
+      await prisma.tenderFile.create({
+        data: {
+          name,
+          extension,
+          url: urlStr,
+          source: "SHEET_SYNC",
+          tags: [TENDER_FILE_TYPES.COSTING_ATTACHMENT],
+          tenderMergedId: mergedId,
+        },
       });
-      if (!merged) continue;
-
-      // Association linking
-      const matched = findMatchingAssociation(row.tenderPrepareBy, associations);
-      if (matched) {
-        const already = await prisma.tenderAssociation.findFirst({
-          where: { tenderMergedId: merged.id, associationId: matched.id },
-        });
-        if (!already) {
-          await prisma.tenderAssociation.create({
-            data: { tenderMergedId: merged.id, associationId: matched.id },
-          });
-          summary.linked++;
-        }
-      }
-
-      // Costing attachment - sync as TenderFile
-      if (row.attachmentUrl) {
-        await prisma.tenderFile.deleteMany({
-          where: {
-            tenderMergedId: merged.id,
-            tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT },
-          },
-        });
-        const urlStr = row.attachmentUrl;
-        const urlParts = urlStr.split("/").pop()?.split(".") || [];
-        const name = urlParts.length > 1 ? urlParts.slice(0, -1).join(".") : urlParts[0] || "attachment";
-        const extension = urlParts.length > 1 ? urlParts[urlParts.length - 1] : "";
-        await prisma.tenderFile.create({
-          data: {
-            name,
-            extension,
-            url: urlStr,
-            source: "SHEET_SYNC",
-            tags: [TENDER_FILE_TYPES.COSTING_ATTACHMENT],
-            tenderMergedId: merged.id,
-          },
-        });
-        console.log("[SheetSync] Created TenderFile for", refNo, { name, extension, url: urlStr, tenderMergedId: merged.id });
-      }
-    } catch (e) {
-      summary.errors++;
+      costingCount++;
+      console.log("[SheetSync] Created TenderFile for", refNo, { name, extension, url: urlStr, tenderMergedId: mergedId });
     }
   }
+  summary.created = costingCount;
 
   // ── Network folder scan → TenderFile entries (parallel with concurrency) ──
   try {
     const folderIndex = await getNetworkFolderIndex();
     const networkTenders = await prisma.tenderMerged.findMany({
-      where: { referenceNo: { in: affectedRefNos } },
+      where: { docketNo: { not: null } },
       select: { id: true, docketNo: true },
     });
 
@@ -442,7 +375,6 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
 
         if (condutorMap.size > 0) {
           const condutorTenders = await prisma.tenderMerged.findMany({
-            where: { referenceNo: { in: affectedRefNos } },
             select: { id: true, referenceNo: true },
           });
 
@@ -513,7 +445,6 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
 
   // Fetch affected records to return as TenderData
   const affected = await prisma.tenderMerged.findMany({
-    where: { referenceNo: { in: affectedRefNos } },
     include: {
       extraFields: true,
       tenderAssociations: { include: { association: true } },
@@ -540,7 +471,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   return {
     summary,
     tenders: {
-      fileName: `Sheet Sync (${summary.created} new, ${summary.updated} updated)`,
+      fileName: `Sheet Sync (${summary.created} costing attachments)`,
       columns,
       rows,
       associations: allAssociations,

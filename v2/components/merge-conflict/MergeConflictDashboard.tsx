@@ -2,6 +2,7 @@
 
 import React, { useMemo, useCallback, useState } from "react";
 import { useAppSelector } from "@/lib/hooks";
+import type { TenderMergedRow } from "@/lib/slices/tendersSlice";
 import {
   OptimizedTenderTable,
   ColumnDef,
@@ -15,30 +16,38 @@ export default function MergeConflictDashboard() {
     {},
   );
 
-  const docketCountMap = useMemo(() => {
-    if (!tenderData) return new Map<string, number>();
-    const map = new Map<string, number>();
-    for (const row of tenderData.rows) {
-      const docket = String(row.docketNo ?? "");
-      if (!docket) continue;
-      map.set(docket, (map.get(docket) ?? 0) + 1);
-    }
-    return map;
-  }, [tenderData]);
-
-  const enrichedRows = useMemo(() => {
+  const groupedRows = useMemo(() => {
     if (!tenderData) return [];
-    return tenderData.rows
-      .filter((row) => {
-        const docket = String(row.docketNo ?? "").trim();
-        return docket.length > 0;
-      })
-      .map((row) => ({
-        ...row,
-        _docketTenderCount:
-          docketCountMap.get(String(row.docketNo ?? "")) ?? 0,
+
+    const groups = new Map<string, TenderMergedRow[]>();
+    for (const row of tenderData.rows) {
+      const docket = String(row.docketNo ?? "").trim();
+      if (!docket) continue;
+      const arr = groups.get(docket) ?? [];
+      arr.push(row);
+      groups.set(docket, arr);
+    }
+
+    return Array.from(groups.entries())
+      .filter(([_, rows]) => rows.length > 1)
+      .map(([docket, rows]) => ({
+        docketNo: docket,
+        organization: [
+          ...new Set(
+            rows.map((r) => String(r.organization ?? "")).filter(Boolean),
+          ),
+        ].join(", "),
+        referenceNo: rows
+          .map((r) => String(r.referenceNo ?? ""))
+          .filter(Boolean)
+          .join(" @ "),
+        tenderBrief: rows
+          .map((r) => String(r.tenderBrief ?? ""))
+          .filter(Boolean)
+          .join(" @ "),
+        _docketTenderCount: rows.length,
       }));
-  }, [tenderData, docketCountMap]);
+  }, [tenderData]);
 
   const handleFilteredRowsChange = useCallback(
     (_rows: Record<string, unknown>[]) => {},
@@ -46,11 +55,11 @@ export default function MergeConflictDashboard() {
   );
 
   const handleApprovedClick = useCallback(
-    (rowId: string, value: string) => {
+    (docket: string, value: string) => {
       setApprovedState((prev) => {
-        const current = prev[rowId] ?? "";
+        const current = prev[docket] ?? "";
         const newValue = current === value ? "" : value;
-        return { ...prev, [rowId]: newValue };
+        return { ...prev, [docket]: newValue };
       });
     },
     [],
@@ -61,28 +70,28 @@ export default function MergeConflictDashboard() {
       {
         header: "Docket No",
         accessor: "docketNo" as keyof Record<string, unknown>,
-        defaultWidth: 150,
+        defaultWidth: 180,
         sortable: true,
         filter: { type: "text" as const },
       },
       {
         header: "Organization",
         accessor: "organization" as keyof Record<string, unknown>,
-        defaultWidth: 250,
+        defaultWidth: 300,
         sortable: true,
         filter: { type: "text" as const },
       },
       {
         header: "Reference No",
         accessor: "referenceNo" as keyof Record<string, unknown>,
-        defaultWidth: 200,
+        defaultWidth: 350,
         sortable: true,
         filter: { type: "text" as const },
       },
       {
         header: "Tender Brief",
         accessor: "tenderBrief" as keyof Record<string, unknown>,
-        defaultWidth: 400,
+        defaultWidth: 500,
         sortable: true,
         filter: { type: "text" as const },
       },
@@ -96,7 +105,6 @@ export default function MergeConflictDashboard() {
         filter: {
           type: "select" as const,
           options: [
-            { value: "0", label: "0" },
             { value: "1", label: "1" },
             { value: "2", label: "2" },
             { value: "3", label: "3" },
@@ -106,8 +114,6 @@ export default function MergeConflictDashboard() {
         },
         renderCell: (value: unknown) => {
           const count = Number(value ?? 0);
-          if (count === 0)
-            return <span className="text-slate-300">-</span>;
           return (
             <span
               className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold ${
@@ -136,15 +142,15 @@ export default function MergeConflictDashboard() {
           ],
         },
         renderCell: (_value: unknown, row: Record<string, unknown>) => {
-          const rowId = String(row.id ?? "");
-          const val = approvedState[rowId] ?? "";
+          const docket = String(row.docketNo ?? "");
+          const val = approvedState[docket] ?? "";
           const isYes = val === "YES";
           const isNo = val === "NO";
           return (
             <div className="flex gap-1 py-1">
               <button
                 type="button"
-                onClick={() => handleApprovedClick(rowId, "YES")}
+                onClick={() => handleApprovedClick(docket, "YES")}
                 className={`w-7 h-7 rounded text-xs font-bold border-2 transition-colors cursor-pointer ${
                   isYes
                     ? "bg-green-500 text-white border-green-600"
@@ -155,7 +161,7 @@ export default function MergeConflictDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => handleApprovedClick(rowId, "NO")}
+                onClick={() => handleApprovedClick(docket, "NO")}
                 className={`w-7 h-7 rounded text-xs font-bold border-2 transition-colors cursor-pointer ${
                   isNo
                     ? "bg-red-500 text-white border-red-600"
@@ -194,7 +200,7 @@ export default function MergeConflictDashboard() {
         <main className="flex-1 overflow-auto p-6">
           <OptimizedTenderTable
             columns={columnDefs}
-            rows={enrichedRows as Record<string, unknown>[]}
+            rows={groupedRows as Record<string, unknown>[]}
             title="Merge Conflict"
             onFilteredRowsChange={handleFilteredRowsChange}
           />

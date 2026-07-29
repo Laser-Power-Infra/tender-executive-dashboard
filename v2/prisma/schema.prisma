@@ -676,6 +676,10 @@ model TenderMerged {
   reverseAuctionDate       DateTime?
   emdPaymentMode           String?
   bgNoUtrNo                String?
+  bgDate                   String?
+  bgExpiryDate             String?
+  claimDate                String?
+  bgStatus                 String?
   emdValidity              DateTime?
   loiPoNoAndDate           String?
   bidValidityExpired       Boolean?

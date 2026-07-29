@@ -11,13 +11,13 @@ $Password = "asmita"
 $LocalBackupDir = "D:\PostgresBackups"
 
 # Network folder (change this)
-$NetworkBackupDir = "Y:\laser-tender-dashboard-backup-v2\"
+$NetworkBackupDir = "Y:\laser-tender-dashboard-backup\"
 
 # Timestamp
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 
 # File name
-$BackupFile = "backup_$Timestamp.dump"
+$BackupFile = "backup_$Timestamp.sql"
 
 # Ensure local folder exists
 New-Item -ItemType Directory -Force -Path $LocalBackupDir | Out-Null
@@ -28,10 +28,9 @@ docker exec `
     -e PGPASSWORD=$Password `
     $ContainerName `
     pg_dump `
-        -U $User `
-        -d $Database `
-        
-        -f "/tmp/$BackupFile.sql"
+    -U $User `
+    -d $Database `
+    -f "/tmp/$BackupFile"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Backup failed." -ForegroundColor Red
@@ -67,3 +66,5 @@ if ($LASTEXITCODE -eq 0) {
 else {
     Write-Host "Backup created locally but failed to copy to network." -ForegroundColor Yellow
 }
+
+Read-Host "Press Enter to exit"

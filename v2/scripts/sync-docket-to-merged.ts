@@ -26,7 +26,12 @@ async function main() {
   let errors = 0;
 
   for (const record of records) {
-    if (!record.tenderNoNitNo) {
+    if (!record.tenderNoNitNo?.trim()) {
+      skipped++;
+      continue;
+    }
+
+    if (!record.docketNo?.trim()) {
       skipped++;
       continue;
     }
@@ -42,7 +47,7 @@ async function main() {
         continue;
       }
 
-      if (existing.docketNo === record.docketNo) {
+      if (existing.docketNo) {
         skipped++;
         continue;
       }
