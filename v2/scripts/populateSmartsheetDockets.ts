@@ -20,7 +20,12 @@ async function main() {
 
   // Count blanks before
   const totalBefore = await prisma.tenderMerged.count({
-    where: { docketNo: { equals: null } },
+     where: {
+    OR: [
+      { docketNo: null },
+      { docketNo: "" },
+    ],
+  },
   });
   console.log(`\n  Blank docket records before: ${totalBefore}`);
 

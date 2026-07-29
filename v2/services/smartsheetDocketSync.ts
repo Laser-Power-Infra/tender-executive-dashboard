@@ -132,19 +132,19 @@ export async function syncDocketFromSmartsheet(): Promise<DocketSyncStats> {
     let foundDocket: string | null = null;
     let source: "emailSubject" | "enquiryTender" | null = null;
 
-    // Check "Email Subject Line (Debosmita Nath)" — substring match both directions
+    // Check "Email Subject Line (Debosmita Nath)" — refNo must appear within the email subject
     for (const [emailVal, docketVal] of emailSubjectToDocket) {
-      if (emailVal.includes(refNoLower) || refNoLower.includes(emailVal)) {
+      if (emailVal.includes(refNoLower)) {
         foundDocket = docketVal;
         source = "emailSubject";
         break;
       }
     }
 
-    // Fallback: check "Enquiry Tender No (Marketing Team)" — substring match both directions
+    // Fallback: check "Enquiry Tender No (Marketing Team)" — refNo must appear within the enquiry value
     if (!foundDocket) {
       for (const [enquiryVal, docketVal] of enquiryTenderToDocket) {
-        if (enquiryVal.includes(refNoLower) || refNoLower.includes(enquiryVal)) {
+        if (enquiryVal.includes(refNoLower)) {
           foundDocket = docketVal;
           source = "enquiryTender";
           break;
