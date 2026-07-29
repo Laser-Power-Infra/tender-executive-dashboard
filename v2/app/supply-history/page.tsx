@@ -106,6 +106,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [indexing, setIndexing] = useState(false);
   const [downloadingDocs, setDownloadingDocs] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
 
   type CertState =
     | { status: "idle" }
@@ -444,6 +445,94 @@ export const SupplyHistoryDashboard: React.FC = () => {
     }
   }, [filtered, triggerDownload]);
 
+  const handleExportAndDownload = useCallback(async () => {
+    const blobHtml = (rows: SupplyHistoryRecord[]) => {
+      const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
+      const tableRows = rows.map(rec => {
+        const cells = COLUMNS.map(col => {
+          const val = rec[col.key];
+          if (val === null || val === undefined) return "<td style='border:1px solid #ddd;padding:8px;'></td>";
+          return `<td style='border:1px solid #ddd;padding:8px;'>${String(val)}</td>`;
+        }).join("");
+        return `<tr>${cells}</tr>`;
+      }).join("");
+      return `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="Content-type" content="text/html;charset=utf-8" />
+          <!--[if gte o4 9]>
+          <xml>
+            <x:ExcelWorkbook>
+              <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                  <x:Name>Supply History</x:Name>
+                  <x:WorksheetOptions>
+                    <x:DisplayGridlines/>
+                  </x:WorksheetOptions>
+                </x:ExcelWorksheet>
+              </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+          </xml>
+          <![endif]-->
+        </head>
+        <body>
+          <table border="1" style="border-collapse:collapse;">
+            <thead><tr>${tableHeader}</tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </body>
+        </html>
+      `
+    }
+
+    setExportingAll(true)
+    const date = new Date().toISOString().split("T")[0]
+
+    try {
+      const excelBlob = new Blob([blobHtml(data)], { type: "application/vnd.ms-excel" })
+      triggerDownload(excelBlob, `Supply_History_Data_${date}.xls`)
+    } catch (err) {
+      console.error("Excel export failed:", err)
+      toast.error("Failed to export Excel")
+      setExportingAll(false)
+      return
+    }
+
+    const withDocs = filtered.filter(r => r.hasDocuments && r.saleBillNumber)
+    if (withDocs.length === 0) {
+      toast.info("Excel exported. No documents to zip.")
+      setExportingAll(false)
+      return
+    }
+
+    const billNumbers = withDocs.map(r => r.saleBillNumber!).filter(Boolean)
+
+    try {
+      const res = await fetch("/api/supply-history/download-documents-zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE" },
+        body: JSON.stringify({ saleBillNumbers: billNumbers }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Download failed" }))
+        throw new Error(err.error || "Download failed")
+      }
+
+      const zipBlob = await res.blob()
+      triggerDownload(zipBlob, `Supply_Documents_${date}.zip`)
+
+      const driveOnly = filtered.filter(r => !r.hasDocuments && r.attachmentUrl)
+      if (driveOnly.length > 0) {
+        toast.info(`${driveOnly.length} record(s) with only Google Drive documents were excluded from the zip`)
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download documents")
+    } finally {
+      setExportingAll(false)
+    }
+  }, [data, filtered, triggerDownload])
+
   const handleExportExcel = () => {
     const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
     const tableRows = sorted.map(rec => {
@@ -589,6 +678,14 @@ export const SupplyHistoryDashboard: React.FC = () => {
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
               {downloadingDocs ? <><RefreshCw size={14} /> Zipping...</> : <><Download size={14} /> Download All Docs</>}
+            </button>
+            <button
+              className="export-excel-btn"
+              onClick={handleExportAndDownload}
+              disabled={exportingAll}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              {exportingAll ? <><RefreshCw size={14} /> Processing...</> : <><Download size={14} /> Export & Download</>}
             </button>
             <button
               className="clear-filters-btn"
