@@ -161,7 +161,7 @@ export async function syncDocketFromSmartsheet(): Promise<DocketSyncStats> {
     try {
       await prisma.tenderMerged.update({
         where: { id: record.id },
-        data: { docketNo: foundDocket },
+        data: { docketNo: null },
       });
 
       if (source === "emailSubject") {

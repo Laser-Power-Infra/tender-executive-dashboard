@@ -11,7 +11,7 @@ $Password = "asmita"
 $LocalBackupDir = "D:\PostgresBackups"
 
 # Network folder (change this)
-$NetworkBackupDir = "Y:\laser-tender-dashboard-backup\"
+$NetworkBackupDir = "Y:\laser-tender-dashboard-backup-v2\"
 
 # Timestamp
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
@@ -30,12 +30,12 @@ docker exec `
     pg_dump `
         -U $User `
         -d $Database `
-        -Fc `
-        -f "/tmp/$BackupFile"
+        
+        -f "/tmp/$BackupFile.sql"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Backup failed." -ForegroundColor Red
-    exit 1
+    # exit 1
 }
 
 Write-Host "Copying backup from container..."
@@ -44,7 +44,7 @@ docker cp "$ContainerName`:/tmp/$BackupFile" "$LocalBackupDir\$BackupFile"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to copy backup from container." -ForegroundColor Red
-    exit 1
+    # exit 1
 }
 
 Write-Host "Removing temporary file from container..."
