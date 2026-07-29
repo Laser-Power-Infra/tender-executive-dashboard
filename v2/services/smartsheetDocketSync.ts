@@ -67,12 +67,18 @@ export async function syncDocketFromSmartsheet(): Promise<DocketSyncStats> {
   }
 
   // 3. Query TenderMerged records with blank docketNo
-  const blankDocketRecords = await prisma.tenderMerged.findMany({
-    where: {
-      docketNo: { equals: null },
-    },
-    select: { id: true, referenceNo: true },
-  });
+const blankDocketRecords = await prisma.tenderMerged.findMany({
+  where: {
+    OR: [
+      { docketNo: null },
+      { docketNo: "" },
+    ],
+  },
+  select: {
+    id: true,
+    referenceNo: true,
+  },
+});
 
   stats.totalBlank = blankDocketRecords.length;
 

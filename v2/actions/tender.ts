@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendTenderWebhook } from "@/lib/webhook";
 import { withLog, logActivity } from "@/lib/activity-logger";
+import { triggerEmdPaymentWebhook, EMD_VALID_VALUES } from "@/lib/integrations/n8n";
 
 export async function updateTenderAssignmentsAction(params: {
   tenderMergedId: number;
@@ -406,21 +407,102 @@ export async function updateBeneficiaryBankDetails(params: {
   });
 }
 
+type EmdPayloadSelect = {
+  emdPaymentMode: string | null
+  referenceNo: string | null
+  proposedErpItemName: string | null
+  proposedErpQuantity: string | null
+  deadline: Date | null
+  documentFees: string | null
+  emd: string | null
+}
+
+function validateEmdPayloadData(record: EmdPayloadSelect) {
+  const missing: string[] = []
+
+  if (!record.referenceNo) missing.push("Reference No.")
+  if (!record.proposedErpItemName) missing.push("Proposed ERP Item Name")
+  if (!record.proposedErpQuantity || Number(record.proposedErpQuantity) <= 0) missing.push("Proposed ERP Quantity")
+  if (!record.deadline) missing.push("Last Date of Submission")
+  if (!record.documentFees || Number(record.documentFees) <= 0) missing.push("Document Fee")
+  if (!record.emd || Number(record.emd) <= 0) missing.push("EMD Amount")
+
+  return missing
+}
+
 export async function updateTenderMergedStringField(params: {
   tenderMergedId: number;
   field: string;
   value: string;
 }) {
+  const { tenderMergedId, field, value } = params
+
+  if (field === "emdPaymentMode" && value && (EMD_VALID_VALUES as readonly string[]).includes(value)) {
+    const current = await prisma.tenderMerged.findUnique({
+      where: { id: tenderMergedId },
+      select: {
+        emdPaymentMode: true,
+        referenceNo: true,
+        proposedErpItemName: true,
+        proposedErpQuantity: true,
+        deadline: true,
+        documentFees: true,
+        emd: true,
+      },
+    })
+
+    if (!current) return
+
+    if (current.emdPaymentMode === value) return
+
+    const missing = validateEmdPayloadData(current)
+    if (missing.length > 0) {
+      throw new Error(
+        `Cannot update EMD Payment Mode. Please fill in the following fields first: ${missing.join(", ")}`,
+      )
+    }
+
+    await prisma.tenderMerged.update({
+      where: { id: tenderMergedId },
+      data: { emdPaymentMode: value },
+    })
+
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(tenderMergedId),
+      referenceNo: current.referenceNo ?? undefined,
+      details: `Updated emdPaymentMode to "${value}" on tender #${tenderMergedId}`,
+    })
+
+    try {
+      await triggerEmdPaymentWebhook({
+        referenceNo: current.referenceNo ?? "",
+        proposedErpItemName: current.proposedErpItemName ?? "",
+        proposedErpQuantity: current.proposedErpQuantity ? Number(current.proposedErpQuantity) : 0,
+        lastDateOfSubmission: current.deadline?.toISOString() ?? "",
+        documentFee: current.documentFees ? Number(current.documentFees) : 0,
+        emdAmount: current.emd ? Number(current.emd) : 0,
+        emdPaymentMode: value,
+      })
+    } catch (error) {
+      console.error("[EMD Webhook] Failed to trigger webhook:", error)
+    }
+
+    return
+  }
+
   await prisma.tenderMerged.update({
-    where: { id: params.tenderMergedId },
-    data: { [params.field]: params.value },
-  });
+    where: { id: tenderMergedId },
+    data: { [field]: value },
+  })
+
   logActivity({
     action: "UPDATE",
     tableName: "TenderMerged",
-    recordId: String(params.tenderMergedId),
-    details: `Updated ${params.field} to "${params.value}" on tender #${params.tenderMergedId}`,
-  });
+    recordId: String(tenderMergedId),
+    details: `Updated ${field} to "${value}" on tender #${tenderMergedId}`,
+  })
 }
 
 export async function updateTenderMergedDateField(params: {
