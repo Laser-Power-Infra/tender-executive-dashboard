@@ -84,6 +84,7 @@ export default function Dashboard() {
     string,
     unknown
   > | null>(null);
+  const [syncingDockets, setSyncingDockets] = useState(false);
   const feedbackSaving = useAppSelector((s) => s.tenders.feedbackSaving);
 
   const prevTenderDataRef = useRef(tenderData);
@@ -108,6 +109,27 @@ export default function Dashboard() {
       dispatch(fetchTendersIncremental(files.map((f) => f.id)));
     }
   }, [files, dispatch]);
+
+  const handleSyncDockets = async () => {
+    setSyncingDockets(true);
+    try {
+      const res = await fetch("/api/sync-dockets", { method: "POST" });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(`Docket sync failed: ${data.error}`);
+      } else {
+        const s = data.stats;
+        toast.success(
+          `Dockets synced: ${s.foundInEmailSubject + s.foundInEnquiryTender} filled, ` +
+          `${s.notFound} not found, ${s.errors} errors`,
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Docket sync failed");
+    } finally {
+      setSyncingDockets(false);
+    }
+  };
 
   const dateFilteredRows = useMemo(() => {
     if (!tenderData) return [];
@@ -1330,6 +1352,10 @@ export default function Dashboard() {
                         </>
                       )}
                     </div>
+                    <button className="export-btn" onClick={handleSyncDockets} disabled={syncingDockets}>
+                      <Loader2 size={14} className={syncingDockets ? "animate-spin" : ""} />
+                      {syncingDockets ? " Syncing Dockets..." : " Sync Dockets"}
+                    </button>
                     <ConfirmAnalysisDialog filteredRows={filteredRows} />
                     {feedbackRow && (
                       <AiFeedbackDialog
