@@ -49,7 +49,13 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     tenderPrepareBy: resolveAssociationNames(row.assignedTo, tenderData.associations),
     currentStatus: row.currentStatus || "",
     tenderSubmittedDate: row.scrapedDate ? new Date(row.scrapedDate) : null,
-    reverseAuctionApplicable: null,
+    reverseAuctionApplicable: row.raQualificationRule
+      ? true
+      : row.reverseAuctionApplicable === "true"
+        ? true
+        : row.reverseAuctionApplicable === "false"
+          ? false
+          : null,
     reverseAuctionDate: null,
     emdPaymentMode: null,
     bgNoUtrNo: row.bgNoUtrNo || null,

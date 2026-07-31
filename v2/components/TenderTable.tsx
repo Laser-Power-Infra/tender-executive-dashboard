@@ -1285,6 +1285,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       toast.error("Database record ID is not found. Please refresh and try again.");
       return;
     }
+    if (field === "reverseAuctionApplicable") {
+      const raRule = record.raQualificationRule;
+      if (raRule != null && raRule !== "") {
+        toast.error("Reverse Auction Applicable cannot be edited when RA Qualification Rule is set.");
+        return;
+      }
+    }
     const key = `${record.id}::${field}`;
     setSavingKeys((prev) => ({ ...prev, [key]: true }));
 
@@ -3286,56 +3293,65 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             cellContent = formatDate(cellVal as Date | null);
                           } else if (col.type === "boolean") {
                             if (col.accessor === "reverseAuctionApplicable") {
-                              const raVal =
-                                overrides[record.id!]
-                                  ?.reverseAuctionApplicable !== undefined
-                                  ? overrides[record.id!]
-                                      ?.reverseAuctionApplicable
-                                  : record.reverseAuctionApplicable;
-                              const isSaving =
-                                !!savingKeys[
-                                  `${record.id}::reverseAuctionApplicable`
-                                ];
+                              const hasRaRule =
+                                record.raQualificationRule != null &&
+                                record.raQualificationRule !== "";
 
-                              if (readOnly) {
-                                const raDisplay = raVal === true ? "Yes" : raVal === false ? "No" : "-";
-                                cellContent = <span>{raDisplay}</span>;
+                              if (hasRaRule) {
+                                cellContent = <span>Yes</span>;
                                 cellClass = "col-center";
                               } else {
-                                let selectVal = "BLANK";
-                                if (raVal === true) selectVal = "YES";
-                                else if (raVal === false) selectVal = "NO";
+                                const raVal =
+                                  overrides[record.id!]
+                                    ?.reverseAuctionApplicable !== undefined
+                                    ? overrides[record.id!]
+                                        ?.reverseAuctionApplicable
+                                    : record.reverseAuctionApplicable;
+                                const isSaving =
+                                  !!savingKeys[
+                                    `${record.id}::reverseAuctionApplicable`
+                                  ];
 
-                                cellContent = (
-                                  <select
-                                    value={selectVal}
-                                    disabled={isSaving}
-                                    onChange={(e) => {
-                                      const val =
-                                        e.target.value === "YES"
-                                          ? true
-                                          : e.target.value === "NO"
-                                            ? false
-                                            : null;
-                                      handleUpdate(
-                                        record,
-                                        "reverseAuctionApplicable",
-                                        val,
-                                      );
-                                    }}
-                                    className="table-editable-select status-select"
-                                    style={{
-                                      minWidth: "60px",
-                                      padding: "2px 4px",
-                                      fontSize: "11px",
-                                    }}
-                                  >
-                                    <option value="BLANK">(Blank)</option>
-                                    <option value="YES">Yes</option>
-                                    <option value="NO">No</option>
-                                  </select>
-                                );
-                                cellClass = "col-center col-editable";
+                                if (readOnly) {
+                                  const raDisplay = raVal === true ? "Yes" : raVal === false ? "No" : "-";
+                                  cellContent = <span>{raDisplay}</span>;
+                                  cellClass = "col-center";
+                                } else {
+                                  let selectVal = "BLANK";
+                                  if (raVal === true) selectVal = "YES";
+                                  else if (raVal === false) selectVal = "NO";
+
+                                  cellContent = (
+                                    <select
+                                      value={selectVal}
+                                      disabled={isSaving}
+                                      onChange={(e) => {
+                                        const val =
+                                          e.target.value === "YES"
+                                            ? true
+                                            : e.target.value === "NO"
+                                              ? false
+                                              : null;
+                                        handleUpdate(
+                                          record,
+                                          "reverseAuctionApplicable",
+                                          val,
+                                        );
+                                      }}
+                                      className="table-editable-select status-select"
+                                      style={{
+                                        minWidth: "60px",
+                                        padding: "2px 4px",
+                                        fontSize: "11px",
+                                      }}
+                                    >
+                                      <option value="BLANK">(Blank)</option>
+                                      <option value="YES">Yes</option>
+                                      <option value="NO">No</option>
+                                    </select>
+                                  );
+                                  cellClass = "col-center col-editable";
+                                }
                               }
                             } else if (col.accessor === "participated") {
                               const participatedVal = cellVal as boolean | null;

@@ -492,6 +492,25 @@ export async function updateTenderMergedStringField(params: {
     return
   }
 
+  if (field === "raQualificationRule") {
+    await prisma.tenderMerged.update({
+      where: { id: tenderMergedId },
+      data: {
+        raQualificationRule: value,
+        reverseAuctionApplicable: value ? true : null,
+      },
+    })
+
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(tenderMergedId),
+      details: `Updated raQualificationRule to "${value}" and reverseAuctionApplicable to "${!!value}" on tender #${tenderMergedId}`,
+    })
+
+    return
+  }
+
   await prisma.tenderMerged.update({
     where: { id: tenderMergedId },
     data: { [field]: value },
