@@ -1,5 +1,6 @@
 import fs from "fs";
 import { prisma } from "@/lib/prisma";
+import { resolveSupplyPath } from "@/controllers/tenderAttachmentController";
 
 interface UniqueFileEntry {
   filePath: string;
@@ -21,9 +22,10 @@ export async function getUniqueSupplyDocuments(
 
   for (const doc of docs) {
     if (seenFilenames.has(doc.fileName)) continue;
-    if (!fs.existsSync(doc.filePath)) continue;
+    const resolvedPath = resolveSupplyPath(doc.filePath);
+    if (!fs.existsSync(resolvedPath)) continue;
     seenFilenames.add(doc.fileName);
-    results.push({ filePath: doc.filePath, filename: doc.fileName });
+    results.push({ filePath: resolvedPath, filename: doc.fileName });
   }
 
   return results;
