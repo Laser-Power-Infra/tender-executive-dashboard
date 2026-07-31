@@ -6,6 +6,7 @@ import {
   MERGED_FIELDS,
   mapRowToTender,
   hasReferenceNoColumn,
+  findHeaderRowIndex,
   getReferenceNo,
   isGemReference,
   parseDate,
@@ -121,11 +122,12 @@ function parseSheetData(
   associations?: { id: number; name: string; email: string }[],
 ): ParsedSheet {
   const sheet = workbook.Sheets[sheetName];
-  const jsonData: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
+  const rawRows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
     defval: "",
   });
 
-  if (!jsonData.length) {
+  if (!rawRows.length) {
     return {
       sheetName,
       prepared: [],
@@ -134,7 +136,19 @@ function parseSheetData(
     };
   }
 
-  const headers = Object.keys(jsonData[0]);
+  const headerRowIdx = findHeaderRowIndex(rawRows);
+  if (headerRowIdx < 0) {
+    return {
+      sheetName,
+      prepared: [],
+      skipped: true,
+      excludedCount: 0,
+    };
+  }
+
+  const headers = (rawRows[headerRowIdx] as unknown[])
+    .map((h) => (h == null ? "" : String(h).trim()))
+    .filter(Boolean);
 
   if (!hasReferenceNoColumn(headers, customColumnMap)) {
     return {
@@ -144,6 +158,17 @@ function parseSheetData(
       excludedCount: 0,
     };
   }
+
+  const jsonData: Record<string, unknown>[] = rawRows
+    .slice(headerRowIdx + 1)
+    .map((row) => {
+      const obj: Record<string, unknown> = {};
+      const headerRow = rawRows[headerRowIdx] as unknown[];
+      headerRow.forEach((h, i) => {
+        if (h) obj[String(h).trim()] = row[i] ?? "";
+      });
+      return obj;
+    });
 
   const prepared: PreparedTender[] = [];
   let excludedCount = 0;
@@ -238,6 +263,20 @@ async function insertTenderMerged(
       }
       if (p.createData.apm && p.createData.apm !== "NOT_DECIDED" && old.apm === "NOT_DECIDED") {
         updateData.apm = p.createData.apm;
+      }
+
+      const SKIP_KEYS = new Set([
+        "fileId", "referenceNo", "tenderType", "excludedCategory",
+        "deadline", "app", "aps", "apm",
+        "tenderAssociations", "extraFields",
+      ]);
+
+      for (const [key, value] of Object.entries(p.createData)) {
+        if (SKIP_KEYS.has(key)) continue;
+        const oldVal = (old as any)[key];
+        if ((oldVal == null || oldVal === "") && value != null && value !== "") {
+          updateData[key] = value;
+        }
       }
 
       if (Object.keys(updateData).length > 0) {

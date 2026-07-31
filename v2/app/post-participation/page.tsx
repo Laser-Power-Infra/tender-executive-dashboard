@@ -7,9 +7,12 @@ import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
 import { Eraser, ExternalLink, FileText, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 import "../Dashboard.css";
 
 export default function PostParticipation() {
+  const { data: session } = useSession();
+  const canSync = session?.user?.role === "admin" || session?.user?.role === "developer";
   const referenceDate = useMemo(() => new Date("2026-06-25T12:00:00"), []);
   const tenderSliceData = useAppSelector((s) => s.tenders.data);
   const loadingTenders = useAppSelector((s) => s.tenders.loading);
@@ -153,14 +156,16 @@ export default function PostParticipation() {
             >
               <ExternalLink size={14} /> Open Sheet
             </button>
-            <button
-              className="erp-sync-btn"
-              onClick={handleSyncQuotation}
-              disabled={syncQuotationLoading}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-            >
-              {syncQuotationLoading ? <><RefreshCw size={14} className="spin" /> Syncing Quotation...</> : <><FileText size={14} /> Sync Quotation</>}
-            </button>
+            {canSync && (
+              <button
+                className="erp-sync-btn"
+                onClick={handleSyncQuotation}
+                disabled={syncQuotationLoading}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                {syncQuotationLoading ? <><RefreshCw size={14} className="spin" /> Syncing Quotation...</> : <><FileText size={14} /> Sync Quotation</>}
+              </button>
+            )}
           </div>
         </header>
         <main className="dashboard-body">
@@ -172,7 +177,7 @@ export default function PostParticipation() {
             </div>
           ) : (
             <>
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated"]} showPostParticipationColumns={true} />
+              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated", "nextAction", "tenderUpdateStatus", "currentStatus", "ourRank", "ourValue", "nameOfRank1", "valueOfRank1", "differenceBetweenRank1", "nameOfRank2", "valueOfRank2", "differenceBetweenRank2"]} showPostParticipationColumns={true} />
             </>
           )}
         </main>

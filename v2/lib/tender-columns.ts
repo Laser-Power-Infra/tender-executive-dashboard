@@ -1,32 +1,124 @@
-const GEM_FIELDS = new Set([
-  "referenceNo", "tenderBrief", "value", "deadline", "app", "aps", "apm", "location",
-  "organization", "documentFees", "emd", "msmeExemption",
-  "startupExemption", "quantity", "bidOpeningDateTime",
-  "bidOfferValidity", "ministryStateName", "departmentName",
-  "officeName", "minimumAverageAnnualTurnover", "yearsOfPastExperience",
-  "oemAverageTurnover", "contractPeriod",
-  "financialDocumentPriceBreakupRequired", "similarCategory",
-  "pastExperienceSimilarServicesRequired", "documentRequiredFromSeller",
-  "pastPerformance", "bidToRaEnabled", "raQualificationRule",
-  "boqTitle", "bidDetails", "comprehensiveMaintenanceChargesRequired",
-  "typeOfBid", "technicalClarificationTimeAllowed", "inspectionRequired",
-  "estimatedBidValue", "evaluationMethod", "advisoryBank",
-  "ePbgPercentage", "ePbgDurationMonths", "msePurchasePreference",
-  "miiPurchasePreference", "consigneesReportingOfficer",
-  "mediationClause", "arbitrationClause", "checklist",
-  "t247Id", "scrapedDate", "source", "assignedTo",
-  "markedStatus", "sheetStatus", "ready", "searchKey",
-  "downloadLink", "currency",
-  "itemCategory", "totalQuantity",
-]);
-
-const NON_GEM_FIELDS = new Set([
-  "referenceNo", "tenderBrief", "estimatedBidValue", "deadline", "app", "aps", "apm",
-  "location", "organization", "documentFees", "emd",
-  "msmeExemption", "startupExemption", "quantity", "checklist",
-  "t247Id", "scrapedDate", "source", "assignedTo",
-  "markedStatus", "sheetStatus", "ready", "searchKey",
-  "downloadLink", "currency",
+const MERGED_FIELDS = new Set([
+  "advisoryBank",
+  "aiRelevanceReason",
+  "aiRelevanceValid",
+  "apm",
+  "app",
+  "aps",
+  "arbitrationClause",
+  "assignedTo",
+  "attachmentUrl",
+  "beneficiaryBankDetails",
+  "bgDate",
+  "bgExpiryDate",
+  "bgNoUtrNo",
+  "bgStatus",
+  "bidDetails",
+  "bidOfferValidity",
+  "bidOpeningDateTime",
+  "bidStatus",
+  "bidToRaEnabled",
+  "bidValidityDays",
+  "bidValidityExpired",
+  "boqTitle",
+  "checklist",
+  "claimDate",
+  "competitors",
+  "comprehensiveMaintenanceChargesRequired",
+  "consigneesReportingOfficer",
+  "contractNo",
+  "contractPeriod",
+  "contractPeriodDays",
+  "currency",
+  "currentStatus",
+  "cva",
+  "deadline",
+  "departmentName",
+  "differenceBetweenRank1",
+  "differenceBetweenRank2",
+  "diffL1ManuallyEdited",
+  "diffL2ManuallyEdited",
+  "diffPercentFromL1",
+  "diffPercentFromL2",
+  "docketNo",
+  "documentFees",
+  "documentRequiredFromSeller",
+  "downloadLink",
+  "emd",
+  "emdPaymentMode",
+  "emdValidity",
+  "ePbgDurationMonths",
+  "ePbgPercentage",
+  "estimatedBidValue",
+  "evaluationMethod",
+  "evaluationTableData",
+  "excludedCategory",
+  "finalRemarks",
+  "financialDocumentPriceBreakupRequired",
+  "inspectionRequired",
+  "itemCategory",
+  "location",
+  "locationCount",
+  "loiPoNoAndDate",
+  "markedStatus",
+  "mediationClause",
+  "miiPurchasePreference",
+  "minimumAverageAnnualTurnover",
+  "ministryStateName",
+  "msePurchasePreference",
+  "msmeExemption",
+  "nameOfRank1",
+  "nameOfRank2",
+  "nextAction",
+  "oemAverageTurnover",
+  "officeName",
+  "organization",
+  "ourRank",
+  "ourValue",
+  "parseError",
+  "parseStatus",
+  "participated",
+  "pastExperienceSimilarServicesRequired",
+  "pastPerformance",
+  "price",
+  "proposedErpItemName",
+  "proposedErpQuantity",
+  "quantity",
+  "quotationNo",
+  "raQualificationRule",
+  "rawMaterials",
+  "ready",
+  "reason",
+  "remarks",
+  "referenceNo",
+  "resultAutomationError",
+  "resultAutomationStatus",
+  "reverseAuctionApplicable",
+  "reverseAuctionDate",
+  "scrapedDate",
+  "searchKey",
+  "sheetStatus",
+  "similarCategory",
+  "size",
+  "slNo",
+  "source",
+  "startupExemption",
+  "state",
+  "statusCategory",
+  "t247Id",
+  "technicalClarificationTimeAllowed",
+  "tenderBrief",
+  "tenderFileUrl",
+  "tenderFor",
+  "tenderOpeningDate",
+  "tenderUpdateStatus",
+  "totalQuantity",
+  "typeOfBid",
+  "value",
+  "valueOfRank1",
+  "valueOfRank2",
+  "website",
+  "yearsOfPastExperience",
 ]);
 
 type ColumnMap = Record<string, string>;
@@ -230,6 +322,105 @@ export const COLUMN_MAP: ColumnMap = {
   "Total Quantity": "totalQuantity",
   totalQty: "totalQuantity",
   totalqty: "totalQuantity",
+
+  aiRelevanceValid: "aiRelevanceValid",
+  aiRelevanceReason: "aiRelevanceReason",
+  attachmentUrl: "attachmentUrl",
+  "Attachment URL": "attachmentUrl",
+  beneficiaryBankDetails: "beneficiaryBankDetails",
+  "Beneficiary Bank Details": "beneficiaryBankDetails",
+  bgDate: "bgDate",
+  "BG Date": "bgDate",
+  bgExpiryDate: "bgExpiryDate",
+  "BG Expiry Date": "bgExpiryDate",
+  bgNoUtrNo: "bgNoUtrNo",
+  "BG No / UTR No": "bgNoUtrNo",
+  bgStatus: "bgStatus",
+  "BG Status": "bgStatus",
+  bidStatus: "bidStatus",
+  "Bid Status": "bidStatus",
+  bidValidityDays: "bidValidityDays",
+  "Bid Validity Days": "bidValidityDays",
+  bidValidityExpired: "bidValidityExpired",
+  claimDate: "claimDate",
+  "Claim Date": "claimDate",
+  competitors: "competitors",
+  contractNo: "contractNo",
+  "Contract No": "contractNo",
+  contractPeriodDays: "contractPeriodDays",
+  currentStatus: "currentStatus",
+  "Current Status": "currentStatus",
+  cva: "cva",
+  docketNo: "docketNo",
+  docketNumber: "docketNo",
+  "Docket No": "docketNo",
+  diffPercentFromL1: "diffPercentFromL1",
+  "Diff % from L1": "diffPercentFromL1",
+  diffPercentFromL2: "diffPercentFromL2",
+  "Diff % from L2": "diffPercentFromL2",
+  diffL1ManuallyEdited: "diffL1ManuallyEdited",
+  diffL2ManuallyEdited: "diffL2ManuallyEdited",
+  differenceBetweenRank1: "differenceBetweenRank1",
+  differenceBetweenRank2: "differenceBetweenRank2",
+  emdPaymentMode: "emdPaymentMode",
+  "EMD Payment Mode": "emdPaymentMode",
+  emdValidity: "emdValidity",
+  evaluationTableData: "evaluationTableData",
+  excludedCategory: "excludedCategory",
+  "Excluded Category": "excludedCategory",
+  finalRemarks: "finalRemarks",
+  "Final Remarks": "finalRemarks",
+  locationCount: "locationCount",
+  "Location Count": "locationCount",
+  loiPoNoAndDate: "loiPoNoAndDate",
+  "LOI / PO No & Date": "loiPoNoAndDate",
+  nameOfRank1: "nameOfRank1",
+  "Name of Rank 1": "nameOfRank1",
+  nameOfRank2: "nameOfRank2",
+  "Name of Rank 2": "nameOfRank2",
+  nextAction: "nextAction",
+  "Next Action": "nextAction",
+  ourRank: "ourRank",
+  "Our Rank": "ourRank",
+  ourValue: "ourValue",
+  "Our Value": "ourValue",
+  parseStatus: "parseStatus",
+  parseError: "parseError",
+  participated: "participated",
+  price: "price",
+  proposedErpItemName: "proposedErpItemName",
+  "Proposed ERP Item Name": "proposedErpItemName",
+  proposedErpQuantity: "proposedErpQuantity",
+  "Proposed ERP Quantity": "proposedErpQuantity",
+  quotationNo: "quotationNo",
+  "Quotation No": "quotationNo",
+  rawMaterials: "rawMaterials",
+  "Raw Materials": "rawMaterials",
+  reason: "reason",
+  remarks: "remarks",
+  resultAutomationStatus: "resultAutomationStatus",
+  resultAutomationError: "resultAutomationError",
+  reverseAuctionApplicable: "reverseAuctionApplicable",
+  "Reverse Auction Applicable": "reverseAuctionApplicable",
+  reverseAuctionDate: "reverseAuctionDate",
+  "Reverse Auction Date": "reverseAuctionDate",
+  slNo: "slNo",
+  "SL No": "slNo",
+  statusCategory: "statusCategory",
+  "Status Category": "statusCategory",
+  tenderFileUrl: "tenderFileUrl",
+  "Tender File URL": "tenderFileUrl",
+  tenderFor: "tenderFor",
+  "Tender For": "tenderFor",
+  tenderOpeningDate: "tenderOpeningDate",
+  "Tender Opening Date": "tenderOpeningDate",
+  tenderUpdateStatus: "tenderUpdateStatus",
+  "Tender Update Status": "tenderUpdateStatus",
+  valueOfRank1: "valueOfRank1",
+  "Value of Rank 1": "valueOfRank1",
+  valueOfRank2: "valueOfRank2",
+  "Value of Rank 2": "valueOfRank2",
+  website: "website",
 };
 
 const NORMALIZED_COLUMN_MAP: ColumnMap = (() => {
@@ -344,6 +535,12 @@ export function mapRowToTender(
         const raw = rawValue == null ? "" : String(rawValue);
         const val = raw.trim().toLowerCase();
         knownFields[mappedField] = val === "yes" ? "YES" : val === "no" ? "NO" : "NOT_DECIDED";
+      } else if (mappedField === "statusCategory") {
+        const raw = rawValue == null ? "" : String(rawValue);
+        const val = raw.trim().toUpperCase();
+        if (val === "AOC" || val === "FINANCIAL" || val === "TECHNICAL") {
+          knownFields[mappedField] = val;
+        }
       } else {
         const val = rawValue == null ? "" : String(rawValue).trim();
         if (val) knownFields[mappedField] = val;
@@ -363,7 +560,7 @@ function findReferenceNoColumn(
 ): string | undefined {
   for (const h of headers) {
     if (isIgnoredHeader(h)) continue;
-    if (normalizeHeader(h) === "referenceno") return h;
+    if (normalizeHeader(h) === "referenceno" || normalizeHeader(h) === "tenderReferenceno") return h;
   }
 
   const columnMap = customColumnMap ?? NORMALIZED_COLUMN_MAP;
@@ -378,6 +575,20 @@ function findReferenceNoColumn(
     if (columnMap[n] === "referenceNo") return h;
   }
   return undefined;
+}
+
+export function findHeaderRowIndex(rows: unknown[][]): number {
+  for (let i = 0; i < rows.length; i++) {
+    for (const cell of rows[i]) {
+      const val = cell == null ? "" : String(cell).trim();
+      if (!val) continue;
+      if (val === "referenceNo" || val === "tenderReferenceNo") return i;
+      const n = normalizeHeader(val);
+      if (n === "referenceno" || n === "tenderreferenceno") return i;
+      if (n.includes("ref") && n.includes("no")) return i;
+    }
+  }
+  return -1;
 }
 
 export function hasReferenceNoColumn(headers: string[], customColumnMap?: ColumnMap): boolean {
@@ -428,6 +639,4 @@ export function getFieldValue(
   return row[col] ?? null;
 }
 
-export const MERGED_FIELDS = new Set([...GEM_FIELDS, ...NON_GEM_FIELDS]);
-
-export { parseDate, GEM_FIELDS, NON_GEM_FIELDS };
+export { parseDate, MERGED_FIELDS };

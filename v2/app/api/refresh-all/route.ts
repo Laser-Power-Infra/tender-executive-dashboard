@@ -5,10 +5,13 @@ import { DatabaseSupplyService } from "@/services/databaseSupplyService";
 import { GoogleSheetService } from "@/services/googleSheetService";
 import { fetchAndEnrichSmartsheetTenders } from "@/services/smartsheetEnrichmentService";
 import { fetchSupplyHistoryFromGoogleSheet } from "@/services/supplySheetService";
+import { requireAdminApi } from "@/lib/dal";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const forbidden = await requireAdminApi()
+  if (forbidden) return forbidden
   const errors: string[] = [];
 
   // 1. Refresh Executive Dashboard (Tender) data

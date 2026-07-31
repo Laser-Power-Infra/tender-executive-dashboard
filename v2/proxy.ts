@@ -2,6 +2,8 @@ import { auth } from "@/auth"
 import { NextRequest, NextResponse } from "next/server"
 
 const protectedRoutes = ["/admin"]
+const syncApiPaths = ["/api/sync", "/api/refresh-all"]
+const ADMIN_ROLES = ["admin", "developer"]
 
 export default async function proxy(req: NextRequest) {
   const path = req.nextUrl.pathname
@@ -16,6 +18,12 @@ export default async function proxy(req: NextRequest) {
       const session = await auth()
       if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
+      // Sync API routes require admin or developer role
+      if (syncApiPaths.some(p => path.startsWith(p))) {
+        if (!ADMIN_ROLES.includes(session.user.role)) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+        }
       }
     }
     return NextResponse.next()

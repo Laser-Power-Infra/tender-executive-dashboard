@@ -145,6 +145,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [isDownloadingPdfs, setIsDownloadingPdfs] = useState(false);
   const [isParsingPdfs, setIsParsingPdfs] = useState(false);
+  const [isParsingCva, setIsParsingCva] = useState(false);
 
   const dispatch = useAppDispatch();
   const columnFilters = useAppSelector((s) => s.filters.columnFilters);
@@ -481,6 +482,20 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       }));
   }, [processedRows]);
 
+  const tendersForCvaParsing = useMemo(() => {
+    return processedRows
+      .filter((row) => {
+        const type = row["type" as keyof T];
+        const costingUrl = row["costingFileUrl" as keyof T];
+        return type === "Gem" && !!costingUrl;
+      })
+      .map((row) => ({
+        id: parseInt(String(row["id" as keyof T] ?? "0"), 10),
+        referenceNo: String(row["referenceNo" as keyof T] ?? ""),
+        file_link: String(row["costingFileUrl" as keyof T] ?? ""),
+      }));
+  }, [processedRows]);
+
   const totalRecords = processedRows.length;
   const totalPages = Math.ceil(totalRecords / rowsPerPage) || 1;
 
@@ -618,6 +633,29 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       setIsParsingPdfs(false);
     }
   }, [tendersToParse]);
+
+  const handleParseCva = useCallback(async () => {
+    if (tendersForCvaParsing.length === 0) return;
+    setIsParsingCva(true);
+    try {
+      const res = await fetch("/api/parse-cva", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenders: tendersForCvaParsing }),
+      });
+      const data = await res.json();
+      const msg =
+        data.queued > 0
+          ? `Queued ${data.queued} tenders for CVA parsing`
+          : "No tenders queued";
+      alert(msg);
+      onParseCompleteRef.current?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Parse CVA failed");
+    } finally {
+      setIsParsingCva(false);
+    }
+  }, [tendersForCvaParsing]);
 
   const formatCurrency = useCallback(
     (val: number | null | undefined): string => {
@@ -867,6 +905,70 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
         }
       }
 
+      const parseJsonOrSplit = (raw: unknown, splitBy: RegExp | string, useKeys = false): string[] => {
+        if (raw == null) return [];
+        if (typeof raw === "object" && !(raw instanceof Date)) {
+          if (Array.isArray(raw)) return (raw as any[]).map(String);
+          return (useKeys ? Object.keys(raw as Record<string, unknown>) : Object.values(raw as Record<string, unknown>)).map(String);
+        }
+        if (typeof raw !== "string") return [];
+        if (!raw) return [];
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.map(String);
+          if (typeof parsed === "object" && parsed !== null) return (useKeys ? Object.keys(parsed) : Object.values(parsed)).map(String);
+        } catch {
+          // not JSON, fallback to split
+        }
+        return raw.split(splitBy).map(p => p.trim()).filter(Boolean);
+      };
+
+      const renderStacked = (parts: string[], alignCenter = false) => {
+        if (parts.length === 0) return "-";
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px", ...(alignCenter ? { alignItems: "center" } : {}) }}>
+            {parts.map((part, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>)}
+          </div>
+        );
+      };
+
+      const accStr = String(col.accessor);
+      if (accStr === "proposedErpItemName") {
+        return renderStacked(parseJsonOrSplit(value, /\n+/, true));
+      }
+      if (accStr === "proposedErpQuantity") {
+        return renderStacked(parseJsonOrSplit(value, /[\n,;]+/));
+      }
+      if (accStr === "cva") {
+        return renderStacked(parseJsonOrSplit(value, /@/), true);
+      }
+
+      if (accStr === "rawMaterials") {
+        let entries: [string, unknown][] = [];
+        if (value != null && value !== "") {
+          if (typeof value === "object") {
+            entries = Object.entries(value);
+          } else {
+            try {
+              const parsed = JSON.parse(String(value));
+              if (typeof parsed === "object" && parsed !== null) {
+                entries = Object.entries(parsed);
+              }
+            } catch {}
+          }
+        }
+        if (entries.length === 0) return "-";
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {entries.map(([key, val], i) => (
+              <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>
+                <strong>{key}</strong>: <strong>{String(val)}</strong>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
       if (col.type === "currency") {
         return formatCurrency(value as number | null | undefined);
       }
@@ -967,6 +1069,15 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
         <div className="toolbar-right">
           <button className="export-btn" onClick={handleExportExcel}>
             <FileSpreadsheet size={14} /> Export Excel
+          </button>
+          <button
+            className="export-btn"
+            onClick={handleParseCva}
+            disabled={isParsingCva || tendersForCvaParsing.length === 0}
+          >
+            {isParsingCva
+              ? <><Loader2 size={14} className="animate-spin" /> Parsing CVA...</>
+              : <><FileText size={14} /> Parse CVA ({tendersForCvaParsing.length})</>}
           </button>
           {/* <button
             className="export-btn"

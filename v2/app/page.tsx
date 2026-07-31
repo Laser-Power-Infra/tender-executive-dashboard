@@ -9,12 +9,15 @@ import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
 import { syncSheetToMerged } from "@/lib/slices/tendersSlice";
 import { Eraser, ExternalLink, Database, RefreshCw, Loader2, Landmark, Building2 } from "lucide-react";
 import { toast } from "sonner";
-import { debugParseAllAttachments } from "@/actions/debugParseAttachments";
+import { queueAllCvaParsing } from "@/actions/queueCvaParsing";
+import { useSession } from "next-auth/react";
 import "./Dashboard.css";
 
 export default function Home() {
   const referenceDate = useMemo(() => new Date("2026-06-25T12:00:00"), []);
   const dispatch = useAppDispatch();
+  const { data: session } = useSession();
+  const canSync = session?.user?.role === "admin" || session?.user?.role === "developer";
   const tenderSliceData = useAppSelector((s) => s.tenders.data);
   const loadingTenders = useAppSelector((s) => s.tenders.loading);
   const preFilteredData = useMemo(() => {
@@ -111,31 +114,10 @@ export default function Home() {
   const handleEnrichCva = async () => {
     setCvaLoading(true);
     try {
-      const results = await debugParseAllAttachments();
-      const total = results.length;
-      const withError = results.filter((r) => r.error);
-      const mfgFound = results.filter((r) => r.sheets?.some((s) => s.mfgPercentFound));
-      const lines = [
-        `Processed ${total} attachment(s)`,
-        mfgFound.length > 0 ? `MFG% found in ${mfgFound.length} file(s)` : "No MFG% header found",
-        withError.length > 0 ? `${withError.length} failed` : "",
-      ]
-        .filter(Boolean)
-        .join(" | ");
-      toast.success(lines);
-      results.forEach((r) => {
-        if (r.error) {
-          console.warn(`[Parse] ${r.docketNo}: ${r.error}`);
-        } else {
-          const mfgSheets = r.sheets?.filter((s) => s.mfgPercentFound).map((s) => s.name) || [];
-          console.log(
-            `[Parse] ${r.docketNo}: sheets=${r.sheets?.length}, MFG% in=[${mfgSheets.join(", ")}]`,
-            r.sheets?.map((s) => ({ sheet: s.name, headers: s.headers })),
-          );
-        }
-      });
+      const { queued } = await queueAllCvaParsing();
+      toast.success(`Queued ${queued} tenders for CVA parsing`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Parsing failed");
+      toast.error(err instanceof Error ? err.message : "Queue failed");
     } finally {
       setCvaLoading(false);
     }
@@ -208,9 +190,11 @@ export default function Home() {
           </div>
           <div className="header-actions">
             <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Eraser size={14} /> Clear Filters</button>
-            <button className="erp-sync-btn" onClick={handleRefresh} disabled={loadingTenders} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              {loadingTenders ? <><RefreshCw size={14} /> Refreshing...</> : <><RefreshCw size={14} /> Refresh Dashboard</>}
-            </button>
+            {canSync && (
+              <button className="erp-sync-btn" onClick={handleRefresh} disabled={loadingTenders} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {loadingTenders ? <><RefreshCw size={14} /> Refreshing...</> : <><RefreshCw size={14} /> Refresh Dashboard</>}
+              </button>
+            )}
             <button
               className="erp-sync-btn"
               onClick={() => window.open("https://docs.google.com/spreadsheets/d/1GTwzxMgViohbCimXqfiBZBJsKbCSr7hCgbcHF_En1VE", "_blank", "noopener,noreferrer")}
@@ -224,24 +208,28 @@ export default function Home() {
               disabled={cvaLoading}
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
-              {cvaLoading ? <><RefreshCw size={14} className="spin" /> Parsing CVA...</> : <><Database size={14} /> Parse CVA</>}
+              {cvaLoading ? <><RefreshCw size={14} className="spin" /> Queuing...</> : <><Database size={14} /> Parse CVA</>}
             </button>
-            <button
-              className="erp-sync-btn"
-              onClick={handleSyncBankDetails}
-              disabled={syncBankLoading}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-            >
-              {syncBankLoading ? <><RefreshCw size={14} className="spin" /> Syncing Bank...</> : <><Landmark size={14} /> Sync Bank Details</>}
-            </button>
-            <button
-              className="erp-sync-btn"
-              onClick={handleSyncOrganization}
-              disabled={syncOrgLoading}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-            >
-              {syncOrgLoading ? <><RefreshCw size={14} className="spin" /> Syncing Org...</> : <><Building2 size={14} /> Sync Organization</>}
-            </button>
+            {canSync && (
+              <button
+                className="erp-sync-btn"
+                onClick={handleSyncBankDetails}
+                disabled={syncBankLoading}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                {syncBankLoading ? <><RefreshCw size={14} className="spin" /> Syncing Bank...</> : <><Landmark size={14} /> Sync Bank Details</>}
+              </button>
+            )}
+            {canSync && (
+              <button
+                className="erp-sync-btn"
+                onClick={handleSyncOrganization}
+                disabled={syncOrgLoading}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                {syncOrgLoading ? <><RefreshCw size={14} className="spin" /> Syncing Org...</> : <><Building2 size={14} /> Sync Organization</>}
+              </button>
+            )}
           </div>
         </header>
         <main className="dashboard-body">

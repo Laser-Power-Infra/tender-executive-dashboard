@@ -4,6 +4,7 @@ import {
   EpcTenderRecord,
   ManagementDecision,
   EMDExchangeMode,
+  CURRENT_STATUS_OPTIONS,
 } from "@/types/tender";
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
@@ -40,32 +41,32 @@ const filesPromiseCache = new Map<string, Promise<any[]>>();
 
 const fetchDocketFiles = (docketNo: string): Promise<any[]> => {
   if (filesCache.has(docketNo)) {
-    console.log(`[DEBUG fetchDocketFiles] CACHE HIT for ${docketNo}:`, filesCache.get(docketNo));
+    // console.log(`[DEBUG fetchDocketFiles] CACHE HIT for ${docketNo}:`, filesCache.get(docketNo));
     return Promise.resolve(filesCache.get(docketNo)!);
   }
   if (filesPromiseCache.has(docketNo)) {
-    console.log(`[DEBUG fetchDocketFiles] IN-FLIGHT HIT for ${docketNo}`);
+    // console.log(`[DEBUG fetchDocketFiles] IN-FLIGHT HIT for ${docketNo}`);
     return filesPromiseCache.get(docketNo)!;
   }
-  console.log(`[DEBUG fetchDocketFiles] FETCHING for ${docketNo}`);
+  // console.log(`[DEBUG fetchDocketFiles] FETCHING for ${docketNo}`);
   const promise = fetch(`/api/executive-tenders/${docketNo}/files`, {
     headers: {
       Authorization: "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE",
     },
   })
     .then((res) => {
-      console.log(`[DEBUG fetchDocketFiles] ${docketNo} response status:`, res.status, res.statusText);
+      // console.log(`[DEBUG fetchDocketFiles] ${docketNo} response status:`, res.status, res.statusText);
       return res.ok ? res.json() : { files: [] };
     })
     .then((data) => {
-      console.log(`[DEBUG fetchDocketFiles] ${docketNo} response data:`, JSON.stringify(data).slice(0, 500));
+      // console.log(`[DEBUG fetchDocketFiles] ${docketNo} response data:`, JSON.stringify(data).slice(0, 500));
       const files = data.files || [];
       filesCache.set(docketNo, files);
       filesPromiseCache.delete(docketNo);
       return files;
     })
     .catch((err) => {
-      console.warn(`[DEBUG fetchDocketFiles] ${docketNo} fetch error:`, err);
+      // console.warn(`[DEBUG fetchDocketFiles] ${docketNo} fetch error:`, err);
       return [];
     });
   filesPromiseCache.set(docketNo, promise);
@@ -301,8 +302,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "custom",
     },
     {
-      header: "Proposed Qty",
-      accessor: "proposedQty",
+      header: "Proposed ERP Quantity",
+      accessor: "proposedErpQuantity",
       defaultWidth: 120,
       align: "left",
       type: "custom",
@@ -357,6 +358,34 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
+      header: "emd",
+      accessor: "emd",
+      defaultWidth: 130,
+      align: "right",
+      type: "string",
+    },
+    {
+      header: "bgDate",
+      accessor: "bgDate",
+      defaultWidth: 120,
+      align: "center",
+      type: "string",
+    },
+    {
+      header: "bgExpiryDate",
+      accessor: "bgExpiryDate",
+      defaultWidth: 120,
+      align: "center",
+      type: "string",
+    },
+    {
+      header: "claimDate",
+      accessor: "claimDate",
+      defaultWidth: 120,
+      align: "center",
+      type: "string",
+    },
+    {
       header: "BG / UTR No",
       accessor: "bgNoUtrNo",
       defaultWidth: 150,
@@ -395,13 +424,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       header: "Reason for not participation",
       accessor: "reason",
       defaultWidth: 250,
-      align: "left",
-      type: "string",
-    },
-    {
-      header: "Prep By",
-      accessor: "tenderPrepareBy",
-      defaultWidth: 120,
       align: "left",
       type: "string",
     },
@@ -462,6 +484,62 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
+      header: "Our Rank",
+      accessor: "ourRank",
+      defaultWidth: 100,
+      align: "center",
+      type: "string",
+    },
+    {
+      header: "Our Value",
+      accessor: "ourValue",
+      defaultWidth: 120,
+      align: "right",
+      type: "string",
+    },
+    {
+      header: "L1 Party Name",
+      accessor: "nameOfRank1",
+      defaultWidth: 200,
+      align: "left",
+      type: "string",
+    },
+    {
+      header: "L1 Price",
+      accessor: "valueOfRank1",
+      defaultWidth: 120,
+      align: "right",
+      type: "string",
+    },
+    {
+      header: "L1 Diff (%)",
+      accessor: "differenceBetweenRank1",
+      defaultWidth: 110,
+      align: "right",
+      type: "string",
+    },
+    {
+      header: "L2 Party Name",
+      accessor: "nameOfRank2",
+      defaultWidth: 200,
+      align: "left",
+      type: "string",
+    },
+    {
+      header: "L2 Price",
+      accessor: "valueOfRank2",
+      defaultWidth: 120,
+      align: "right",
+      type: "string",
+    },
+    {
+      header: "L2 Diff (%)",
+      accessor: "differenceBetweenRank2",
+      defaultWidth: 110,
+      align: "right",
+      type: "string",
+    },
+    {
       header: "Tender Update Status",
       accessor: "tenderUpdateStatus",
       defaultWidth: 150,
@@ -488,6 +566,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       defaultWidth: 100,
       align: "center",
       type: "decision",
+    },
+    {
+      header: "Prep By",
+      accessor: "tenderPrepareBy",
+      defaultWidth: 120,
+      align: "left",
+      type: "string",
     },
     {
       header: "Participated?",
@@ -573,10 +658,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "bgNoUtrNo", "remarks", "loiPoNoAndDate",
     "competitors", "diffPercentFromL1", "diffPercentFromL2",
     "nextAction",
-    "quotationNo", "contractNo",
+    "quotationNo", "contractNo", "currentStatus",
+    "ourRank", "ourValue",
+    "nameOfRank1", "valueOfRank1", "differenceBetweenRank1",
+    "nameOfRank2", "valueOfRank2", "differenceBetweenRank2",
+  ]);
+  const postParticipationExcludeAccessors = new Set([
+    "merged_office_consignees", "miiPurchasePreference", "tenderDocument",
+    "reportings", "website", "raQualificationRule", "startupExemption",
+    "minimumAverageAnnualTurnover", "yearsOfPastExperience", "ePbgDurationMonths",
   ]);
   const visibleColumns = showPostParticipationColumns
-    ? columns
+    ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor))
     : columns.filter((col) => !postParticipationAccessors.has(col.accessor));
 
   // 2. States
@@ -651,6 +744,31 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [experienceEditValue, setExperienceEditValue] = useState("");
   const [editingEpbgId, setEditingEpbgId] = useState<string | null>(null);
   const [epbgEditValue, setEpbgEditValue] = useState("");
+  const [editingOurRankId, setEditingOurRankId] = useState<string | null>(null);
+  const [ourRankEditValue, setOurRankEditValue] = useState("");
+  const [editingOurValueId, setEditingOurValueId] = useState<string | null>(null);
+  const [ourValueEditValue, setOurValueEditValue] = useState("");
+  const [editingNameOfRank1Id, setEditingNameOfRank1Id] = useState<string | null>(null);
+  const [nameOfRank1EditValue, setNameOfRank1EditValue] = useState("");
+  const [editingValueOfRank1Id, setEditingValueOfRank1Id] = useState<string | null>(null);
+  const [valueOfRank1EditValue, setValueOfRank1EditValue] = useState("");
+  const [editingDifferenceBetweenRank1Id, setEditingDifferenceBetweenRank1Id] = useState<string | null>(null);
+  const [differenceBetweenRank1EditValue, setDifferenceBetweenRank1EditValue] = useState("");
+  const [editingNameOfRank2Id, setEditingNameOfRank2Id] = useState<string | null>(null);
+  const [nameOfRank2EditValue, setNameOfRank2EditValue] = useState("");
+  const [editingValueOfRank2Id, setEditingValueOfRank2Id] = useState<string | null>(null);
+  const [valueOfRank2EditValue, setValueOfRank2EditValue] = useState("");
+  const [editingDifferenceBetweenRank2Id, setEditingDifferenceBetweenRank2Id] = useState<string | null>(null);
+  const [differenceBetweenRank2EditValue, setDifferenceBetweenRank2EditValue] = useState("");
+  const [editingBgStatusId, setEditingBgStatusId] = useState<string | null>(null);
+  const [bgStatusEditValue, setBgStatusEditValue] = useState<string>("");
+  const [editingBgDateId, setEditingBgDateId] = useState<string | null>(null);
+  const [bgDateEditValue, setBgDateEditValue] = useState<string>("");
+  const [editingBgExpiryId, setEditingBgExpiryId] = useState<string | null>(null);
+  const [bgExpiryEditValue, setBgExpiryEditValue] = useState<string>("");
+  const [editingClaimDateId, setEditingClaimDateId] = useState<string | null>(null);
+  const [claimDateEditValue, setClaimDateEditValue] = useState<string>("");
+  const [editingPriceBasisId, setEditingPriceBasisId] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -2551,49 +2669,32 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           );
                           cellClass = "col-left";
                         } else if (col.accessor === "rawMaterials") {
-                          const activeRates = [
-                            { label: "Al", price: record.aluminiumPrice },
-                            {
-                              label: "Al Alloy",
-                              price: record.aluminiumAlloyPrice,
-                            },
-                            { label: "Cu", price: record.copperTapePrice },
-                            {
-                              label: "Semicon",
-                              price: record.extrudedSemiconductivePrice,
-                            },
-                            { label: "XLPE", price: record.htXlpePrice },
-                            { label: "ST-2", price: record.pvcTypeSt2Price },
-                            {
-                              label: "Steel",
-                              price: record.galvanisedSteelFlatStripPrice,
-                            },
-                            { label: "Filler", price: record.fillerPrice },
-                          ].filter(
-                            (m) =>
-                              m.price !== null &&
-                              m.price !== undefined &&
-                              m.price !== 0,
+                          const raw = (record as any).rawMaterials;
+                          let entries: [string, unknown][] = [];
+                          if (raw != null && raw !== "") {
+                            if (typeof raw === "object") {
+                              entries = Object.entries(raw);
+                            } else {
+                              try {
+                                const parsed = JSON.parse(String(raw));
+                                if (typeof parsed === "object" && parsed !== null) {
+                                  entries = Object.entries(parsed);
+                                }
+                              } catch {}
+                            }
+                          }
+                          cellContent = entries.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              {entries.map(([key, val], i) => (
+                                <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>
+                                  <strong>{key}</strong>: <strong>{String(val)}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span>-</span>
                           );
-
-                          cellContent =
-                            activeRates.length > 0 ? (
-                              <div className="raw-materials-grid">
-                                {activeRates.map((m) => (
-                                  <div
-                                    className="material-rate-tag"
-                                    key={m.label}
-                                    title={`${m.label}: ₹${m.price}/kg`}
-                                  >
-                                    <span className="mat-lbl">{m.label}:</span>
-                                    <span className="mat-val">₹{m.price}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="no-rates-placeholder">-</span>
-                            );
-                          cellClass = "col-raw-materials";
+                          cellClass = "col-left";
                         } else if (col.accessor === "files") {
                           cellContent = (
                             <FilesCell
@@ -2607,22 +2708,68 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             <BOQChartCell docketNo={record.docketNo} boqFileId={record.boqFileId} tenderFilesJson={record.tenderFiles} />
                           );
                           cellClass = "col-center";
-                        } else if (
-                          col.accessor === "proposedErpItemName" ||
-                          col.accessor === "proposedQty"
-                        ) {
-                          const text =
-                            (record[
-                              col.accessor as keyof EpcTenderRecord
-                            ] as string) || "";
-                          cellContent = text ? (
-                            <div className="proposed-items-cell-content">
-                              {text}
+                        } else if (col.accessor === "proposedErpItemName") {
+                          const raw: unknown = record[col.accessor as keyof EpcTenderRecord];
+                          let parts: string[] = [];
+                          if (raw != null && raw !== "") {
+                            if (typeof raw === "object" && !(raw instanceof Date)) {
+                              if (Array.isArray(raw)) {
+                                parts = (raw as any[]).map(String);
+                              } else {
+                                parts = Object.keys(raw as Record<string, unknown>).map(String);
+                              }
+                            } else if (typeof raw === "string") {
+                              try {
+                                const parsed = JSON.parse(raw);
+                                if (Array.isArray(parsed)) {
+                                  parts = parsed.map(String);
+                                } else if (typeof parsed === "object" && parsed !== null) {
+                                  parts = Object.keys(parsed).map(String);
+                                }
+                              } catch {
+                                parts = raw.split(/\n+/).map(p => p.trim()).filter(Boolean);
+                              }
+                            }
+                          }
+                          cellContent = parts.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              {parts.map((part, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>)}
                             </div>
                           ) : (
                             <span>-</span>
                           );
-                          cellClass = "col-left text-pre-line";
+                          cellClass = "col-left";
+                        } else if (col.accessor === "proposedErpQuantity") {
+                          const raw: unknown = record[col.accessor as keyof EpcTenderRecord];
+                          let parts: string[] = [];
+                          if (raw != null && raw !== "") {
+                            if (typeof raw === "object" && !(raw instanceof Date)) {
+                              if (Array.isArray(raw)) {
+                                parts = (raw as any[]).map(String);
+                              } else {
+                                parts = Object.values(raw as Record<string, unknown>).map(String);
+                              }
+                            } else if (typeof raw === "string") {
+                              try {
+                                const parsed = JSON.parse(raw);
+                                if (Array.isArray(parsed)) {
+                                  parts = parsed.map(String);
+                                } else if (typeof parsed === "object" && parsed !== null) {
+                                  parts = Object.values(parsed).map(String);
+                                }
+                              } catch {
+                                parts = raw.split(/[\n,;]+/).map(p => p.trim()).filter(Boolean);
+                              }
+                            }
+                          }
+                          cellContent = parts.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              {parts.map((part, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>)}
+                            </div>
+                          ) : (
+                            <span>-</span>
+                          );
+                          cellClass = "col-left";
                         } else if (
                           col.accessor === "diffPercentFromL1"
                         ) {
@@ -2873,7 +3020,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             "OPEN";
                           const isSaving =
                             !!savingKeys[`${record.id}::tenderUpdateStatus`];
-                          if (readOnly) {
+                          if (readOnly && !editableColumns.includes("tenderUpdateStatus")) {
                             cellContent = (
                               <span className={`status-badge ${statusValue === "CLOSED" ? "won" : "eval"}`}>
                                 {statusValue}
@@ -2907,7 +3054,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               : (record.nextAction ?? "");
                           const isSaving =
                             !!savingKeys[`${record.id}::nextAction`];
-                          if (readOnly) {
+                          if (readOnly && !editableColumns.includes("nextAction")) {
                             const actionLabels: Record<string, string> = {
                               "UPDATE_FROM_AB_LETTER": "Update from AB letter",
                               "BG_REFUND_LETTER_TO_BE_SENT": "BG refund letter to be sent",
@@ -2958,14 +3105,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             let url = "";
                             if (filesRaw) {
                               try {
-                                const files: Array<{ url: string; tags: string[] }> = JSON.parse(filesRaw);
+                                const files: Array<{ url: string; source: string; tags: string[] }> = JSON.parse(filesRaw);
                                 const costingFile = files.find((f) => f.tags?.includes("costingAttachment"));
-                                url = costingFile?.url ?? "";
+                                url = costingFile?.source && costingFile.source !== 'SHEET_SYNC'
+                                  ? `/api/executive-files/view/${costingFile.source}`
+                                  : costingFile?.url ?? "";
                               } catch {}
                             }
                             cellContent = url ? (
                               <a
-                                href={url}
+                                href={url.startsWith('/api/')
+                                  ? `${url}?auth=${encodeURIComponent("Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE")}`
+                                  : url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="table-attachment-link"
@@ -3089,15 +3240,41 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             );
                             cellClass = "col-center col-editable";
                           } else if (col.accessor === "priceBasis") {
-                            const basis = (cellVal as string) || "Firm";
-                            cellContent = (
-                              <span
-                                className={`price-basis-badge ${basis.toLowerCase().includes("variable") ? "variable" : "firm"}`}
-                              >
-                                {basis}
-                              </span>
-                            );
-                            cellClass = "col-center";
+                            const isEditing = editingPriceBasisId === record.id;
+                            const isSaving = !!savingKeys[`${record.id}-priceBasis`];
+                            const val = (cellVal as string) || "";
+                            if (isEditing) {
+                              cellContent = (
+                                <select
+                                  value={val}
+                                  disabled={isSaving}
+                                  onChange={(e) => {
+                                    handleMergedFieldSave(record, "priceBasis", e.target.value, () => {}, () => {});
+                                    setEditingPriceBasisId(null);
+                                  }}
+                                  onBlur={() => setEditingPriceBasisId(null)}
+                                  className="table-editable-select status-select"
+                                  style={{ minWidth: "100px", padding: "2px 4px", fontSize: "11px" }}
+                                  autoFocus
+                                >
+                                  <option value="">(Blank)</option>
+                                  <option value="FIRM">FIRM</option>
+                                  <option value="VARIABLE">VARIABLE</option>
+                                </select>
+                              );
+                            } else {
+                              const basis = (cellVal as string) || "Firm";
+                              cellContent = (
+                                <span
+                                  className={`price-basis-badge ${basis.toLowerCase().includes("variable") ? "variable" : "firm"}`}
+                                  onClick={() => setEditingPriceBasisId(record.id ?? null)}
+                                  style={{ cursor: "pointer" }}
+                                >
+                                  {basis}
+                                </span>
+                              );
+                            }
+                            cellClass = "col-center col-editable";
                           } else if (col.type === "currency") {
                             cellContent = formatCurrency(
                               cellVal as number | null,
@@ -3278,16 +3455,44 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             }
                           } else if (col.type === "status") {
                             const statusVal = (cellVal as string) || "";
-                            cellContent = statusVal ? (
-                              <span
-                                className={`status-badge ${getStatusClass(statusVal)}`}
-                              >
-                                {statusVal}
-                              </span>
-                            ) : (
-                              <span>-</span>
-                            );
-                            cellClass = "col-center";
+                            if (readOnly && !editableColumns.includes("currentStatus")) {
+                              cellContent = statusVal ? (
+                                <span className={`status-badge ${getStatusClass(statusVal)}`}>{statusVal}</span>
+                              ) : (
+                                <span>-</span>
+                              );
+                              cellClass = "col-center";
+                            } else {
+                              const isSaving = !!savingKeys[`${record.id}::currentStatus`];
+                              cellContent = (
+                                <select
+                                  value={statusVal}
+                                  disabled={isSaving}
+                                  onChange={(e) => {
+                                    const key = `${record.id}::currentStatus`;
+                                    setSavingKeys(prev => ({ ...prev, [key]: true }));
+                                    dispatch(updateTenderMergedField({
+                                      rowIndex: 0,
+                                      field: "currentStatus",
+                                      value: e.target.value,
+                                      tenderMergedId: Number(record.id),
+                                      oldValue: statusVal,
+                                    }))
+                                      .unwrap()
+                                      .then(() => toast.success("Status updated!"))
+                                      .catch((err) => toast.error(err?.message || "Failed to update status."))
+                                      .finally(() => setSavingKeys(prev => { const c = { ...prev }; delete c[key]; return c; }));
+                                  }}
+                                  className="table-editable-select status-select"
+                                >
+                                  <option value="">None</option>
+                                  {CURRENT_STATUS_OPTIONS.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              );
+                              cellClass = "col-center col-editable";
+                            }
                           } else if (col.type === "decision") {
                             const decVal = cellVal as ManagementDecision;
                             cellContent = (
@@ -3301,16 +3506,82 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           } else {
                             if (col.accessor === "bgStatus") {
                               const val = (cellVal as string) || "";
-                              cellContent = val ? (
-                                <span
-                                  className={`bg-status-badge ${val.toLowerCase()}`}
+                              const isSaving = !!savingKeys[`${record.id}-bgStatus`];
+                              cellContent = (
+                                <select
+                                  value={val}
+                                  disabled={isSaving}
+                                  onChange={(e) => handleMergedFieldSave(record, "bgStatus", e.target.value, () => {}, () => {})}
+                                  className="table-editable-select status-select"
+                                  style={{ minWidth: "100px", padding: "2px 4px", fontSize: "11px" }}
                                 >
-                                  {val}
-                                </span>
-                              ) : (
-                                "-"
+                                  <option value="">(Blank)</option>
+                                  <option value="PENDING">PENDING</option>
+                                  <option value="TO BE FOLLOWED UP">TO BE FOLLOWED UP</option>
+                                  <option value="RETURNED">RETURNED</option>
+                                </select>
                               );
-                              cellClass = "col-center";
+                              cellClass = "col-center col-editable";
+                            } else if (col.accessor === "emd") {
+                              const emdVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditingEmd = editingEmdId === record.id;
+                              const isSavingEmd = !!savingKeys[`${record.id}-emd`];
+                              if (isEditingEmd) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input type="text" value={emdEditValue} onChange={(e) => setEmdEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "emd", emdEditValue, setEditingEmdId, setEmdEditValue); else if (e.key === "Escape") setEditingEmdId(null); }} autoFocus disabled={isSavingEmd} className="docket-edit-input" />
+                                    <button onClick={() => handleMergedFieldSave(record, "emd", emdEditValue, setEditingEmdId, setEmdEditValue)} disabled={isSavingEmd} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                  </div>
+                                );
+                              } else {
+                                cellContent = <span className="docket-display">{emdVal || "-"}{isSavingEmd && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                              }
+                              cellClass = "col-editable";
+                            } else if (col.accessor === "bgDate") {
+                              const bgDateVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditingBgDate = editingBgDateId === record.id;
+                              const isSavingBgDate = !!savingKeys[`${record.id}-bgDate`];
+                              if (isEditingBgDate) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input type="text" value={bgDateEditValue} onChange={(e) => setBgDateEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "bgDate", bgDateEditValue, setEditingBgDateId, setBgDateEditValue); else if (e.key === "Escape") setEditingBgDateId(null); }} autoFocus disabled={isSavingBgDate} className="docket-edit-input" />
+                                    <button onClick={() => handleMergedFieldSave(record, "bgDate", bgDateEditValue, setEditingBgDateId, setBgDateEditValue)} disabled={isSavingBgDate} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                  </div>
+                                );
+                              } else {
+                                cellContent = <span className="docket-display">{bgDateVal || "-"}{isSavingBgDate && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                              }
+                              cellClass = "col-editable";
+                            } else if (col.accessor === "bgExpiryDate") {
+                              const bgExpiryVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditingBgExpiry = editingBgExpiryId === record.id;
+                              const isSavingBgExpiry = !!savingKeys[`${record.id}-bgExpiryDate`];
+                              if (isEditingBgExpiry) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input type="text" value={bgExpiryEditValue} onChange={(e) => setBgExpiryEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "bgExpiryDate", bgExpiryEditValue, setEditingBgExpiryId, setBgExpiryEditValue); else if (e.key === "Escape") setEditingBgExpiryId(null); }} autoFocus disabled={isSavingBgExpiry} className="docket-edit-input" />
+                                    <button onClick={() => handleMergedFieldSave(record, "bgExpiryDate", bgExpiryEditValue, setEditingBgExpiryId, setBgExpiryEditValue)} disabled={isSavingBgExpiry} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                  </div>
+                                );
+                              } else {
+                                cellContent = <span className="docket-display">{bgExpiryVal || "-"}{isSavingBgExpiry && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                              }
+                              cellClass = "col-editable";
+                            } else if (col.accessor === "claimDate") {
+                              const claimDateVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
+                              const isEditingClaimDate = editingClaimDateId === record.id;
+                              const isSavingClaimDate = !!savingKeys[`${record.id}-claimDate`];
+                              if (isEditingClaimDate) {
+                                cellContent = (
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    <input type="text" value={claimDateEditValue} onChange={(e) => setClaimDateEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "claimDate", claimDateEditValue, setEditingClaimDateId, setClaimDateEditValue); else if (e.key === "Escape") setEditingClaimDateId(null); }} autoFocus disabled={isSavingClaimDate} className="docket-edit-input" />
+                                    <button onClick={() => handleMergedFieldSave(record, "claimDate", claimDateEditValue, setEditingClaimDateId, setClaimDateEditValue)} disabled={isSavingClaimDate} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                  </div>
+                                );
+                              } else {
+                                cellContent = <span className="docket-display">{claimDateVal || "-"}{isSavingClaimDate && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                              }
+                              cellClass = "col-editable";
                             } else if (col.accessor === "docketNo") {
                               const docketVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
                               const isEditing = editingDocketId === record.id;
@@ -3585,6 +3856,194 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 cellContent = <span className="docket-display">{cVal || "-"}{isSavingC && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
                               }
                               cellClass = !canEditContract ? "col-docket" : "col-docket col-editable";
+                            } else if (col.accessor === "ourRank") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("ourRank")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-center";
+                              } else {
+                                const isEditing = editingOurRankId === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-ourRank`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={ourRankEditValue} onChange={(e) => setOurRankEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "ourRank", ourRankEditValue, setEditingOurRankId, setOurRankEditValue); else if (e.key === "Escape") setEditingOurRankId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "ourRank", ourRankEditValue, setEditingOurRankId, setOurRankEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-center col-editable";
+                              }
+                            } else if (col.accessor === "ourValue") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("ourValue")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-center";
+                              } else {
+                                const isEditing = editingOurValueId === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-ourValue`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={ourValueEditValue} onChange={(e) => setOurValueEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "ourValue", ourValueEditValue, setEditingOurValueId, setOurValueEditValue); else if (e.key === "Escape") setEditingOurValueId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "ourValue", ourValueEditValue, setEditingOurValueId, setOurValueEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-center col-editable";
+                              }
+                            } else if (col.accessor === "nameOfRank1") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("nameOfRank1")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-left";
+                              } else {
+                                const isEditing = editingNameOfRank1Id === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-nameOfRank1`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={nameOfRank1EditValue} onChange={(e) => setNameOfRank1EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "nameOfRank1", nameOfRank1EditValue, setEditingNameOfRank1Id, setNameOfRank1EditValue); else if (e.key === "Escape") setEditingNameOfRank1Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "nameOfRank1", nameOfRank1EditValue, setEditingNameOfRank1Id, setNameOfRank1EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-left col-editable";
+                              }
+                            } else if (col.accessor === "valueOfRank1") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("valueOfRank1")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-right";
+                              } else {
+                                const isEditing = editingValueOfRank1Id === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-valueOfRank1`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={valueOfRank1EditValue} onChange={(e) => setValueOfRank1EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "valueOfRank1", valueOfRank1EditValue, setEditingValueOfRank1Id, setValueOfRank1EditValue); else if (e.key === "Escape") setEditingValueOfRank1Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "valueOfRank1", valueOfRank1EditValue, setEditingValueOfRank1Id, setValueOfRank1EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-right col-editable";
+                              }
+                            } else if (col.accessor === "differenceBetweenRank1") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("differenceBetweenRank1")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-right";
+                              } else {
+                                const isEditing = editingDifferenceBetweenRank1Id === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-differenceBetweenRank1`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={differenceBetweenRank1EditValue} onChange={(e) => setDifferenceBetweenRank1EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "differenceBetweenRank1", differenceBetweenRank1EditValue, setEditingDifferenceBetweenRank1Id, setDifferenceBetweenRank1EditValue); else if (e.key === "Escape") setEditingDifferenceBetweenRank1Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "differenceBetweenRank1", differenceBetweenRank1EditValue, setEditingDifferenceBetweenRank1Id, setDifferenceBetweenRank1EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-right col-editable";
+                              }
+                            } else if (col.accessor === "nameOfRank2") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("nameOfRank2")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-left";
+                              } else {
+                                const isEditing = editingNameOfRank2Id === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-nameOfRank2`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={nameOfRank2EditValue} onChange={(e) => setNameOfRank2EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "nameOfRank2", nameOfRank2EditValue, setEditingNameOfRank2Id, setNameOfRank2EditValue); else if (e.key === "Escape") setEditingNameOfRank2Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "nameOfRank2", nameOfRank2EditValue, setEditingNameOfRank2Id, setNameOfRank2EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-left col-editable";
+                              }
+                            } else if (col.accessor === "valueOfRank2") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("valueOfRank2")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-right";
+                              } else {
+                                const isEditing = editingValueOfRank2Id === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-valueOfRank2`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={valueOfRank2EditValue} onChange={(e) => setValueOfRank2EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "valueOfRank2", valueOfRank2EditValue, setEditingValueOfRank2Id, setValueOfRank2EditValue); else if (e.key === "Escape") setEditingValueOfRank2Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "valueOfRank2", valueOfRank2EditValue, setEditingValueOfRank2Id, setValueOfRank2EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-right col-editable";
+                              }
+                            } else if (col.accessor === "differenceBetweenRank2") {
+                              const dispVal = cellVal != null ? String(cellVal) : "";
+                              if (readOnly && !editableColumns.includes("differenceBetweenRank2")) {
+                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
+                                cellClass = "col-right";
+                              } else {
+                                const isEditing = editingDifferenceBetweenRank2Id === record.id;
+                                const isSaving = !!savingKeys[`${record.id}-differenceBetweenRank2`];
+                                if (isEditing) {
+                                  cellContent = (
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                      <input type="text" value={differenceBetweenRank2EditValue} onChange={(e) => setDifferenceBetweenRank2EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "differenceBetweenRank2", differenceBetweenRank2EditValue, setEditingDifferenceBetweenRank2Id, setDifferenceBetweenRank2EditValue); else if (e.key === "Escape") setEditingDifferenceBetweenRank2Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
+                                      <button onClick={() => handleMergedFieldSave(record, "differenceBetweenRank2", differenceBetweenRank2EditValue, setEditingDifferenceBetweenRank2Id, setDifferenceBetweenRank2EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
+                                    </div>
+                                  );
+                                } else {
+                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
+                                }
+                                cellClass = "col-right col-editable";
+                              }
+                            } else if (col.accessor === "cva") {
+                              let parts: string[] = [];
+                              if (cellVal != null && cellVal !== "") {
+                                if (typeof cellVal === "object" && !(cellVal instanceof Date)) {
+                                  if (Array.isArray(cellVal)) {
+                                    parts = (cellVal as any[]).map(String);
+                                  } else {
+                                    parts = Object.values(cellVal as Record<string, unknown>).map(String);
+                                  }
+                                } else if (typeof cellVal === "string") {
+                                  try {
+                                    const parsed = JSON.parse(cellVal);
+                                    if (Array.isArray(parsed)) {
+                                      parts = parsed.map(String);
+                                    } else if (typeof parsed === "object" && parsed !== null) {
+                                      parts = Object.values(parsed).map(String);
+                                    }
+                                  } catch {
+                                    parts = cellVal.split("@").filter(Boolean);
+                                  }
+                                }
+                              }
+                              cellContent = parts.length > 0 ? (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "center" }}>
+                                  {parts.map((part, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>)}
+                                </div>
+                              ) : "-";
+                              cellClass = "col-center";
                             } else {
                               cellContent =
                                 cellVal !== null && cellVal !== undefined
@@ -3677,13 +4136,37 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                                           ? () => { if (!savingKeys[`${record.id}-minimumAverageAnnualTurnover`]) { setEditingTurnoverId(record.id!); setTurnoverEditValue(cellVal != null ? String(cellVal) : ""); } }
                                                           : col.accessor === "yearsOfPastExperience" && editingExperienceId !== record.id
                                                             ? () => { if (!savingKeys[`${record.id}-yearsOfPastExperience`]) { setEditingExperienceId(record.id!); setExperienceEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                             : col.accessor === "ePbgDurationMonths" && editingEpbgId !== record.id
-                                                               ? () => { if (!savingKeys[`${record.id}-ePbgDurationMonths`]) { setEditingEpbgId(record.id!); setEpbgEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                             : col.accessor === "quotationNo" && canEditQuotation && editingQuotationNoId !== record.id
+                                                              : col.accessor === "ePbgDurationMonths" && editingEpbgId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-ePbgDurationMonths`]) { setEditingEpbgId(record.id!); setEpbgEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "ourRank" && editingOurRankId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-ourRank`]) { setEditingOurRankId(record.id!); setOurRankEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "ourValue" && editingOurValueId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-ourValue`]) { setEditingOurValueId(record.id!); setOurValueEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "nameOfRank1" && editingNameOfRank1Id !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-nameOfRank1`]) { setEditingNameOfRank1Id(record.id!); setNameOfRank1EditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "valueOfRank1" && editingValueOfRank1Id !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-valueOfRank1`]) { setEditingValueOfRank1Id(record.id!); setValueOfRank1EditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "differenceBetweenRank1" && editingDifferenceBetweenRank1Id !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-differenceBetweenRank1`]) { setEditingDifferenceBetweenRank1Id(record.id!); setDifferenceBetweenRank1EditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "nameOfRank2" && editingNameOfRank2Id !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-nameOfRank2`]) { setEditingNameOfRank2Id(record.id!); setNameOfRank2EditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "valueOfRank2" && editingValueOfRank2Id !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-valueOfRank2`]) { setEditingValueOfRank2Id(record.id!); setValueOfRank2EditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "differenceBetweenRank2" && editingDifferenceBetweenRank2Id !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-differenceBetweenRank2`]) { setEditingDifferenceBetweenRank2Id(record.id!); setDifferenceBetweenRank2EditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "quotationNo" && canEditQuotation && editingQuotationNoId !== record.id
                                                                ? () => { if (!savingKeys[`${record.id}-quotationNo`]) { setEditingQuotationNoId(record.id!); setQuotationNoEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                             : col.accessor === "contractNo" && canEditContract && editingContractNoId !== record.id
-                                                               ? () => { if (!savingKeys[`${record.id}-contractNo`]) { setEditingContractNoId(record.id!); setContractNoEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                                  : undefined
+                                                              : col.accessor === "contractNo" && canEditContract && editingContractNoId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-contractNo`]) { setEditingContractNoId(record.id!); setContractNoEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "emd" && editingEmdId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-emd`]) { setEditingEmdId(record.id!); setEmdEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "bgDate" && editingBgDateId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-bgDate`]) { setEditingBgDateId(record.id!); setBgDateEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "bgExpiryDate" && editingBgExpiryId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-bgExpiryDate`]) { setEditingBgExpiryId(record.id!); setBgExpiryEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                              : col.accessor === "claimDate" && editingClaimDateId !== record.id
+                                                                ? () => { if (!savingKeys[`${record.id}-claimDate`]) { setEditingClaimDateId(record.id!); setClaimDateEditValue(cellVal != null ? String(cellVal) : ""); } }
+                                                                   : undefined
                             }
                             title={
                               col.accessor !== "rawMaterials" &&

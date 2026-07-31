@@ -23,6 +23,12 @@ export enum CurrentStatus {
   CANCELLED = "Cancelled"
 }
 
+export enum StatusCategory {
+  AOC = "AOC",
+  FINANCIAL = "FINANCIAL",
+  TECHNICAL = "TECHNICAL",
+}
+
 export enum EMDExchangeMode {
   BG = "BG",
   NEFT = "NEFT",
@@ -76,8 +82,9 @@ export interface EpcTenderRecord {
   galvanisedSteelFlatStripPrice?: number | null;
   fillerPrice?: number | null;
   proposedErpItemName?: string;
-  proposedQty?: string;
-  statusCategory?: string;
+  proposedErpQuantity?: string;
+  rawMaterials?: string;
+  statusCategory?: StatusCategory;
   itemCategory?: string | null;
   competitors?: string | null;
   fileCount?: number;
@@ -100,13 +107,40 @@ export interface EpcTenderRecord {
   minimumAverageAnnualTurnover?: string | null;
   yearsOfPastExperience?: string | null;
   ePbgDurationMonths?: string | null;
+  emd?: string | null;
+  bgDate?: string | null;
+  bgExpiryDate?: string | null;
+  claimDate?: string | null;
   reportings?: string;
+  ourRank?: string | null;
+  ourValue?: string | null;
+  nameOfRank1?: string | null;
+  valueOfRank1?: string | null;
+  differenceBetweenRank1?: string | null;
+  nameOfRank2?: string | null;
+  valueOfRank2?: string | null;
+  differenceBetweenRank2?: string | null;
 }
 
 export enum TenderUpdateStatus {
   OPEN = "OPEN",
   CLOSED = "CLOSED"
 }
+
+export const CURRENT_STATUS_OPTIONS = [
+  "we are l1",
+  "submitted",
+  "awarded",
+  "rejected",
+  "technical evaluation",
+  "date extended",
+  "financial evaluation",
+  "counter offer as per l1 price",
+  "bid validity expired",
+  "not evaluated",
+  "not participated",
+  "under preparation",
+] as const;
 
 export enum NextAction {
   UPDATE_FROM_AB_LETTER = "UPDATE_FROM_AB_LETTER",

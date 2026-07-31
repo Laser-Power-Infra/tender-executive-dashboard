@@ -9,7 +9,7 @@ interface ScanRecord {
   lastModified: number;
 }
 
-function resolveRootPath(): string {
+export function resolveRootPath(): string {
   const candidates = [
     process.env.INDEXER_NETWORK_PATH,
     "Z:\\",                                        // asmita : Z, bidyut : Z

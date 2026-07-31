@@ -3,7 +3,9 @@
 # ===========================
 
 $ContainerName = "postgres17"
-$Database = "laser-tender-dashboard"
+# $Database = "enquiry-quotation"
+# $Database = "laser-tender-dashboard"
+$Database = "testing"
 $User = "asmita"
 $Password = "asmita"
 
@@ -17,7 +19,7 @@ $NetworkBackupDir = "Y:\laser-tender-dashboard-backup\"
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 
 # File name
-$BackupFile = "backup_$Timestamp.dump"
+$BackupFile = "backup_$Database-_$Timestamp.sql"
 
 # Ensure local folder exists
 New-Item -ItemType Directory -Force -Path $LocalBackupDir | Out-Null
@@ -28,14 +30,13 @@ docker exec `
     -e PGPASSWORD=$Password `
     $ContainerName `
     pg_dump `
-        -U $User `
-        -d $Database `
-        -Fc `
-        -f "/tmp/$BackupFile"
+    -U $User `
+    -d $Database `
+    -f "/tmp/$BackupFile"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Backup failed." -ForegroundColor Red
-    exit 1
+    # exit 1
 }
 
 Write-Host "Copying backup from container..."
@@ -44,7 +45,7 @@ docker cp "$ContainerName`:/tmp/$BackupFile" "$LocalBackupDir\$BackupFile"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to copy backup from container." -ForegroundColor Red
-    exit 1
+    # exit 1
 }
 
 Write-Host "Removing temporary file from container..."
@@ -67,3 +68,5 @@ if ($LASTEXITCODE -eq 0) {
 else {
     Write-Host "Backup created locally but failed to copy to network." -ForegroundColor Yellow
 }
+
+Read-Host "Press Enter to exit"

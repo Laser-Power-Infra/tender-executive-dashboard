@@ -1,5 +1,5 @@
 import { TenderData } from "@/lib/slices/tendersSlice";
-import { EpcTenderRecord, ManagementDecision, NextAction } from "@/types/tender";
+import { EpcTenderRecord, ManagementDecision, NextAction, StatusCategory } from "@/types/tender";
 
 function parseFloatOrNull(val: string | undefined | null): number | null {
   if (val == null || val === "") return null;
@@ -79,15 +79,20 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     galvanisedSteelFlatStripPrice: null,
     fillerPrice: null,
     proposedErpItemName: row.proposedErpItemName || undefined,
-    proposedQty: row.proposedQty || undefined,
-    statusCategory: undefined,
+    proposedErpQuantity: row.proposedErpQuantity || undefined,
+    rawMaterials: row.rawMaterials || undefined,
+    statusCategory: row.statusCategory as StatusCategory | undefined,
     itemCategory: row.itemCategory || null,
     competitors: row.competitors || null,
     fileCount: undefined,
     hasBoqChart: undefined,
     boqFileId: undefined,
-    bgStatus: null,
+    bgStatus: row.bgStatus || null,
     beneficiaryBankDetails: row.beneficiaryBankDetails || null,
+    emd: row.emd || null,
+    bgDate: row.bgDate || null,
+    bgExpiryDate: row.bgExpiryDate || null,
+    claimDate: row.claimDate || null,
     tenderUpdateStatus: undefined,
     nextAction: (row.nextAction || null) as NextAction | null,
     quotationNo: row.quotationNo || null,
@@ -103,5 +108,13 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     yearsOfPastExperience: row.yearsOfPastExperience || null,
     ePbgDurationMonths: row.ePbgDurationMonths || null,
     reportings: row.reportings || "",
+    ourRank: row.ourRank || null,
+    ourValue: row.ourValue || null,
+    nameOfRank1: row.nameOfRank1 || null,
+    valueOfRank1: row.valueOfRank1 || null,
+    differenceBetweenRank1: row.differenceBetweenRank1 || null,
+    nameOfRank2: row.nameOfRank2 || null,
+    valueOfRank2: row.valueOfRank2 || null,
+    differenceBetweenRank2: row.differenceBetweenRank2 || null,
   }));
 }
