@@ -1,11 +1,15 @@
 /**
- * Analysis + merge script for duplicate docketNo groups in TenderMerged where
- * the referenceNo differs only by case.
+ * Analysis + merge script for duplicate docketNo groups in TenderMerged.
+ *
+ * Groups whose referenceNo differs only by case (CASE-ONLY) are mergeable.
+ * Groups with genuinely different referenceNos (DIFFERENT REFERENCE) are
+ * analyzed and logged only (winning referenceNo = longest length, uppercased,
+ * tie → lowest id); they are NOT merged.
  *
  * Dry-run (default): reports which fields/links can be merged vs conflicting.
  * Merge (--apply): merges case-only groups using these rules:
  *   - Survivor = the record whose tenderAssociations exist (fewest links wins;
- *     ties / no-association groups are skipped & logged).
+ *     identical association sets / no-association groups also merge).
  *   - Non-null field values from losers fill null/empty fields on the survivor;
  *     conflicting values keep the survivor's and are logged.
  *   - referenceNo on survivor is normalized to uppercase.
@@ -34,23 +38,26 @@ const EXCLUDE_FIELDS = new Set([
   "utilityMappingId",
   "docketNo",
   "deadline",
+  "tenderBrief",
+  "tenderFileUrl",
+  "originalId",
+  "location",
+  "t247Id",
+  "aiRelevanceReason",
 ]);
 
 const DECISION_FIELDS = new Set(["app", "aps", "apm"]);
 
 type LinkKind = "tenderAssociations" | "tenderFiles" | "reportings" | "evaluations";
 
-const LINK_KINDS: LinkKind[] = [
-  "tenderAssociations",
-  "tenderFiles",
-  "reportings",
-  "evaluations",
-];
+const LINK_KINDS: LinkKind[] = ["tenderAssociations"];
 
 const FK_LINK_FIELDS = ["tenderStatusId", "utilityMappingId"] as const;
 
 type ReportGroup = {
   docketNo: string;
+  kind: "caseOnly" | "differentRef";
+  winningReferenceNo?: string;
   count: number;
   recordIds: number[];
   referenceNos: string[];
@@ -182,7 +189,11 @@ function selectSurvivor(records: RecordAny[]): {
 } {
   const withLinks = records.filter((r) => r.tenderAssociations.length > 0);
   if (withLinks.length === 0) {
-    return { survivor: null, reason: "no tender associations to prioritize" };
+    records.sort((a, b) => a.id - b.id);
+    return {
+      survivor: records[0],
+      reason: "no tender associations on any record — both invalid, merging",
+    };
   }
   if (withLinks.length === 1) {
     return { survivor: withLinks[0], reason: "only record with associations" };
@@ -197,9 +208,41 @@ function selectSurvivor(records: RecordAny[]): {
   if (minRecords.length === 1) {
     return { survivor: minRecords[0], reason: "fewest association links" };
   }
+
+  const signatures = new Set(
+    minRecords.map((r) =>
+      JSON.stringify(
+        r.tenderAssociations
+          .map((a: { associationId: number }) => a.associationId)
+          .sort((x: number, y: number) => x - y),
+      ),
+    ),
+  );
+  if (signatures.size === 1) {
+    minRecords.sort((a, b) => a.id - b.id);
+    return {
+      survivor: minRecords[0],
+      reason: `tie in association link count (${minCount} links each) — identical association set`,
+    };
+  }
   return {
     survivor: null,
     reason: `tie in association link count (${minCount} links each)`,
+  };
+}
+
+function pickWinningReferenceNo(records: RecordAny[]): {
+  referenceNo: string;
+  recordId: number;
+} {
+  const winner = [...records].sort((a, b) => {
+    const lenDiff = b.referenceNo.trim().length - a.referenceNo.trim().length;
+    if (lenDiff !== 0) return lenDiff;
+    return a.id - b.id;
+  })[0];
+  return {
+    referenceNo: winner.referenceNo.trim().toUpperCase(),
+    recordId: winner.id,
   };
 }
 
@@ -349,7 +392,7 @@ async function main() {
 
   const report: ReportGroup[] = [];
   let caseOnlyCount = 0;
-  let skippedDifferentRef = 0;
+  let differentRefCount = 0;
   let groupsWithConflicts = 0;
   let cleanGroups = 0;
 
@@ -370,11 +413,13 @@ async function main() {
     const normalizedRefs = new Set(
       records.map((r) => r.referenceNo.trim().toLowerCase()),
     );
-    if (normalizedRefs.size > 1) {
-      skippedDifferentRef++;
-      continue;
-    }
-    caseOnlyCount++;
+    const isCaseOnly = normalizedRefs.size === 1;
+    if (isCaseOnly) caseOnlyCount++;
+    else differentRefCount++;
+
+    const winningReferenceNo = isCaseOnly
+      ? undefined
+      : pickWinningReferenceNo(records).referenceNo;
 
     const { mergeableFields, conflictingFields } = computeFieldAnalysis(
       records,
@@ -389,6 +434,8 @@ async function main() {
 
     const reportGroup: ReportGroup = {
       docketNo: group.docketNo as string,
+      kind: isCaseOnly ? "caseOnly" : "differentRef",
+      winningReferenceNo,
       count: records.length,
       recordIds: records.map((r) => r.id),
       referenceNos: records.map((r) => r.referenceNo),
@@ -399,7 +446,12 @@ async function main() {
     report.push(reportGroup);
 
     console.log(`\n══════════════════════════════════════════════════════════`);
-    console.log(`Docket No: ${reportGroup.docketNo}`);
+    console.log(
+      `Docket No: ${reportGroup.docketNo}  [${isCaseOnly ? "CASE-ONLY" : "DIFFERENT REFERENCE"}]`,
+    );
+    if (winningReferenceNo) {
+      console.log(`  Winning referenceNo: "${winningReferenceNo}"`);
+    }
     console.log(`Records (${reportGroup.count}):`);
     for (const [i, record] of records.entries()) {
       console.log(`  [${i}] id=${record.id}  referenceNo="${record.referenceNo}"`);
@@ -445,7 +497,19 @@ async function main() {
         const normalizedRefs = new Set(
           records.map((r) => r.referenceNo.trim().toLowerCase()),
         );
-        if (normalizedRefs.size > 1) continue;
+        if (normalizedRefs.size > 1) {
+          const { referenceNo } = pickWinningReferenceNo(records);
+          const entry: MergeLogEntry = {
+            docketNo: group.docketNo as string,
+            action: "SKIPPED",
+            skipReason: `different referenceNo — log only, not merged (winning ref: "${referenceNo}")`,
+          };
+          mergeLog.push(entry);
+          console.log(
+            `  [SKIP] docketNo=${entry.docketNo}: ${entry.skipReason}`,
+          );
+          continue;
+        }
 
         const entry = await mergeGroup(
           tx,
@@ -480,11 +544,11 @@ async function main() {
 
   console.log(`\n══════════════════════════════════════════════════════════`);
   console.log("=== Summary ===");
-  console.log(`  Duplicate docketNo groups:      ${duplicateGroups.length}`);
-  console.log(`  Case-only (analyzed):           ${caseOnlyCount}`);
-  console.log(`  Skipped (different referenceNo): ${skippedDifferentRef}`);
-  console.log(`  Case-only groups with conflicts: ${groupsWithConflicts}`);
-  console.log(`  Case-only clean groups:          ${cleanGroups}`);
+  console.log(`  Duplicate docketNo groups:            ${duplicateGroups.length}`);
+  console.log(`  Case-only (analyzed):                 ${caseOnlyCount}`);
+  console.log(`  Different-referenceNo (log-only):     ${differentRefCount}`);
+  console.log(`  Groups with conflicts:                ${groupsWithConflicts}`);
+  console.log(`  Clean groups:                         ${cleanGroups}`);
 
   if (APPLY) {
     const merged = mergeLog.filter((e) => e.action === "MERGED");

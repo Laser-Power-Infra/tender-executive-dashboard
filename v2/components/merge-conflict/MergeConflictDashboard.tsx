@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useMemo, useCallback, useState } from "react";
+import { Eye } from "lucide-react";
 import { useAppSelector } from "@/lib/hooks";
 import type { TenderMergedRow } from "@/lib/slices/tendersSlice";
 import {
   OptimizedTenderTable,
   ColumnDef,
 } from "@/components/tender-viewer/optimized-tender-table/OptimizedTenderTable";
+import ConflictDetailsDialog from "./ConflictDetailsDialog";
+import { computeConflicts } from "./conflictUtils";
 
 export default function MergeConflictDashboard() {
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -15,6 +18,8 @@ export default function MergeConflictDashboard() {
   const [approvedState, setApprovedState] = useState<Record<string, string>>(
     {},
   );
+
+  const [selectedDocket, setSelectedDocket] = useState<string | null>(null);
 
   const groupedRows = useMemo(() => {
     if (!tenderData) return [];
@@ -46,6 +51,8 @@ export default function MergeConflictDashboard() {
           .filter(Boolean)
           .join(" @ "),
         _docketTenderCount: rows.length,
+        _conflicts: String(computeConflicts(rows).length),
+        _rows: rows,
       }));
   }, [tenderData]);
 
@@ -129,6 +136,44 @@ export default function MergeConflictDashboard() {
         sortValue: (value: unknown) => Number(value ?? 0),
       },
       {
+        header: "Conflicts",
+        accessor: "_conflicts" as keyof Record<string, unknown>,
+        defaultWidth: 200,
+        align: "center",
+        sortable: false,
+        searchable: false,
+        type: "custom" as const,
+        renderCell: (value: unknown, row: Record<string, unknown>) => {
+          const count = Number(value ?? 0);
+          const docket = String(row.docketNo ?? "");
+          return (
+            <div className="flex items-center justify-center gap-2 py-1">
+              <span
+                className={`inline-flex items-center justify-center min-w-7 h-7 px-1.5 rounded-full text-xs font-bold ${
+                  count > 0
+                    ? "bg-red-100 text-red-700"
+                    : "bg-slate-100 text-slate-400"
+                }`}
+              >
+                {count}
+              </span>
+              <button
+                type="button"
+                disabled={count === 0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedDocket(docket);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                View
+              </button>
+            </div>
+          );
+        },
+      },
+      {
         header: "Approved",
         accessor: "_approved" as keyof Record<string, unknown>,
         defaultWidth: 130,
@@ -175,7 +220,7 @@ export default function MergeConflictDashboard() {
         },
       },
     ],
-    [approvedState, handleApprovedClick],
+    [approvedState, handleApprovedClick, setSelectedDocket],
   );
 
   if (loadingTenders && !tenderData) {
@@ -195,17 +240,26 @@ export default function MergeConflictDashboard() {
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-[#f4f6f8]">
-      <div className="flex flex-col flex-1 min-w-0">
-        <main className="flex-1 overflow-auto p-6">
-          <OptimizedTenderTable
-            columns={columnDefs}
-            rows={groupedRows as Record<string, unknown>[]}
-            title="Merge Conflict"
-            onFilteredRowsChange={handleFilteredRowsChange}
-          />
-        </main>
+    <>
+      <div className="flex flex-1 overflow-hidden bg-[#f4f6f8]">
+        <div className="flex flex-col flex-1 min-w-0">
+          <main className="flex-1 overflow-auto p-6">
+            <OptimizedTenderTable
+              columns={columnDefs}
+              rows={groupedRows as Record<string, unknown>[]}
+              title="Merge Conflict"
+              onFilteredRowsChange={handleFilteredRowsChange}
+            />
+          </main>
+        </div>
       </div>
-    </div>
+
+      {selectedDocket && (
+        <ConflictDetailsDialog
+          docketNo={selectedDocket}
+          onClose={() => setSelectedDocket(null)}
+        />
+      )}
+    </>
   );
 }

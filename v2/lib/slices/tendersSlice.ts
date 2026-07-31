@@ -131,13 +131,23 @@ export const updateTenderMergedField = createAsyncThunk(
         field: params.field,
         value: params.value,
       });
-    } else if (params.field === "emdValidity" || params.field === "reverseAuctionDate") {
+    } else if (
+      params.field === "emdValidity" ||
+      params.field === "reverseAuctionDate" ||
+      params.field === "tenderOpeningDate"
+    ) {
       await updateTenderMergedDateField({
         tenderMergedId: params.tenderMergedId,
         field: params.field,
         value: params.value || null,
       });
-    } else if (params.field === "bidValidityExpired") {
+    } else if (
+      params.field === "bidValidityExpired" ||
+      params.field === "participated" ||
+      params.field === "reverseAuctionApplicable" ||
+      params.field === "diffL1ManuallyEdited" ||
+      params.field === "diffL2ManuallyEdited"
+    ) {
       await updateTenderMergedBooleanField({
         tenderMergedId: params.tenderMergedId,
         field: params.field,
