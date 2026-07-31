@@ -37,7 +37,7 @@ function normalizeDrive(p: string): string {
   return p.replace(/^[a-zA-Z]:\\/, (m) => m.toUpperCase());
 }
 
-function resolveSupplyPath(storedPath: string): string {
+export function resolveSupplyPath(storedPath: string): string {
   const supplyRoot = process.env.SUPPLY_NETWORK_PATH;
   if (!supplyRoot) return storedPath;
   const driveMatch = storedPath.match(/^[a-zA-Z]:\\/);
