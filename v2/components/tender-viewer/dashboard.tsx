@@ -535,11 +535,33 @@ export default function Dashboard() {
           header: "Size",
           accessor: col as keyof Record<string, unknown>,
           defaultWidth: 200,
-          renderCell: (value) => {
+          renderCell: (value, row) => {
             const str = value != null && value !== "" ? String(value) : "-";
+            if (str === "-") return str;
+            if (String((row as Record<string, unknown>)?.type ?? "") === "Gem") {
+              return (
+                <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
+                </div>
+              );
+            }
+            let items: string[];
+            if (Array.isArray(value)) {
+              items = value.map(String);
+            } else {
+              try {
+                const parsed = JSON.parse(str);
+                items = Array.isArray(parsed) ? parsed.map(String) : [str];
+              } catch {
+                items = [str];
+              }
+            }
+            if (items.length <= 1) return str;
             return (
-              <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {items.map((part, i) => (
+                  <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>
+                ))}
               </div>
             );
           },
@@ -1167,9 +1189,30 @@ export default function Dashboard() {
               const val = row[firstField as keyof typeof row];
               const str = val != null && val !== "" ? String(val) : "-";
               if (str === "-") return str;
+              if (String(row.type ?? "") === "Gem") {
+                return (
+                  <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
+                  </div>
+                );
+              }
+              let items: string[];
+              if (Array.isArray(val)) {
+                items = val.map(String);
+              } else {
+                try {
+                  const parsed = JSON.parse(str);
+                  items = Array.isArray(parsed) ? parsed.map(String) : [str];
+                } catch {
+                  items = [str];
+                }
+              }
+              if (items.length <= 1) return str;
               return (
-                <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {items.map((part, i) => (
+                    <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>
+                  ))}
                 </div>
               );
             }

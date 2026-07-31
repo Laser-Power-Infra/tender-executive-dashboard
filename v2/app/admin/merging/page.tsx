@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import MergedColumnDialog from "@/components/admin/MergedColumnDialog";
-import { GEM_FIELDS } from "@/lib/tender-columns";
+import { MERGED_FIELDS } from "@/lib/tender-columns";
 
 export default function ColumnMergingPage() {
   const [columnGroups, setColumnGroups] = useState<{
@@ -16,7 +16,7 @@ export default function ColumnMergingPage() {
   const [loading, setLoading] = useState(true);
 
   const mergeFieldOptions = useMemo(
-    () => (allFields.length ? allFields : [...GEM_FIELDS].sort()),
+    () => (allFields.length ? allFields : [...MERGED_FIELDS].sort()),
     [allFields],
   );
 

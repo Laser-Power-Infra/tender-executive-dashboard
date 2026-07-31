@@ -1,5 +1,5 @@
 import { TenderData } from "@/lib/slices/tendersSlice";
-import { EpcTenderRecord, ManagementDecision, NextAction } from "@/types/tender";
+import { EpcTenderRecord, ManagementDecision, NextAction, StatusCategory } from "@/types/tender";
 
 function parseFloatOrNull(val: string | undefined | null): number | null {
   if (val == null || val === "") return null;
@@ -75,7 +75,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     proposedErpItemName: row.proposedErpItemName || undefined,
     proposedErpQuantity: row.proposedErpQuantity || undefined,
     rawMaterials: row.rawMaterials || undefined,
-    statusCategory: undefined,
+    statusCategory: row.statusCategory as StatusCategory | undefined,
     itemCategory: row.itemCategory || null,
     competitors: row.competitors || null,
     fileCount: undefined,

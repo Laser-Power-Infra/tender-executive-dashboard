@@ -3,7 +3,9 @@
 # ===========================
 
 $ContainerName = "postgres17"
-$Database = "laser-tender-dashboard"
+# $Database = "enquiry-quotation"
+# $Database = "laser-tender-dashboard"
+$Database = "testing"
 $User = "asmita"
 $Password = "asmita"
 
@@ -17,7 +19,7 @@ $NetworkBackupDir = "Y:\laser-tender-dashboard-backup\"
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 
 # File name
-$BackupFile = "backup_$Timestamp.sql"
+$BackupFile = "backup_$Database-_$Timestamp.sql"
 
 # Ensure local folder exists
 New-Item -ItemType Directory -Force -Path $LocalBackupDir | Out-Null

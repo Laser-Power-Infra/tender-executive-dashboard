@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import MappingDialog from "@/components/admin/MappingDialog";
-import { GEM_FIELDS } from "@/lib/tender-columns";
+import { MERGED_FIELDS } from "@/lib/tender-columns";
 
 interface Mapping {
   id: number;
@@ -22,7 +22,7 @@ export default function ColumnMappingsPage() {
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const dbFieldOptions = useMemo(() => [...GEM_FIELDS].sort(), []);
+  const dbFieldOptions = useMemo(() => [...MERGED_FIELDS].sort(), []);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editData, setEditData] = useState<Mapping | null>(null);

@@ -3,6 +3,7 @@ import path from "path";
 import { indexFolderFiles } from "@/services/fileIndexer";
 import { encryptPath, decryptPath } from "@/lib/fileCrypto";
 import { extractNumericDocket } from "@/lib/extractNumericDocket";
+import { resolveRootPath } from "@/services/documentIndexer";
 import { prisma } from "@/lib/prisma";
 import type {
   FileResponse,
@@ -67,6 +68,34 @@ export class TenderAttachmentController {
       return;
     }
     throw { status: 403, error: "Forbidden: Invalid authorization scope." };
+  }
+
+  private static resolveFilePath(fileId: string): string {
+    const decrypted = decryptPath(fileId);
+    const pipeIdx = decrypted.indexOf("|");
+
+    if (pipeIdx === -1) {
+      const result = path.resolve(resolveSupplyPath(decrypted));
+      console.log("[resolveFilePath] Legacy token", { decrypted, result });
+      return result;
+    }
+
+    const type = decrypted.slice(0, pipeIdx);
+    const relative = decrypted.slice(pipeIdx + 1);
+
+    let base: string;
+    if (type === "condutor") {
+      base = process.env.CONDUTOR_PATH!;
+      if (!base) throw new Error("CONDUTOR_PATH not set");
+    } else if (type === "network") {
+      base = resolveRootPath();
+    } else {
+      throw new Error(`Unknown path type prefix: ${type}`);
+    }
+
+    const result = path.resolve(path.join(base, relative));
+    console.log("[resolveFilePath] New format token", { type, base, relative, result });
+    return result;
   }
 
   static async getTenderFiles(
@@ -193,7 +222,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = path.resolve(resolveSupplyPath(decryptPath(fileId)));
+      const absolutePath = TenderAttachmentController.resolveFilePath(fileId);
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {
@@ -231,7 +260,7 @@ export class TenderAttachmentController {
     TenderAttachmentController.authenticateAccess(authHeader);
 
     try {
-      const absolutePath = path.resolve(resolveSupplyPath(decryptPath(fileId)));
+      const absolutePath = TenderAttachmentController.resolveFilePath(fileId);
       verifyPathSafety(absolutePath);
 
       if (!fs.existsSync(absolutePath)) {

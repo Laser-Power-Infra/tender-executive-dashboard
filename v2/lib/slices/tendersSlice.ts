@@ -533,11 +533,11 @@ export const tendersSlice = createSlice({
         state.data.totalNonGem += incoming.totalNonGem;
         state.data.fileName = `Files (${state.completedFiles + 1}/${state.totalFiles})`;
 
-        console.log(
-          `[mergeFile] incoming="${incoming.fileName}" cols=${incoming.columns.length} rows=${incoming.rows.length}`,
-          `newCols=${newCols.length > 0 ? JSON.stringify(newCols) : "none"}`,
-          `totalCols=${state.data.columns.length}`,
-        );
+        // console.log(
+        //   `[mergeFile] incoming="${incoming.fileName}" cols=${incoming.columns.length} rows=${incoming.rows.length}`,
+        //   `newCols=${newCols.length > 0 ? JSON.stringify(newCols) : "none"}`,
+        //   `totalCols=${state.data.columns.length}`,
+        // );
       }
 
       state.completedFiles += 1;

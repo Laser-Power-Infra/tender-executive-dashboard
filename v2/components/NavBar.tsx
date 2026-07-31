@@ -58,6 +58,7 @@ export function NavBar() {
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
   const isAdminActive = adminLinks.some((l) => pathname === l.href);
+  // console.log(session)
 
   return (
     <>
@@ -83,7 +84,7 @@ export function NavBar() {
                 </NavigationMenuItem>
               );
             })}
-            {isAuthenticated && (
+            {isAuthenticated && (session?.user?.role === "admin" || session?.user?.role === "developer") && (
               <NavigationMenuItem className="ml-auto relative">
                 <div className="group inline-flex">
                   <button

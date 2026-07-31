@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeSyncPipeline } from "@/services/syncPipeline";
+import { requireAdminApi } from "@/lib/dal";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const forbidden = await requireAdminApi()
+  if (forbidden) return forbidden
+
   try {
     const result = await executeSyncPipeline("MANUAL");
     if (result.success) {

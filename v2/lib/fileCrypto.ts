@@ -17,6 +17,10 @@ export function encryptPath(absolutePath: string): string {
   return encrypted;
 }
 
+export function encryptRelativePath(type: string, relativePath: string): string {
+  return encryptPath(`${type}|${relativePath}`);
+}
+
 export function decryptPath(fileId: string): string {
   try {
     const decipher = crypto.createDecipheriv(

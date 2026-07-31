@@ -34,6 +34,12 @@ enum PriceType {
   VARIABLE
 }
 
+enum StatusCategory {
+  AOC
+  FINANCIAL
+  TECHNICAL
+}
+
 model User {
   id           String        @id @default(uuid())
   name         String?
@@ -661,6 +667,7 @@ model TenderMerged {
   aps               Decision  @default(NOT_DECIDED)
   apm               Decision  @default(NOT_DECIDED)
   state             String?
+  statusCategory    StatusCategory?
   website           String?
   locationCount     Int?
   size              String?

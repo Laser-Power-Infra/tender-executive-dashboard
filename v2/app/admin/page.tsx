@@ -2,8 +2,11 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { RefreshCw, Columns, ListOrdered, GitMerge } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 export default function AdminPage() {
+  const { data: session } = useSession();
+  const canSync = session?.user?.role === "admin" || session?.user?.role === "developer";
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
@@ -96,25 +99,27 @@ export default function AdminPage() {
           Trigger a full refresh from all data sources (Google Sheets, Smartsheet, Supply History).
           This will pull the latest data and update the database.
         </p>
-          <button
-          onClick={handleRefreshAll}
-          disabled={syncing}
-          style={{
-            padding: "10px 24px",
-            background: syncing ? "#999" : "#0a2540",
-            color: "#fff",
-            border: "none",
-            borderRadius: "6px",
-            cursor: syncing ? "not-allowed" : "pointer",
-            fontSize: "14px",
-            fontWeight: 600,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-          }}
-        >
-          {syncing ? <><RefreshCw size={14} /> Syncing All Sources...</> : <><RefreshCw size={14} /> Refresh All Data</>}
-        </button>
+          {canSync && (
+            <button
+            onClick={handleRefreshAll}
+            disabled={syncing}
+            style={{
+              padding: "10px 24px",
+              background: syncing ? "#999" : "#0a2540",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              cursor: syncing ? "not-allowed" : "pointer",
+              fontSize: "14px",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            {syncing ? <><RefreshCw size={14} /> Syncing All Sources...</> : <><RefreshCw size={14} /> Refresh All Data</>}
+          </button>
+          )}
         {syncResult && (
           <div style={{ marginTop: "16px", padding: "12px", background: syncResult.startsWith("Sync completed") ? "#e6f4ea" : "#fce8e6", borderRadius: "4px", fontSize: "14px" }}>
             {syncResult}

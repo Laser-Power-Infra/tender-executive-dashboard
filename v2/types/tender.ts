@@ -23,6 +23,12 @@ export enum CurrentStatus {
   CANCELLED = "Cancelled"
 }
 
+export enum StatusCategory {
+  AOC = "AOC",
+  FINANCIAL = "FINANCIAL",
+  TECHNICAL = "TECHNICAL",
+}
+
 export enum EMDExchangeMode {
   BG = "BG",
   NEFT = "NEFT",
@@ -78,7 +84,7 @@ export interface EpcTenderRecord {
   proposedErpItemName?: string;
   proposedErpQuantity?: string;
   rawMaterials?: string;
-  statusCategory?: string;
+  statusCategory?: StatusCategory;
   itemCategory?: string | null;
   competitors?: string | null;
   fileCount?: number;

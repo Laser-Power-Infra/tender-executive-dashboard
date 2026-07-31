@@ -49,3 +49,15 @@ export async function publishTenderParsingTask(
 ): Promise<boolean> {
   return publishToQueue(QUEUES.TENDER_PARSING, payload);
 }
+
+export type NonGemBoqParsingPayload = {
+  type: "NON_GEM_BOQ_PARSING";
+  referenceNo: string;
+  file_link: string;
+};
+
+export async function publishNonGemBoqParsingTask(
+  payload: NonGemBoqParsingPayload,
+): Promise<boolean> {
+  return publishToQueue(QUEUES.TENDER_PARSING, payload);
+}

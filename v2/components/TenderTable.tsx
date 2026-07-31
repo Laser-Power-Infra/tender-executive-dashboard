@@ -41,32 +41,32 @@ const filesPromiseCache = new Map<string, Promise<any[]>>();
 
 const fetchDocketFiles = (docketNo: string): Promise<any[]> => {
   if (filesCache.has(docketNo)) {
-    console.log(`[DEBUG fetchDocketFiles] CACHE HIT for ${docketNo}:`, filesCache.get(docketNo));
+    // console.log(`[DEBUG fetchDocketFiles] CACHE HIT for ${docketNo}:`, filesCache.get(docketNo));
     return Promise.resolve(filesCache.get(docketNo)!);
   }
   if (filesPromiseCache.has(docketNo)) {
-    console.log(`[DEBUG fetchDocketFiles] IN-FLIGHT HIT for ${docketNo}`);
+    // console.log(`[DEBUG fetchDocketFiles] IN-FLIGHT HIT for ${docketNo}`);
     return filesPromiseCache.get(docketNo)!;
   }
-  console.log(`[DEBUG fetchDocketFiles] FETCHING for ${docketNo}`);
+  // console.log(`[DEBUG fetchDocketFiles] FETCHING for ${docketNo}`);
   const promise = fetch(`/api/executive-tenders/${docketNo}/files`, {
     headers: {
       Authorization: "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE",
     },
   })
     .then((res) => {
-      console.log(`[DEBUG fetchDocketFiles] ${docketNo} response status:`, res.status, res.statusText);
+      // console.log(`[DEBUG fetchDocketFiles] ${docketNo} response status:`, res.status, res.statusText);
       return res.ok ? res.json() : { files: [] };
     })
     .then((data) => {
-      console.log(`[DEBUG fetchDocketFiles] ${docketNo} response data:`, JSON.stringify(data).slice(0, 500));
+      // console.log(`[DEBUG fetchDocketFiles] ${docketNo} response data:`, JSON.stringify(data).slice(0, 500));
       const files = data.files || [];
       filesCache.set(docketNo, files);
       filesPromiseCache.delete(docketNo);
       return files;
     })
     .catch((err) => {
-      console.warn(`[DEBUG fetchDocketFiles] ${docketNo} fetch error:`, err);
+      // console.warn(`[DEBUG fetchDocketFiles] ${docketNo} fetch error:`, err);
       return [];
     });
   filesPromiseCache.set(docketNo, promise);
@@ -768,6 +768,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [bgExpiryEditValue, setBgExpiryEditValue] = useState<string>("");
   const [editingClaimDateId, setEditingClaimDateId] = useState<string | null>(null);
   const [claimDateEditValue, setClaimDateEditValue] = useState<string>("");
+  const [editingPriceBasisId, setEditingPriceBasisId] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -3097,14 +3098,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             let url = "";
                             if (filesRaw) {
                               try {
-                                const files: Array<{ url: string; tags: string[] }> = JSON.parse(filesRaw);
+                                const files: Array<{ url: string; source: string; tags: string[] }> = JSON.parse(filesRaw);
                                 const costingFile = files.find((f) => f.tags?.includes("costingAttachment"));
-                                url = costingFile?.url ?? "";
+                                url = costingFile?.source && costingFile.source !== 'SHEET_SYNC'
+                                  ? `/api/executive-files/view/${costingFile.source}`
+                                  : costingFile?.url ?? "";
                               } catch {}
                             }
                             cellContent = url ? (
                               <a
-                                href={url}
+                                href={url.startsWith('/api/')
+                                  ? `${url}?auth=${encodeURIComponent("Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE")}`
+                                  : url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="table-attachment-link"
@@ -3228,15 +3233,41 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             );
                             cellClass = "col-center col-editable";
                           } else if (col.accessor === "priceBasis") {
-                            const basis = (cellVal as string) || "Firm";
-                            cellContent = (
-                              <span
-                                className={`price-basis-badge ${basis.toLowerCase().includes("variable") ? "variable" : "firm"}`}
-                              >
-                                {basis}
-                              </span>
-                            );
-                            cellClass = "col-center";
+                            const isEditing = editingPriceBasisId === record.id;
+                            const isSaving = !!savingKeys[`${record.id}-priceBasis`];
+                            const val = (cellVal as string) || "";
+                            if (isEditing) {
+                              cellContent = (
+                                <select
+                                  value={val}
+                                  disabled={isSaving}
+                                  onChange={(e) => {
+                                    handleMergedFieldSave(record, "priceBasis", e.target.value, () => {}, () => {});
+                                    setEditingPriceBasisId(null);
+                                  }}
+                                  onBlur={() => setEditingPriceBasisId(null)}
+                                  className="table-editable-select status-select"
+                                  style={{ minWidth: "100px", padding: "2px 4px", fontSize: "11px" }}
+                                  autoFocus
+                                >
+                                  <option value="">(Blank)</option>
+                                  <option value="FIRM">FIRM</option>
+                                  <option value="VARIABLE">VARIABLE</option>
+                                </select>
+                              );
+                            } else {
+                              const basis = (cellVal as string) || "Firm";
+                              cellContent = (
+                                <span
+                                  className={`price-basis-badge ${basis.toLowerCase().includes("variable") ? "variable" : "firm"}`}
+                                  onClick={() => setEditingPriceBasisId(record.id ?? null)}
+                                  style={{ cursor: "pointer" }}
+                                >
+                                  {basis}
+                                </span>
+                              );
+                            }
+                            cellClass = "col-center col-editable";
                           } else if (col.type === "currency") {
                             cellContent = formatCurrency(
                               cellVal as number | null,
