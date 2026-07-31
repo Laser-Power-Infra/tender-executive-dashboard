@@ -812,7 +812,12 @@ export const tendersSlice = createSlice({
       state.updatingCells[key] = false;
       if (state.data) {
         const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
-        if (row) row[field] = value;
+        if (row) {
+          row[field] = value;
+          if (field === "raQualificationRule") {
+            row.reverseAuctionApplicable = value ? "true" : row.reverseAuctionApplicable;
+          }
+        }
       }
     });
     builder.addCase(updateTenderMergedField.rejected, (state, action) => {
