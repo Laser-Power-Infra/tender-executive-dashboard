@@ -73,6 +73,9 @@ export interface EpcTenderRecord {
   attachmentUrl?: string | null;
   tenderFiles?: string;
   priceBasis?: string | null;
+  applicableIndex?: string | null;
+  tenderType?: string | null;
+  tenderBrief?: string | null;
   aluminiumPrice?: number | null;
   aluminiumAlloyPrice?: number | null;
   copperTapePrice?: number | null;

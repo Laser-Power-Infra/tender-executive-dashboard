@@ -723,6 +723,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
+      header: "Tender Type",
+      accessor: "tenderType",
+      defaultWidth: 100,
+      align: "left",
+      type: "string",
+    },
+    {
       header: "Last Date of Submission",
       accessor: "lastDateOfSubmission",
       defaultWidth: 200,
@@ -740,6 +747,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       header: "Tender / NIT No",
       accessor: "tenderNoNitNo",
       defaultWidth: 180,
+      align: "left",
+      type: "string",
+    },
+    {
+      header: "Tender Brief",
+      accessor: "tenderBrief",
+      defaultWidth: 250,
       align: "left",
       type: "string",
     },
@@ -797,6 +811,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       accessor: "price",
       defaultWidth: 90,
       align: "center",
+      type: "string",
+    },
+    {
+      header: "Applicable Index",
+      accessor: "applicableIndex",
+      defaultWidth: 120,
+      align: "left",
       type: "string",
     },
     {
