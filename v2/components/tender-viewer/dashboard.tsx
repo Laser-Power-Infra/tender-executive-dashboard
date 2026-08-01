@@ -1022,12 +1022,49 @@ export default function Dashboard() {
           defaultWidth: 170,
           searchable: false,
           frozen: true,
-          renderCell: (value: unknown) => {
-            const val = String(value ?? "");
-            return val ? (
-              <span className="text-xs font-mono">{val}</span>
-            ) : (
-              <span className="text-slate-300">-</span>
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const val = String(_value ?? "");
+            const apm = String(row.apm ?? "");
+            const participated = String(row.participated ?? "");
+
+            let badge: { label: string; className: string } | null = null;
+            if (apm === "YES") {
+              if (participated === "true") {
+                badge = {
+                  label: "POST",
+                  className:
+                    "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50",
+                };
+              } else if (participated === "false") {
+                badge = {
+                  label: "DEADLINE_OVER",
+                  className:
+                    "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-100",
+                };
+              } else {
+                badge = {
+                  label: "PRE",
+                  className:
+                    "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50",
+                };
+              }
+            }
+
+            return (
+              <div className="flex flex-col gap-1">
+                {val ? (
+                  <span className="text-xs font-mono">{val}</span>
+                ) : (
+                  <span className="text-slate-300">-</span>
+                )}
+                {badge && (
+                  <Badge
+                    className={`inline-flex w-fit text-[10px] font-medium ${badge.className}`}
+                  >
+                    {badge.label}
+                  </Badge>
+                )}
+              </div>
             );
           },
           filter: {
