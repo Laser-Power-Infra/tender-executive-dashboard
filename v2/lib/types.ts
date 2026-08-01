@@ -1,4 +1,9 @@
-export type ColumnFilterType = "dateRange" | "select" | "text" | "boolean";
+export type ColumnFilterType =
+  | "dateRange"
+  | "select"
+  | "text"
+  | "boolean"
+  | "rawMaterials";
 
 export interface FilterOption {
   value: string;
@@ -17,4 +22,10 @@ export interface ColumnFilterState {
   select?: string;
   text?: string;
   boolean?: boolean | null;
+  rawMaterials?: {
+    aluMin: string;
+    aluMax: string;
+    cuMin: string;
+    cuMax: string;
+  };
 }

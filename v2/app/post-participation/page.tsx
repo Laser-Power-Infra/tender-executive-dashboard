@@ -5,6 +5,7 @@ import { TenderTable } from "@/components/TenderTable";
 import { useAppSelector } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
+import { matchesRawMaterialRange } from "@/lib/rawMaterials";
 import { Eraser, ExternalLink, FileText, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
@@ -78,21 +79,10 @@ export default function PostParticipation() {
         return false;
       }
       if (priceBasisFilter !== "All") {
-        const basis = (record.priceBasis || "Firm").toString().toLowerCase();
+        const basis = (record.price || "Firm").toString().toLowerCase();
         if (basis !== priceBasisFilter.toLowerCase()) return false;
       }
-      if (aluminiumMin.trim() !== "" || aluminiumMax.trim() !== "") {
-        if (record.aluminiumPrice === null || record.aluminiumPrice === undefined) return false;
-        const minAl = aluminiumMin.trim() !== "" ? parseFloat(aluminiumMin) : Number.NEGATIVE_INFINITY;
-        const maxAl = aluminiumMax.trim() !== "" ? parseFloat(aluminiumMax) : Number.POSITIVE_INFINITY;
-        if (record.aluminiumPrice < minAl || record.aluminiumPrice > maxAl) return false;
-      }
-      if (copperMin.trim() !== "" || copperMax.trim() !== "") {
-        if (record.copperTapePrice === null || record.copperTapePrice === undefined) return false;
-        const minCu = copperMin.trim() !== "" ? parseFloat(copperMin) : Number.NEGATIVE_INFINITY;
-        const maxCu = copperMax.trim() !== "" ? parseFloat(copperMax) : Number.POSITIVE_INFINITY;
-        if (record.copperTapePrice < minCu || record.copperTapePrice > maxCu) return false;
-      }
+      if (!matchesRawMaterialRange(record, { aluMin: aluminiumMin, aluMax: aluminiumMax, cuMin: copperMin, cuMax: copperMax })) return false;
       return true;
     });
   }, [primaryDataset, clientSearch, selectedStatuses, selectedEngineer, selectedDecision, valueMin, valueMax, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax]);
@@ -177,7 +167,10 @@ export default function PostParticipation() {
             </div>
           ) : (
             <>
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated", "nextAction", "tenderUpdateStatus", "currentStatus", "ourRank", "ourValue", "nameOfRank1", "valueOfRank1", "differenceBetweenRank1", "nameOfRank2", "valueOfRank2", "differenceBetweenRank2"]} showPostParticipationColumns={true} />
+              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated", "nextAction", "tenderUpdateStatus", "currentStatus", "ourRank", "ourValue", "nameOfRank1", "valueOfRank1", "differenceBetweenRank1", "nameOfRank2", "valueOfRank2", "differenceBetweenRank2"]} showPostParticipationColumns={true}
+                aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
+                copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
+              />
             </>
           )}
         </main>

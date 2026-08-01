@@ -70,6 +70,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     attachmentUrl: null,
     tenderFiles: row.tenderFiles || "",
     priceBasis: row.priceBasis || null,
+    price: row.price || null,
     aluminiumPrice: parseFloatOrNull(row.aluminiumPrice),
     aluminiumAlloyPrice: parseFloatOrNull(row.aluminiumAlloyPrice),
     copperTapePrice: parseFloatOrNull(row.copperTapePrice),

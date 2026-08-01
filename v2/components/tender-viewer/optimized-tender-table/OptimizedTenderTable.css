@@ -848,11 +848,84 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--color-primary);
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-rate-tag {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.material-rate-tag .mat-lbl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .no-rates-placeholder {
   color: rgba(0, 0, 0, 0.25);
   font-weight: 500;
+}
+
+/* Raw Materials Alu/Cu Min-Max Header Filter */
+.column-raw-materials-filter {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  width: 100%;
+  gap: 4px;
+  background-color: #eef1f4;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.raw-mat-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.raw-mat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #000000;
+  width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.raw-mat-dash {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.35);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.raw-mat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  background-color: var(--color-bg-white);
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s;
+  height: 22px;
+  box-sizing: border-box;
+}
+
+.raw-mat-input:focus {
+  border-color: var(--color-accent);
 }
 
 /* Empty State */
@@ -988,6 +1061,30 @@
 .assignment-select:focus {
   border-color: var(--color-accent);
   background: var(--color-bg-white);
+}
+
+/* Price Type Dropdown (Price column) */
+.price-edit-select {
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-bg-white);
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--color-primary);
+  cursor: pointer;
+  outline: none;
+  height: 22px;
+  box-sizing: border-box;
+}
+
+.price-edit-select:hover {
+  border-color: #cbd5e1;
+}
+
+.price-edit-select:focus {
+  border-color: var(--color-accent);
 }
 
 /* Reset Filters Button */

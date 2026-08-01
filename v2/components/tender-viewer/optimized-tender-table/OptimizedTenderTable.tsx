@@ -14,7 +14,14 @@ import {
   TextColumnFilter,
   BooleanColumnFilter,
   DeadlineColumnFilter,
+  RawMaterialsColumnFilter,
 } from "./filters";
+import {
+  countRawMaterials,
+  anyRawMaterialInRange,
+  isAlu,
+  isCu,
+} from "@/lib/rawMaterials";
 import {
   format,
   startOfWeek,
@@ -389,6 +396,52 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
           return Boolean(val) === filterState.boolean;
         });
       }
+
+      if (col.filter?.type === "rawMaterials" && filterState.rawMaterials) {
+        const { aluMin, aluMax, cuMin, cuMax } = filterState.rawMaterials;
+        const hasAlu = aluMin.trim() !== "" || aluMax.trim() !== "";
+        const hasCu = cuMin.trim() !== "" || cuMax.trim() !== "";
+        if (hasAlu || hasCu) {
+          const aluRange =
+            hasAlu
+              ? {
+                  min:
+                    aluMin.trim() !== ""
+                      ? parseFloat(aluMin)
+                      : Number.NEGATIVE_INFINITY,
+                  max:
+                    aluMax.trim() !== ""
+                      ? parseFloat(aluMax)
+                      : Number.POSITIVE_INFINITY,
+                }
+              : null;
+          const cuRange =
+            hasCu
+              ? {
+                  min:
+                    cuMin.trim() !== ""
+                      ? parseFloat(cuMin)
+                      : Number.NEGATIVE_INFINITY,
+                  max:
+                    cuMax.trim() !== ""
+                      ? parseFloat(cuMax)
+                      : Number.POSITIVE_INFINITY,
+                }
+              : null;
+          result = result.filter((row) => {
+            const raw = row[col.accessor as keyof T];
+            if (aluRange) {
+              if (!anyRawMaterialInRange(raw, isAlu, aluRange.min, aluRange.max))
+                return false;
+            }
+            if (cuRange) {
+              if (!anyRawMaterialInRange(raw, isCu, cuRange.min, cuRange.max))
+                return false;
+            }
+            return true;
+          });
+        }
+      }
     });
 
     if (sortColumn) {
@@ -396,6 +449,14 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       const getSortValue = sortColDef?.sortValue ?? ((v: unknown) => v);
 
       result.sort((a, b) => {
+        if (sortColumn === "rawMaterials") {
+          const ca = countRawMaterials(a[sortColumn as keyof T]);
+          const cb = countRawMaterials(b[sortColumn as keyof T]);
+          if (ca !== cb)
+            return sortDirection === "asc" ? ca - cb : cb - ca;
+          return 0;
+        }
+
         const valA = getSortValue(a[sortColumn as keyof T], a);
         const valB = getSortValue(b[sortColumn as keyof T], b);
 
@@ -876,6 +937,13 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
               onChange={(v) => updateColumnFilter(accessorStr, "boolean", v)}
             />
           );
+        case "rawMaterials":
+          return (
+            <RawMaterialsColumnFilter
+              value={filterState?.rawMaterials}
+              onChange={(v) => updateColumnFilter(accessorStr, "rawMaterials", v)}
+            />
+          );
         default:
           return null;
       }
@@ -957,12 +1025,23 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
             } catch {}
           }
         }
-        if (entries.length === 0) return "-";
+        const nonNull = entries.filter(
+          ([, v]) => v !== null && v !== undefined && String(v) !== "",
+        );
+        if (nonNull.length === 0) return "-";
         return (
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            {entries.map(([key, val], i) => (
-              <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>
-                <strong>{key}</strong>: <strong>{String(val)}</strong>
+          <div
+            className="raw-materials-grid"
+            title={nonNull.map(([k, v]) => `${k}: ${String(v)}`).join(" | ")}
+          >
+            {nonNull.map(([key, val], i) => (
+              <div
+                className="material-rate-tag"
+                key={i}
+                title={`${key}: ${String(val)}`}
+              >
+                <span className="mat-lbl">{key}:</span>
+                <span className="mat-val">{String(val)}</span>
               </div>
             ))}
           </div>
