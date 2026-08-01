@@ -128,18 +128,22 @@ export enum TenderUpdateStatus {
 }
 
 export const CURRENT_STATUS_OPTIONS = [
-  "we are l1",
-  "submitted",
-  "awarded",
-  "rejected",
-  "technical evaluation",
-  "date extended",
-  "financial evaluation",
-  "counter offer as per l1 price",
-  "bid validity expired",
-  "not evaluated",
-  "not participated",
-  "under preparation",
+  "TECHNICAL BID OPENED",
+  "NOT EVALUATED",
+  "COUNTER OFFER AS PER L1 PRICE",
+  "UNDER EVALUATION",
+  "FINANCIAL EVALUATION",
+  "NOT IN OUR FAVOUR",
+  "TENDER PREPARED BUT NOT SUBMITTED",
+  "AWARDED",
+  "SUBMITTED",
+  "UNDER PREPERATION",
+  "BID VALIDITY EXPIRED",
+  "WE ARE L1",
+  "TENDER CANCELLED",
+  "REJECTED",
+  "DATE EXTENDED",
+  "NOT PARTICIPATED",
 ] as const;
 
 export enum NextAction {

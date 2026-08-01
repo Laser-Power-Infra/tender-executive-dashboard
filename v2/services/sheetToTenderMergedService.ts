@@ -417,7 +417,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
                 name: f.name,
                 extension: f.extension,
                 url: relativePath,
-                source: encryptRelativePath("network", relativePath),
+                source: encryptRelativePath(isCostingFile ? "costing" : "network", relativePath),
                 tags: [tag],
                 tenderMergedId: tm.id,
               },

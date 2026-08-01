@@ -89,6 +89,8 @@ export class TenderAttachmentController {
       if (!base) throw new Error("CONDUTOR_PATH not set");
     } else if (type === "network") {
       base = resolveRootPath();
+    } else if (type === "costing") {
+      base = resolveRootPath();
     } else {
       throw new Error(`Unknown path type prefix: ${type}`);
     }

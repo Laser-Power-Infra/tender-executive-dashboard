@@ -8,6 +8,7 @@ import {
 } from "@/types/tender";
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import type { AppDispatch } from "@/lib/store";
 import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping } from "@/lib/slices/tendersSlice";
 import { toast } from "sonner";
 import {
@@ -202,6 +203,458 @@ const BOQChartCell: React.FC<{
     >
       <BarChart3 size={14} /> Comparative Chart
     </button>
+  );
+};
+
+type EditableInputKind = "text" | "textarea" | "number";
+
+interface EditableFieldConfig {
+  accessor: string;
+  kind: EditableInputKind;
+  editableClass: string;
+  readOnlyClass?: string;
+  canEdit: (
+    record: EpcTenderRecord,
+    readOnly: boolean,
+    editableColumns: string[],
+  ) => boolean;
+  display: (record: EpcTenderRecord) => string;
+  toDraft: (record: EpcTenderRecord) => string;
+  displayClass?: (record: EpcTenderRecord) => string;
+  parse?: (draft: string) => { error?: string };
+  toStored: (draft: string) => unknown;
+  fromStored: (record: EpcTenderRecord) => unknown;
+  save: (
+    dispatch: AppDispatch,
+    record: EpcTenderRecord,
+    stored: unknown,
+    draft: string,
+  ) => Promise<unknown>;
+  successMessage?: (record: EpcTenderRecord, draft: string) => string;
+}
+
+const textFieldConfig = (
+  accessor: string,
+  kind: EditableInputKind,
+  editableClass: string,
+  readOnlyClass?: string,
+  canEdit?: (
+    record: EpcTenderRecord,
+    readOnly: boolean,
+    editableColumns: string[],
+  ) => boolean,
+  save?: (
+    dispatch: AppDispatch,
+    record: EpcTenderRecord,
+    stored: unknown,
+    draft: string,
+  ) => Promise<unknown>,
+  successMessage?: (record: EpcTenderRecord, draft: string) => string,
+): EditableFieldConfig => ({
+  accessor,
+  kind,
+  editableClass,
+  readOnlyClass,
+  canEdit: canEdit ?? (() => true),
+  display: (record) => {
+    const v = record[accessor as keyof EpcTenderRecord];
+    return v !== null && v !== undefined && v !== "" ? String(v) : "-";
+  },
+  toDraft: (record) => {
+    const v = record[accessor as keyof EpcTenderRecord];
+    return v !== null && v !== undefined ? String(v) : "";
+  },
+  toStored: (draft) => draft.trim(),
+  fromStored: (record) =>
+    String(record[accessor as keyof EpcTenderRecord] ?? ""),
+  save:
+    save ??
+    ((dispatch, record, stored) =>
+      dispatch(
+        updateTenderMergedField({
+          rowIndex: 0,
+          field: accessor,
+          value: stored as string,
+          tenderMergedId: Number(record.id),
+          oldValue: String(record[accessor as keyof EpcTenderRecord] ?? ""),
+        }),
+      ).unwrap()),
+  successMessage:
+    successMessage ?? (() => `${accessor} updated successfully!`),
+});
+
+const diffFieldConfig = (
+  accessor: "diffPercentFromL1" | "diffPercentFromL2",
+  label: string,
+  saveThunk: (
+    dispatch: AppDispatch,
+    record: EpcTenderRecord,
+    stored: unknown,
+  ) => Promise<unknown>,
+): EditableFieldConfig => ({
+  accessor,
+  kind: "number",
+  editableClass: "col-right col-editable diff-col",
+  readOnlyClass: "col-right diff-col",
+  canEdit: () => true,
+  display: (record) => {
+    const storedVal = record[accessor] as number | null;
+    const pctVal =
+      storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
+    return pctVal !== null
+      ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%`
+      : "—";
+  },
+  displayClass: (record) => {
+    const storedVal = record[accessor] as number | null;
+    const pctVal =
+      storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
+    return pctVal !== null && pctVal < 0 ? " col-lost" : "";
+  },
+  toDraft: (record) => {
+    const storedVal = record[accessor] as number | null;
+    const pctVal =
+      storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
+    return pctVal !== null ? String(pctVal) : "";
+  },
+  parse: (draft) => {
+    const t = draft.trim();
+    if (t !== "" && isNaN(parseFloat(t))) {
+      return { error: "Please enter a valid number." };
+    }
+    return {};
+  },
+  toStored: (draft) => {
+    const t = draft.trim();
+    const n = t === "" ? null : parseFloat(t);
+    return n !== null ? parseFloat((n / 100).toFixed(6)) : null;
+  },
+  fromStored: (record) => (record[accessor] as number | null) ?? null,
+  save: (dispatch, record, stored) => saveThunk(dispatch, record, stored),
+  successMessage: () => `${label} saved!`,
+});
+
+const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
+  docketNo: textFieldConfig(
+    "docketNo",
+    "text",
+    "col-docket col-editable",
+    "col-docket",
+    (r, readOnly) => !readOnly || !r.docketNo,
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderDocketNo({
+          tenderMergedId: Number(record.id),
+          docketNo: stored as string,
+          oldDocketNo: record.docketNo ?? "",
+        }),
+      ).unwrap(),
+    (_, draft) => `Docket ${draft.trim()} updated successfully!`,
+  ),
+  bgNoUtrNo: textFieldConfig(
+    "bgNoUtrNo",
+    "text",
+    "col-editable",
+    undefined,
+    undefined,
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderBgNoUtrNo({
+          tenderMergedId: Number(record.id),
+          bgNoUtrNo: stored as string,
+          oldBgNoUtrNo: record.bgNoUtrNo ?? "",
+        }),
+      ).unwrap(),
+    () => "BG/UTR No updated successfully!",
+  ),
+  remarks: textFieldConfig(
+    "remarks",
+    "textarea",
+    "col-left col-editable",
+    undefined,
+    undefined,
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderRemarks({
+          tenderMergedId: Number(record.id),
+          remarks: stored as string,
+          oldRemarks: record.remarks ?? "",
+        }),
+      ).unwrap(),
+    () => "Remarks updated successfully!",
+  ),
+  beneficiaryBankDetails: textFieldConfig(
+    "beneficiaryBankDetails",
+    "text",
+    "col-editable",
+    undefined,
+    undefined,
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderBeneficiaryBankDetails({
+          tenderMergedId: Number(record.id),
+          beneficiaryBankDetails: stored as string,
+          oldBeneficiaryBankDetails: record.beneficiaryBankDetails ?? "",
+        }),
+      ).unwrap(),
+    () => "Bank details updated!",
+  ),
+  loiPoNoAndDate: textFieldConfig(
+    "loiPoNoAndDate",
+    "text",
+    "col-editable",
+    undefined,
+    undefined,
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderLoiPoNoAndDate({
+          tenderMergedId: Number(record.id),
+          loiPoNoAndDate: stored as string,
+          oldLoiPoNoAndDate: record.loiPoNoAndDate ?? "",
+        }),
+      ).unwrap(),
+    () => "LOI/PO No updated!",
+  ),
+  competitors: textFieldConfig(
+    "competitors",
+    "textarea",
+    "col-left col-editable",
+    undefined,
+    undefined,
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderCompetitors({
+          tenderMergedId: Number(record.id),
+          competitors: stored as string,
+          oldCompetitors: record.competitors ?? "",
+        }),
+      ).unwrap(),
+    () => "Competitors updated!",
+  ),
+  reason: textFieldConfig(
+    "reason",
+    "textarea",
+    "col-left col-editable",
+    undefined,
+    undefined,
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderReason({
+          tenderMergedId: Number(record.id),
+          reason: stored as string,
+          oldReason: record.reason ?? "",
+        }),
+      ).unwrap(),
+    () => "Reason updated!",
+  ),
+  miiPurchasePreference: textFieldConfig("miiPurchasePreference", "text", "col-editable"),
+  raQualificationRule: textFieldConfig("raQualificationRule", "text", "col-editable"),
+  startupExemption: textFieldConfig("startupExemption", "text", "col-editable"),
+  minimumAverageAnnualTurnover: textFieldConfig(
+    "minimumAverageAnnualTurnover",
+    "text",
+    "col-editable",
+  ),
+  yearsOfPastExperience: textFieldConfig("yearsOfPastExperience", "text", "col-editable"),
+  ePbgDurationMonths: textFieldConfig("ePbgDurationMonths", "text", "col-editable"),
+  ourRank: textFieldConfig(
+    "ourRank",
+    "text",
+    "col-center col-editable",
+    "col-center",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("ourRank")),
+  ),
+  ourValue: textFieldConfig(
+    "ourValue",
+    "text",
+    "col-center col-editable",
+    "col-center",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("ourValue")),
+  ),
+  nameOfRank1: textFieldConfig(
+    "nameOfRank1",
+    "text",
+    "col-left col-editable",
+    "col-left",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("nameOfRank1")),
+  ),
+  valueOfRank1: textFieldConfig(
+    "valueOfRank1",
+    "text",
+    "col-right col-editable",
+    "col-right",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("valueOfRank1")),
+  ),
+  differenceBetweenRank1: textFieldConfig(
+    "differenceBetweenRank1",
+    "text",
+    "col-right col-editable",
+    "col-right",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("differenceBetweenRank1")),
+  ),
+  nameOfRank2: textFieldConfig(
+    "nameOfRank2",
+    "text",
+    "col-left col-editable",
+    "col-left",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("nameOfRank2")),
+  ),
+  valueOfRank2: textFieldConfig(
+    "valueOfRank2",
+    "text",
+    "col-right col-editable",
+    "col-right",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("valueOfRank2")),
+  ),
+  differenceBetweenRank2: textFieldConfig(
+    "differenceBetweenRank2",
+    "text",
+    "col-right col-editable",
+    "col-right",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("differenceBetweenRank2")),
+  ),
+  quotationNo: textFieldConfig(
+    "quotationNo",
+    "text",
+    "col-docket col-editable",
+    "col-docket",
+    (r, readOnly) => !readOnly || !r.quotationNo,
+  ),
+  contractNo: textFieldConfig(
+    "contractNo",
+    "text",
+    "col-docket col-editable",
+    "col-docket",
+    (r, readOnly) => !readOnly || !r.contractNo,
+  ),
+  emd: textFieldConfig("emd", "text", "col-editable"),
+  bgDate: textFieldConfig("bgDate", "text", "col-editable"),
+  bgExpiryDate: textFieldConfig("bgExpiryDate", "text", "col-editable"),
+  claimDate: textFieldConfig("claimDate", "text", "col-editable"),
+  diffPercentFromL1: diffFieldConfig(
+    "diffPercentFromL1",
+    "Diff L1",
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderDiffPercentFromL1({
+          tenderMergedId: Number(record.id),
+          diffPercentFromL1: stored as number | null,
+          oldDiffPercentFromL1: String(record.diffPercentFromL1 ?? ""),
+        }),
+      ).unwrap(),
+  ),
+  diffPercentFromL2: diffFieldConfig(
+    "diffPercentFromL2",
+    "Diff L2",
+    (dispatch, record, stored) =>
+      dispatch(
+        updateTenderDiffPercentFromL2({
+          tenderMergedId: Number(record.id),
+          diffPercentFromL2: stored as number | null,
+          oldDiffPercentFromL2: String(record.diffPercentFromL2 ?? ""),
+        }),
+      ).unwrap(),
+  ),
+};
+
+const InlineEditor: React.FC<{
+  initialValue: string;
+  kind: EditableInputKind;
+  saving: boolean;
+  onSave: (draft: string) => void;
+  onCancel: () => void;
+}> = ({ initialValue, kind, saving, onSave, onCancel }) => {
+  const [draft, setDraft] = useState(initialValue);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const commit = () => {
+    if (!saving) onSave(draft);
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (saving) return;
+      if (editorRef.current && !editorRef.current.contains(e.target as Node)) {
+        onCancel();
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () =>
+      document.removeEventListener("mousedown", handleOutsideClick);
+  }, [onCancel, saving]);
+
+  if (kind === "textarea") {
+    return (
+      <div
+        ref={editorRef}
+        style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          commit();
+        }}
+      >
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && e.shiftKey) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              onCancel();
+            }
+          }}
+          autoFocus
+          disabled={saving}
+          className="remarks-edit-textarea"
+          rows={3}
+          style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
+        />
+        <button
+          onClick={commit}
+          disabled={saving}
+          className="docket-save-btn"
+          title="Save"
+          style={{ flexShrink: 0, marginTop: 2 }}
+        >
+          <Check size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={editorRef}
+      style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        commit();
+      }}
+    >
+      <input
+        type={kind === "number" ? "number" : "text"}
+        step={kind === "number" ? "any" : undefined}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            onCancel();
+          }
+        }}
+        autoFocus
+        disabled={saving}
+        className="docket-edit-input"
+        placeholder={kind === "number" ? "e.g. -6.5" : undefined}
+      />
+      <button onClick={commit} disabled={saving} className="docket-save-btn" title="Save">
+        <Check size={14} />
+      </button>
+    </div>
   );
 };
 
@@ -684,28 +1137,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     >
   >({});
   const [savingKeys, setSavingKeys] = useState<Record<string, boolean>>({});
-  const [editingDocketId, setEditingDocketId] = useState<string | null>(null);
-  const [docketEditValue, setDocketEditValue] = useState<string>("");
-  const [editingBgUtrId, setEditingBgUtrId] = useState<string | null>(null);
-  const [bgUtrEditValue, setBgUtrEditValue] = useState<string>("");
-  const [editingRemarksId, setEditingRemarksId] = useState<string | null>(null);
-  const [remarksEditValue, setRemarksEditValue] = useState<string>("");
-  const [editingDiffL1Id, setEditingDiffL1Id] = useState<string | null>(null);
-  const [diffL1EditValue, setDiffL1EditValue] = useState<string>("");
-  const [editingDiffL2Id, setEditingDiffL2Id] = useState<string | null>(null);
-  const [diffL2EditValue, setDiffL2EditValue] = useState<string>("");
-  const [editingLoiPoId, setEditingLoiPoId] = useState<string | null>(null);
-  const [loiPoEditValue, setLoiPoEditValue] = useState<string>("");
-  const [editingCompetitorsId, setEditingCompetitorsId] = useState<string | null>(null);
-  const [competitorsEditValue, setCompetitorsEditValue] = useState<string>("");
-  const [editingReasonId, setEditingReasonId] = useState<string | null>(null);
-  const [reasonEditValue, setReasonEditValue] = useState<string>("");
-  const [editingBankDetailsId, setEditingBankDetailsId] = useState<string | null>(null);
-  const [bankDetailsEditValue, setBankDetailsEditValue] = useState<string>("");
-  const [editingQuotationNoId, setEditingQuotationNoId] = useState<string | null>(null);
-  const [quotationNoEditValue, setQuotationNoEditValue] = useState<string>("");
-  const [editingContractNoId, setEditingContractNoId] = useState<string | null>(null);
-  const [contractNoEditValue, setContractNoEditValue] = useState<string>("");
+  const [editingCell, setEditingCell] = useState<{ id: string; accessor: string } | null>(null);
 
   // Dialog state for merged office name
   const [officeDialogRecord, setOfficeDialogRecord] = useState<EpcTenderRecord | null>(null);
@@ -713,180 +1145,46 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [websiteDialogRecord, setWebsiteDialogRecord] = useState<EpcTenderRecord | null>(null);
   const [reportingDialogRecord, setReportingDialogRecord] = useState<EpcTenderRecord | null>(null);
 
-  // Inline edit states for new editable fields
-  const [editingValueId, setEditingValueId] = useState<string | null>(null);
-  const [valueEditValue, setValueEditValue] = useState("");
-  const [editingEmdId, setEditingEmdId] = useState<string | null>(null);
-  const [emdEditValue, setEmdEditValue] = useState("");
-  const [editingMiiId, setEditingMiiId] = useState<string | null>(null);
-  const [miiEditValue, setMiiEditValue] = useState("");
-  const [editingDocFeesId, setEditingDocFeesId] = useState<string | null>(null);
-  const [docFeesEditValue, setDocFeesEditValue] = useState("");
-  const [editingQtyId, setEditingQtyId] = useState<string | null>(null);
-  const [qtyEditValue, setQtyEditValue] = useState("");
-  const [editingRaRuleId, setEditingRaRuleId] = useState<string | null>(null);
-  const [raRuleEditValue, setRaRuleEditValue] = useState("");
-  const [editingContractId, setEditingContractId] = useState<string | null>(null);
-  const [contractEditValue, setContractEditValue] = useState("");
-  const [editingBidValidityId, setEditingBidValidityId] = useState<string | null>(null);
-  const [bidValidityEditValue, setBidValidityEditValue] = useState("");
-  const [editingEmdValidityId, setEditingEmdValidityId] = useState<string | null>(null);
-  const [emdValidityEditValue, setEmdValidityEditValue] = useState("");
-  const [editingStartupId, setEditingStartupId] = useState<string | null>(null);
-  const [startupEditValue, setStartupEditValue] = useState("");
-  const [editingRaDateId, setEditingRaDateId] = useState<string | null>(null);
-  const [raDateEditValue, setRaDateEditValue] = useState("");
-  const [editingBidOpenId, setEditingBidOpenId] = useState<string | null>(null);
-  const [bidOpenEditValue, setBidOpenEditValue] = useState("");
-  const [editingTurnoverId, setEditingTurnoverId] = useState<string | null>(null);
-  const [turnoverEditValue, setTurnoverEditValue] = useState("");
-  const [editingExperienceId, setEditingExperienceId] = useState<string | null>(null);
-  const [experienceEditValue, setExperienceEditValue] = useState("");
-  const [editingEpbgId, setEditingEpbgId] = useState<string | null>(null);
-  const [epbgEditValue, setEpbgEditValue] = useState("");
-  const [editingOurRankId, setEditingOurRankId] = useState<string | null>(null);
-  const [ourRankEditValue, setOurRankEditValue] = useState("");
-  const [editingOurValueId, setEditingOurValueId] = useState<string | null>(null);
-  const [ourValueEditValue, setOurValueEditValue] = useState("");
-  const [editingNameOfRank1Id, setEditingNameOfRank1Id] = useState<string | null>(null);
-  const [nameOfRank1EditValue, setNameOfRank1EditValue] = useState("");
-  const [editingValueOfRank1Id, setEditingValueOfRank1Id] = useState<string | null>(null);
-  const [valueOfRank1EditValue, setValueOfRank1EditValue] = useState("");
-  const [editingDifferenceBetweenRank1Id, setEditingDifferenceBetweenRank1Id] = useState<string | null>(null);
-  const [differenceBetweenRank1EditValue, setDifferenceBetweenRank1EditValue] = useState("");
-  const [editingNameOfRank2Id, setEditingNameOfRank2Id] = useState<string | null>(null);
-  const [nameOfRank2EditValue, setNameOfRank2EditValue] = useState("");
-  const [editingValueOfRank2Id, setEditingValueOfRank2Id] = useState<string | null>(null);
-  const [valueOfRank2EditValue, setValueOfRank2EditValue] = useState("");
-  const [editingDifferenceBetweenRank2Id, setEditingDifferenceBetweenRank2Id] = useState<string | null>(null);
-  const [differenceBetweenRank2EditValue, setDifferenceBetweenRank2EditValue] = useState("");
-  const [editingBgStatusId, setEditingBgStatusId] = useState<string | null>(null);
-  const [bgStatusEditValue, setBgStatusEditValue] = useState<string>("");
-  const [editingBgDateId, setEditingBgDateId] = useState<string | null>(null);
-  const [bgDateEditValue, setBgDateEditValue] = useState<string>("");
-  const [editingBgExpiryId, setEditingBgExpiryId] = useState<string | null>(null);
-  const [bgExpiryEditValue, setBgExpiryEditValue] = useState<string>("");
-  const [editingClaimDateId, setEditingClaimDateId] = useState<string | null>(null);
-  const [claimDateEditValue, setClaimDateEditValue] = useState<string>("");
   const [editingPriceBasisId, setEditingPriceBasisId] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
   const updatingCells = useAppSelector((s) => s.tenders.updatingCells);
 
-  const handleDocketSave = useCallback(
-    (record: EpcTenderRecord) => {
+  const saveCell = useCallback(
+    (record: EpcTenderRecord, accessor: string, draft: string) => {
+      const cfg = EDITABLE_FIELDS[accessor];
+      if (!cfg) return;
       if (!record.id) {
         toast.error("Database record ID not found. Please refresh.");
         return;
       }
-      const newVal = docketEditValue.trim();
-      const oldVal = record.docketNo;
-      if (newVal === oldVal) {
-        setEditingDocketId(null);
+      const parsed = cfg.parse?.(draft);
+      if (parsed?.error) {
+        toast.error(parsed.error);
         return;
       }
-      const key = `${record.id}-docket`;
+      const stored = cfg.toStored(draft);
+      const current = cfg.fromStored(record);
+      if (stored === current) {
+        setEditingCell(null);
+        return;
+      }
+      const key = `${record.id}-${accessor}`;
       setSavingKeys((prev) => ({ ...prev, [key]: true }));
-      console.log(`[save:docket] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
-      dispatch(
-        updateTenderDocketNo({
-          tenderMergedId: Number(record.id),
-          docketNo: newVal,
-          oldDocketNo: oldVal,
-        }),
-      )
-        .unwrap()
+      cfg
+        .save(dispatch, record, stored, draft)
         .then(() => {
-          toast.success(`Docket ${newVal} updated successfully!`);
-        })
-        .catch((err) => {
-          toast.error(err?.message || "Failed to update docket number.");
-        })
-        .finally(() => {
-          setEditingDocketId(null);
-          setSavingKeys((prev) => {
-            const copy = { ...prev };
-            delete copy[key];
-            return copy;
-          });
-        });
-    },
-    [dispatch, docketEditValue],
-  );
-
-  const handleBgUtrSave = useCallback(
-    (record: EpcTenderRecord) => {
-      if (!record.id) {
-        toast.error("Database record ID not found. Please refresh.");
-        return;
-      }
-      const newVal = bgUtrEditValue.trim();
-      const oldVal = record.bgNoUtrNo ?? "";
-      if (newVal === oldVal) {
-        setEditingBgUtrId(null);
-        return;
-      }
-      const key = `${record.id}-bgUtr`;
-      setSavingKeys((prev) => ({ ...prev, [key]: true }));
-      console.log(`[save:bgUtr] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
-      dispatch(
-        updateTenderBgNoUtrNo({
-          tenderMergedId: Number(record.id),
-          bgNoUtrNo: newVal,
-          oldBgNoUtrNo: oldVal,
-        }),
-      )
-        .unwrap()
-        .then(() => {
-          toast.success(`BG/UTR No updated successfully!`);
-        })
-        .catch((err) => {
-          toast.error(err?.message || "Failed to update BG/UTR number.");
-        })
-        .finally(() => {
-          setEditingBgUtrId(null);
-          setSavingKeys((prev) => {
-            const copy = { ...prev };
-            delete copy[key];
-            return copy;
-          });
-        });
-    },
-    [dispatch, bgUtrEditValue],
-  );
-
-  const handleRemarksSave = useCallback(
-    (record: EpcTenderRecord) => {
-      if (!record.id) {
-        toast.error("Database record ID not found. Please refresh.");
-        return;
-      }
-      const newVal = remarksEditValue.trim();
-      const oldVal = record.remarks ?? "";
-      if (newVal === oldVal) {
-        setEditingRemarksId(null);
-        return;
-      }
-      const key = `${record.id}-remarks`;
-      setSavingKeys((prev) => ({ ...prev, [key]: true }));
-      console.log(`[save:remarks] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
-      dispatch(
-        updateTenderRemarks({
-          tenderMergedId: Number(record.id),
-          remarks: newVal,
-          oldRemarks: oldVal,
-        }),
-      )
-        .unwrap()
-        .then(() => {
-          toast.success(`Remarks updated successfully!`);
+          toast.success(
+            cfg.successMessage?.(record, draft) ??
+              `${accessor} updated successfully!`,
+          );
         })
         .catch((err: any) => {
-          toast.error(err?.message || "Failed to update remarks.");
+          toast.error(err?.message || `Failed to update ${accessor}.`);
         })
         .finally(() => {
-          setEditingRemarksId(null);
+          setEditingCell(null);
           setSavingKeys((prev) => {
             const copy = { ...prev };
             delete copy[key];
@@ -894,227 +1192,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           });
         });
     },
-    [dispatch, remarksEditValue],
-  );
-
-  const handleBankDetailsSave = useCallback(
-    (record: EpcTenderRecord) => {
-      if (!record.id) {
-        toast.error("Database record ID not found. Please refresh.");
-        return;
-      }
-      const newVal = bankDetailsEditValue.trim();
-      const oldVal = record.beneficiaryBankDetails ?? "";
-      if (newVal === oldVal) {
-        setEditingBankDetailsId(null);
-        return;
-      }
-      const key = `${record.id}-bankDetails`;
-      setSavingKeys((prev) => ({ ...prev, [key]: true }));
-      console.log(`[save:bankDetails] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
-      dispatch(
-        updateTenderBeneficiaryBankDetails({
-          tenderMergedId: Number(record.id),
-          beneficiaryBankDetails: newVal,
-          oldBeneficiaryBankDetails: oldVal,
-        }),
-      )
-        .unwrap()
-        .then(() => {
-          toast.success("Bank details updated!");
-        })
-        .catch((err: any) => {
-          toast.error(err?.message || "Failed to update bank details.");
-        })
-        .finally(() => {
-          setEditingBankDetailsId(null);
-          setSavingKeys((prev) => {
-            const copy = { ...prev };
-            delete copy[key];
-            return copy;
-          });
-        });
-    },
-    [dispatch, bankDetailsEditValue],
-  );
-
-  const handleDiffSave = async (
-    record: EpcTenderRecord,
-    field: "diffPercentFromL1" | "diffPercentFromL2",
-    rawValue: string,
-    setEditingId: (id: string | null) => void,
-    setEditValue: (v: string) => void,
-  ) => {
-    if (!record.id) {
-      toast.error("Database record ID not found. Please refresh.");
-      return;
-    }
-    const trimmed = rawValue.trim();
-    const parsedNum = trimmed === "" ? null : parseFloat(trimmed);
-    if (parsedNum !== null && isNaN(parsedNum)) {
-      toast.error("Please enter a valid number.");
-      return;
-    }
-    const oldVal = (record[field] as number | null) ?? null;
-    const storedVal = parsedNum !== null ? parseFloat((parsedNum / 100).toFixed(6)) : null;
-    if (storedVal === oldVal) {
-      setEditingId(null);
-      return;
-    }
-    const key = `${record.id}-${field === "diffPercentFromL1" ? "diffL1" : "diffL2"}`;
-    setSavingKeys((prev) => ({ ...prev, [key]: true }));
-    console.log(`[save:diff] dispatching: id=${record.id} field=${field} storedVal=${storedVal}`);
-    const dispatchAction = field === "diffPercentFromL1"
-      ? dispatch(updateTenderDiffPercentFromL1({
-          tenderMergedId: Number(record.id),
-          diffPercentFromL1: storedVal,
-          oldDiffPercentFromL1: String(oldVal ?? ""),
-        }))
-      : dispatch(updateTenderDiffPercentFromL2({
-          tenderMergedId: Number(record.id),
-          diffPercentFromL2: storedVal,
-          oldDiffPercentFromL2: String(oldVal ?? ""),
-        }));
-    dispatchAction
-      .unwrap()
-      .then(() => {
-        const label = field === "diffPercentFromL1" ? "Diff L1" : "Diff L2";
-        toast.success(`${label} saved!`);
-      })
-      .catch((err: any) => {
-        toast.error(err?.message || "Failed to save diff value.");
-      })
-      .finally(() => {
-        setEditingId(null);
-        setEditValue("");
-        setSavingKeys((prev) => {
-          const copy = { ...prev };
-          delete copy[key];
-          return copy;
-        });
-      });
-  };
-
-  const handleLoiPoSave = useCallback(
-    (record: EpcTenderRecord) => {
-      if (!record.id) {
-        toast.error("Database record ID not found. Please refresh.");
-        return;
-      }
-      const newVal = loiPoEditValue.trim();
-      const oldVal = record.loiPoNoAndDate ?? "";
-      if (newVal === oldVal) {
-        setEditingLoiPoId(null);
-        return;
-      }
-      const key = `${record.id}-loiPo`;
-      setSavingKeys((prev) => ({ ...prev, [key]: true }));
-      console.log(`[save:loiPo] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
-      dispatch(
-        updateTenderLoiPoNoAndDate({
-          tenderMergedId: Number(record.id),
-          loiPoNoAndDate: newVal,
-          oldLoiPoNoAndDate: oldVal,
-        }),
-      )
-        .unwrap()
-        .then(() => {
-          toast.success("LOI/PO No updated!");
-        })
-        .catch((err: any) => {
-          toast.error(err?.message || "Failed to update LOI/PO No.");
-        })
-        .finally(() => {
-          setEditingLoiPoId(null);
-          setSavingKeys((prev) => {
-            const copy = { ...prev };
-            delete copy[key];
-            return copy;
-          });
-        });
-    },
-    [dispatch, loiPoEditValue],
-  );
-
-  const handleCompetitorsSave = useCallback(
-    (record: EpcTenderRecord) => {
-      if (!record.id) {
-        toast.error("Database record ID not found. Please refresh.");
-        return;
-      }
-      const newVal = competitorsEditValue.trim();
-      const oldVal = record.competitors ?? "";
-      if (newVal === oldVal) {
-        setEditingCompetitorsId(null);
-        return;
-      }
-      const key = `${record.id}-competitors`;
-      setSavingKeys((prev) => ({ ...prev, [key]: true }));
-      console.log(`[save:competitors] dispatching: id=${record.id} newVal="${newVal}" oldVal="${oldVal}"`);
-      dispatch(
-        updateTenderCompetitors({
-          tenderMergedId: Number(record.id),
-          competitors: newVal,
-          oldCompetitors: oldVal,
-        }),
-      )
-        .unwrap()
-        .then(() => {
-          toast.success("Competitors updated!");
-        })
-        .catch((err: any) => {
-          toast.error(err?.message || "Failed to update competitors.");
-        })
-        .finally(() => {
-          setEditingCompetitorsId(null);
-          setSavingKeys((prev) => {
-            const copy = { ...prev };
-            delete copy[key];
-            return copy;
-          });
-        });
-    },
-    [dispatch, competitorsEditValue],
-  );
-
-  const handleReasonSave = useCallback(
-    (record: EpcTenderRecord) => {
-      if (!record.id) {
-        toast.error("Database record ID not found. Please refresh.");
-        return;
-      }
-      const newVal = reasonEditValue.trim();
-      const oldVal = record.reason ?? "";
-      if (newVal === oldVal) {
-        setEditingReasonId(null);
-        return;
-      }
-      const key = `${record.id}-reason`;
-      setSavingKeys((prev) => ({ ...prev, [key]: true }));
-      dispatch(
-        updateTenderReason({
-          tenderMergedId: Number(record.id),
-          reason: newVal,
-          oldReason: oldVal,
-        }),
-      )
-        .unwrap()
-        .then(() => {
-          toast.success("Reason updated!");
-        })
-        .catch((err: any) => {
-          toast.error(err?.message || "Failed to update reason.");
-        })
-        .finally(() => {
-          setEditingReasonId(null);
-          setSavingKeys((prev) => {
-            const copy = { ...prev };
-            delete copy[key];
-            return copy;
-          });
-        });
-    },
-    [dispatch, reasonEditValue],
+    [dispatch],
   );
 
   const handleMergedFieldSave = useCallback(
@@ -2602,11 +2680,51 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         let cellVal: any;
                         let cellContent: React.ReactNode = "-";
                         let cellClass = "";
-                        let canEditDocket = false;
-                        let canEditQuotation = false;
-                        let canEditContract = false;
 
-                        if (col.accessor === "merged_office_consignees") {
+                        const editableCfg = EDITABLE_FIELDS[col.accessor];
+                        if (editableCfg) {
+                          const isEditing =
+                            editingCell?.id === record.id &&
+                            editingCell?.accessor === col.accessor;
+                          const isSaving =
+                            !!savingKeys[`${record.id}-${col.accessor}`];
+                          if (isEditing) {
+                            cellContent = (
+                              <InlineEditor
+                                initialValue={editableCfg.toDraft(record)}
+                                kind={editableCfg.kind}
+                                saving={isSaving}
+                                onSave={(draft) =>
+                                  saveCell(record, col.accessor, draft)
+                                }
+                                onCancel={() => setEditingCell(null)}
+                              />
+                            );
+                          } else {
+                            cellContent = (
+                              <span className="docket-display">
+                                {editableCfg.display(record)}
+                                {isSaving && (
+                                  <Loader2
+                                    size={12}
+                                    className="spin"
+                                    style={{ marginLeft: 4 }}
+                                  />
+                                )}
+                              </span>
+                            );
+                          }
+                          const editable = editableCfg.canEdit(
+                            record,
+                            readOnly,
+                            editableColumns,
+                          );
+                          cellClass = editable
+                            ? editableCfg.editableClass
+                            : (editableCfg.readOnlyClass ??
+                              editableCfg.editableClass);
+                          cellClass += editableCfg.displayClass?.(record) ?? "";
+                        } else if (col.accessor === "merged_office_consignees") {
                           const office = record.officeName || "";
                           const consignees = record.consigneesReportingOfficer || "";
                           cellContent = (
@@ -2770,249 +2888,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             <span>-</span>
                           );
                           cellClass = "col-left";
-                        } else if (
-                          col.accessor === "diffPercentFromL1"
-                        ) {
-                          const isEditing = editingDiffL1Id === record.id;
-                          const isSaving = !!savingKeys[`${record.id}-diffL1`];
-                          const storedVal = record.diffPercentFromL1 as number | null;
-                          const pctVal = storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
-                          if (isEditing) {
-                            cellContent = (
-                              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  className="docket-edit-input"
-                                  value={diffL1EditValue}
-                                  autoFocus
-                                  placeholder="e.g. -6.5"
-                                  onChange={(e) => setDiffL1EditValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      handleDiffSave(record, "diffPercentFromL1", diffL1EditValue, setEditingDiffL1Id, setDiffL1EditValue);
-                                    } else if (e.key === "Escape") {
-                                      setEditingDiffL1Id(null);
-                                    }
-                                  }}
-                                />
-                                <button
-                                  onClick={() => handleDiffSave(record, "diffPercentFromL1", diffL1EditValue, setEditingDiffL1Id, setDiffL1EditValue)}
-                                  disabled={isSaving}
-                                  className="docket-save-btn"
-                                  title="Save"
-                                >
-                                  <Check size={14} />
-                                </button>
-                              </div>
-                            );
-                            cellClass = "col-right col-editable diff-col";
-                          } else {
-                            const displayVal = pctVal !== null ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%` : "—";
-                            cellContent = (
-                              <span className="docket-display">
-                                {displayVal}
-                                {isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                              </span>
-                            );
-                            cellClass = `col-right col-editable diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
-                          }
-                        } else if (
-                          col.accessor === "diffPercentFromL2"
-                        ) {
-                          const isEditing = editingDiffL2Id === record.id;
-                          const isSaving = !!savingKeys[`${record.id}-diffL2`];
-                          const storedVal = record.diffPercentFromL2 as number | null;
-                          const pctVal = storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
-                          if (isEditing) {
-                            cellContent = (
-                              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  className="docket-edit-input"
-                                  value={diffL2EditValue}
-                                  autoFocus
-                                  placeholder="e.g. -6.5"
-                                  onChange={(e) => setDiffL2EditValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      handleDiffSave(record, "diffPercentFromL2", diffL2EditValue, setEditingDiffL2Id, setDiffL2EditValue);
-                                    } else if (e.key === "Escape") {
-                                      setEditingDiffL2Id(null);
-                                    }
-                                  }}
-                                />
-                                <button
-                                  onClick={() => handleDiffSave(record, "diffPercentFromL2", diffL2EditValue, setEditingDiffL2Id, setDiffL2EditValue)}
-                                  disabled={isSaving}
-                                  className="docket-save-btn"
-                                  title="Save"
-                                >
-                                  <Check size={14} />
-                                </button>
-                              </div>
-                            );
-                            cellClass = "col-right col-editable diff-col";
-                          } else {
-                            const displayVal = pctVal !== null ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%` : "—";
-                            cellContent = (
-                              <span className="docket-display">
-                                {displayVal}
-                                {isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                              </span>
-                            );
-                            cellClass = `col-right col-editable diff-col ${pctVal !== null && pctVal < 0 ? "col-lost" : ""}`;
-                          }
-                        } else if (col.accessor === "competitors") {
-                          const compVal =
-                            (record[
-                              col.accessor as keyof EpcTenderRecord
-                            ] as string) || "";
-                          const isEditingComp = editingCompetitorsId === record.id;
-                          const isSavingComp = !!savingKeys[`${record.id}-competitors`];
-                          if (isEditingComp) {
-                            cellContent = (
-                              <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}>
-                                <textarea
-                                  value={competitorsEditValue}
-                                  onChange={(e) => setCompetitorsEditValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && e.shiftKey) return;
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      handleCompetitorsSave(record);
-                                    } else if (e.key === "Escape") {
-                                      setEditingCompetitorsId(null);
-                                    }
-                                  }}
-                                  autoFocus
-                                  disabled={isSavingComp}
-                                  className="remarks-edit-textarea"
-                                  rows={3}
-                                  style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
-                                />
-                                <button
-                                  onClick={() => handleCompetitorsSave(record)}
-                                  disabled={isSavingComp}
-                                  className="docket-save-btn"
-                                  title="Save"
-                                  style={{ flexShrink: 0, marginTop: 2 }}
-                                >
-                                  <Check size={14} />
-                                </button>
-                              </div>
-                            );
-                            cellClass = "col-left col-editable";
-                          } else {
-                            cellContent = (
-                              <span className="docket-display" style={{ display: "block", width: "100%" }}>
-                                {compVal || "-"}
-                                {isSavingComp && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                              </span>
-                            );
-                            cellClass = "col-left col-editable";
-                          }
-                        } else if (col.accessor === "remarks") {
-                          const remarksVal =
-                            (record[
-                              col.accessor as keyof EpcTenderRecord
-                            ] as string) || "";
-                          const isEditingRem = editingRemarksId === record.id;
-                          const isSavingRem = !!savingKeys[`${record.id}-remarks`];
-                          if (isEditingRem) {
-                            cellContent = (
-                              <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}>
-                                <textarea
-                                  value={remarksEditValue}
-                                  onChange={(e) => setRemarksEditValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && e.shiftKey) return;
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      handleRemarksSave(record);
-                                    } else if (e.key === "Escape") {
-                                      setEditingRemarksId(null);
-                                    }
-                                  }}
-                                  autoFocus
-                                  disabled={isSavingRem}
-                                  className="remarks-edit-textarea"
-                                  rows={3}
-                                  style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
-                                />
-                                <button
-                                  onClick={() => handleRemarksSave(record)}
-                                  disabled={isSavingRem}
-                                  className="docket-save-btn"
-                                  title="Save"
-                                  style={{ flexShrink: 0, marginTop: 2 }}
-                                >
-                                  <Check size={14} />
-                                </button>
-                              </div>
-                            );
-                            cellClass = "col-left col-editable";
-                          } else {
-                            cellContent = (
-                              <span className="docket-display" style={{ display: "block", width: "100%" }}>
-                                {remarksVal || "-"}
-                                {isSavingRem && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                              </span>
-                            );
-                            cellClass = "col-left col-editable";
-                          }
-                        } else if (col.accessor === "reason") {
-                          const reasonVal =
-                            (record[
-                              col.accessor as keyof EpcTenderRecord
-                            ] as string) || "";
-                          const isEditingReason = editingReasonId === record.id;
-                          const isSavingReason = !!savingKeys[`${record.id}-reason`];
-                          if (isEditingReason) {
-                            cellContent = (
-                              <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 4 }}>
-                                <textarea
-                                  value={reasonEditValue}
-                                  onChange={(e) => setReasonEditValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && e.shiftKey) return;
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      handleReasonSave(record);
-                                    } else if (e.key === "Escape") {
-                                      setEditingReasonId(null);
-                                    }
-                                  }}
-                                  autoFocus
-                                  disabled={isSavingReason}
-                                  className="remarks-edit-textarea"
-                                  rows={3}
-                                  style={{ width: "100%", minWidth: 180, fontSize: 11, padding: "4px 6px", resize: "vertical" }}
-                                />
-                                <button
-                                  onClick={() => handleReasonSave(record)}
-                                  disabled={isSavingReason}
-                                  className="docket-save-btn"
-                                  title="Save"
-                                  style={{ flexShrink: 0, marginTop: 2 }}
-                                >
-                                  <Check size={14} />
-                                </button>
-                              </div>
-                            );
-                            cellClass = "col-left col-editable";
-                          } else {
-                            cellContent = (
-                              <span className="docket-display" style={{ display: "block", width: "100%" }}>
-                                {reasonVal || "-"}
-                                {isSavingReason && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                              </span>
-                            );
-                            cellClass = "col-left col-editable";
-                          }
                         } else if (col.accessor === "tenderUpdateStatus") {
                           const statusValue =
                             overrides[record.id!]?.tenderUpdateStatus ??
@@ -3193,34 +3068,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               </div>
                             );
                             cellClass = "col-left";
-                          } else if (col.accessor === "startupExemption") {
-                            const isEditing = editingStartupId === record.id;
-                            const isSaving = !!savingKeys[`${record.id}-startupExemption`];
-                            const dispVal = cellVal != null ? String(cellVal) : "";
-                            if (isEditing) {
-                              cellContent = (
-                                <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                  <input
-                                    type="text"
-                                    value={startupEditValue}
-                                    onChange={(e) => setStartupEditValue(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") { handleMergedFieldSave(record, "startupExemption", startupEditValue, setEditingStartupId, setStartupEditValue); }
-                                      else if (e.key === "Escape") { setEditingStartupId(null); }
-                                    }}
-                                    autoFocus
-                                    disabled={isSaving}
-                                    className="docket-edit-input"
-                                  />
-                                  <button onClick={() => handleMergedFieldSave(record, "startupExemption", startupEditValue, setEditingStartupId, setStartupEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                </div>
-                              );
-                            } else {
-                              cellContent = (
-                                <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>
-                              );
-                            }
-                            cellClass = "col-editable";
                           } else if (col.accessor === "emdPaymentMode") {
                             const isSaving = !!savingKeys[`${record.id}-emdPaymentMode`];
                             const val = (cellVal as string) || "";
@@ -3522,500 +3369,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 </select>
                               );
                               cellClass = "col-center col-editable";
-                            } else if (col.accessor === "emd") {
-                              const emdVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditingEmd = editingEmdId === record.id;
-                              const isSavingEmd = !!savingKeys[`${record.id}-emd`];
-                              if (isEditingEmd) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={emdEditValue} onChange={(e) => setEmdEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "emd", emdEditValue, setEditingEmdId, setEmdEditValue); else if (e.key === "Escape") setEditingEmdId(null); }} autoFocus disabled={isSavingEmd} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "emd", emdEditValue, setEditingEmdId, setEmdEditValue)} disabled={isSavingEmd} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{emdVal || "-"}{isSavingEmd && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "bgDate") {
-                              const bgDateVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditingBgDate = editingBgDateId === record.id;
-                              const isSavingBgDate = !!savingKeys[`${record.id}-bgDate`];
-                              if (isEditingBgDate) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={bgDateEditValue} onChange={(e) => setBgDateEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "bgDate", bgDateEditValue, setEditingBgDateId, setBgDateEditValue); else if (e.key === "Escape") setEditingBgDateId(null); }} autoFocus disabled={isSavingBgDate} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "bgDate", bgDateEditValue, setEditingBgDateId, setBgDateEditValue)} disabled={isSavingBgDate} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{bgDateVal || "-"}{isSavingBgDate && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "bgExpiryDate") {
-                              const bgExpiryVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditingBgExpiry = editingBgExpiryId === record.id;
-                              const isSavingBgExpiry = !!savingKeys[`${record.id}-bgExpiryDate`];
-                              if (isEditingBgExpiry) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={bgExpiryEditValue} onChange={(e) => setBgExpiryEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "bgExpiryDate", bgExpiryEditValue, setEditingBgExpiryId, setBgExpiryEditValue); else if (e.key === "Escape") setEditingBgExpiryId(null); }} autoFocus disabled={isSavingBgExpiry} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "bgExpiryDate", bgExpiryEditValue, setEditingBgExpiryId, setBgExpiryEditValue)} disabled={isSavingBgExpiry} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{bgExpiryVal || "-"}{isSavingBgExpiry && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "claimDate") {
-                              const claimDateVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditingClaimDate = editingClaimDateId === record.id;
-                              const isSavingClaimDate = !!savingKeys[`${record.id}-claimDate`];
-                              if (isEditingClaimDate) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={claimDateEditValue} onChange={(e) => setClaimDateEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "claimDate", claimDateEditValue, setEditingClaimDateId, setClaimDateEditValue); else if (e.key === "Escape") setEditingClaimDateId(null); }} autoFocus disabled={isSavingClaimDate} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "claimDate", claimDateEditValue, setEditingClaimDateId, setClaimDateEditValue)} disabled={isSavingClaimDate} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{claimDateVal || "-"}{isSavingClaimDate && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "docketNo") {
-                              const docketVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditing = editingDocketId === record.id;
-                              const isSaving = !!savingKeys[`${record.id}-docket`];
-                              canEditDocket = !readOnly || !docketVal;
-                              if (!canEditDocket) {
-                                cellContent = (
-                                  <span className="docket-display">{docketVal || "-"}</span>
-                                );
-                                cellClass = "col-docket";
-                              } else if (isEditing) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input
-                                      type="text"
-                                      value={docketEditValue}
-                                      onChange={(e) => setDocketEditValue(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          handleDocketSave(record);
-                                        } else if (e.key === "Escape") {
-                                          setEditingDocketId(null);
-                                        }
-                                      }}
-                                      autoFocus
-                                      disabled={isSaving}
-                                      className="docket-edit-input"
-                                    />
-                                    <button
-                                      onClick={() => handleDocketSave(record)}
-                                      disabled={isSaving}
-                                      className="docket-save-btn"
-                                      title="Save"
-                                    >
-                                      <Check size={14} />
-                                    </button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = (
-                                  <span className="docket-display">
-                                    {docketVal || "-"}
-                                    {isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                                  </span>
-                                );
-                              }
-                              cellClass = !canEditDocket ? "col-docket" : "col-docket col-editable";
-                            } else if (col.accessor === "bgNoUtrNo") {
-                              const bgUtrVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditingBg = editingBgUtrId === record.id;
-                              const isSavingBg = !!savingKeys[`${record.id}-bgUtr`];
-                              if (isEditingBg) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input
-                                      type="text"
-                                      value={bgUtrEditValue}
-                                      onChange={(e) => setBgUtrEditValue(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          handleBgUtrSave(record);
-                                        } else if (e.key === "Escape") {
-                                          setEditingBgUtrId(null);
-                                        }
-                                      }}
-                                      autoFocus
-                                      disabled={isSavingBg}
-                                      className="docket-edit-input"
-                                    />
-                                    <button
-                                      onClick={() => handleBgUtrSave(record)}
-                                      disabled={isSavingBg}
-                                      className="docket-save-btn"
-                                      title="Save"
-                                    >
-                                      <Check size={14} />
-                                    </button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = (
-                                  <span className="docket-display">
-                                    {bgUtrVal || "-"}
-                                    {isSavingBg && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                                  </span>
-                                );
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "loiPoNoAndDate") {
-                              const loiPoVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditingLoi = editingLoiPoId === record.id;
-                              const isSavingLoi = !!savingKeys[`${record.id}-loiPo`];
-                              if (isEditingLoi) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input
-                                      type="text"
-                                      value={loiPoEditValue}
-                                      onChange={(e) => setLoiPoEditValue(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") { handleLoiPoSave(record); }
-                                        else if (e.key === "Escape") { setEditingLoiPoId(null); }
-                                      }}
-                                      autoFocus
-                                      disabled={isSavingLoi}
-                                      className="docket-edit-input"
-                                    />
-                                    <button onClick={() => handleLoiPoSave(record)} disabled={isSavingLoi} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                                cellClass = "col-editable";
-                              } else {
-                                cellContent = (
-                                  <span className="docket-display">
-                                    {loiPoVal || "-"}
-                                    {isSavingLoi && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                                  </span>
-                                );
-                                cellClass = "col-editable";
-                              }
-                            } else if (col.accessor === "miiPurchasePreference") {
-                              const isEditing = editingMiiId === record.id;
-                              const isSaving = !!savingKeys[`${record.id}-miiPurchasePreference`];
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (isEditing) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={miiEditValue} onChange={(e) => setMiiEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "miiPurchasePreference", miiEditValue, setEditingMiiId, setMiiEditValue); else if (e.key === "Escape") setEditingMiiId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "miiPurchasePreference", miiEditValue, setEditingMiiId, setMiiEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "raQualificationRule") {
-                              const isEditing = editingRaRuleId === record.id;
-                              const isSaving = !!savingKeys[`${record.id}-raQualificationRule`];
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (isEditing) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={raRuleEditValue} onChange={(e) => setRaRuleEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "raQualificationRule", raRuleEditValue, setEditingRaRuleId, setRaRuleEditValue); else if (e.key === "Escape") setEditingRaRuleId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "raQualificationRule", raRuleEditValue, setEditingRaRuleId, setRaRuleEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "minimumAverageAnnualTurnover") {
-                              const isEditing = editingTurnoverId === record.id;
-                              const isSaving = !!savingKeys[`${record.id}-minimumAverageAnnualTurnover`];
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (isEditing) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={turnoverEditValue} onChange={(e) => setTurnoverEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "minimumAverageAnnualTurnover", turnoverEditValue, setEditingTurnoverId, setTurnoverEditValue); else if (e.key === "Escape") setEditingTurnoverId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "minimumAverageAnnualTurnover", turnoverEditValue, setEditingTurnoverId, setTurnoverEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "yearsOfPastExperience") {
-                              const isEditing = editingExperienceId === record.id;
-                              const isSaving = !!savingKeys[`${record.id}-yearsOfPastExperience`];
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (isEditing) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={experienceEditValue} onChange={(e) => setExperienceEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "yearsOfPastExperience", experienceEditValue, setEditingExperienceId, setExperienceEditValue); else if (e.key === "Escape") setEditingExperienceId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "yearsOfPastExperience", experienceEditValue, setEditingExperienceId, setExperienceEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "ePbgDurationMonths") {
-                              const isEditing = editingEpbgId === record.id;
-                              const isSaving = !!savingKeys[`${record.id}-ePbgDurationMonths`];
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (isEditing) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={epbgEditValue} onChange={(e) => setEpbgEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "ePbgDurationMonths", epbgEditValue, setEditingEpbgId, setEpbgEditValue); else if (e.key === "Escape") setEditingEpbgId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "ePbgDurationMonths", epbgEditValue, setEditingEpbgId, setEpbgEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "beneficiaryBankDetails") {
-                              const bankVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              const isEditingBank = editingBankDetailsId === record.id;
-                              const isSavingBank = !!savingKeys[`${record.id}-bankDetails`];
-                              if (isEditingBank) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input
-                                      type="text"
-                                      value={bankDetailsEditValue}
-                                      onChange={(e) => setBankDetailsEditValue(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          handleBankDetailsSave(record);
-                                        } else if (e.key === "Escape") {
-                                          setEditingBankDetailsId(null);
-                                        }
-                                      }}
-                                      autoFocus
-                                      disabled={isSavingBank}
-                                      className="docket-edit-input"
-                                    />
-                                    <button
-                                      onClick={() => handleBankDetailsSave(record)}
-                                      disabled={isSavingBank}
-                                      className="docket-save-btn"
-                                      title="Save"
-                                    >
-                                      <Check size={14} />
-                                    </button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = (
-                                  <span className="docket-display">
-                                    {bankVal || "-"}
-                                    {isSavingBank && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}
-                                  </span>
-                                );
-                              }
-                              cellClass = "col-editable";
-                            } else if (col.accessor === "quotationNo") {
-                              const qVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              canEditQuotation = !readOnly || !qVal;
-                              const isEditingQ = editingQuotationNoId === record.id;
-                              const isSavingQ = !!savingKeys[`${record.id}-quotationNo`];
-                              if (!canEditQuotation) {
-                                cellContent = <span className="docket-display">{qVal || "-"}</span>;
-                                cellClass = "col-docket";
-                              } else if (isEditingQ) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={quotationNoEditValue} onChange={(e) => setQuotationNoEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "quotationNo", quotationNoEditValue, setEditingQuotationNoId, setQuotationNoEditValue); else if (e.key === "Escape") setEditingQuotationNoId(null); }} autoFocus disabled={isSavingQ} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "quotationNo", quotationNoEditValue, setEditingQuotationNoId, setQuotationNoEditValue)} disabled={isSavingQ} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{qVal || "-"}{isSavingQ && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = !canEditQuotation ? "col-docket" : "col-docket col-editable";
-                            } else if (col.accessor === "contractNo") {
-                              const cVal = cellVal !== null && cellVal !== undefined ? String(cellVal) : "";
-                              canEditContract = !readOnly || !cVal;
-                              const isEditingC = editingContractNoId === record.id;
-                              const isSavingC = !!savingKeys[`${record.id}-contractNo`];
-                              if (!canEditContract) {
-                                cellContent = <span className="docket-display">{cVal || "-"}</span>;
-                                cellClass = "col-docket";
-                              } else if (isEditingC) {
-                                cellContent = (
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                    <input type="text" value={contractNoEditValue} onChange={(e) => setContractNoEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "contractNo", contractNoEditValue, setEditingContractNoId, setContractNoEditValue); else if (e.key === "Escape") setEditingContractNoId(null); }} autoFocus disabled={isSavingC} className="docket-edit-input" />
-                                    <button onClick={() => handleMergedFieldSave(record, "contractNo", contractNoEditValue, setEditingContractNoId, setContractNoEditValue)} disabled={isSavingC} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                  </div>
-                                );
-                              } else {
-                                cellContent = <span className="docket-display">{cVal || "-"}{isSavingC && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                              }
-                              cellClass = !canEditContract ? "col-docket" : "col-docket col-editable";
-                            } else if (col.accessor === "ourRank") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("ourRank")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-center";
-                              } else {
-                                const isEditing = editingOurRankId === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-ourRank`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={ourRankEditValue} onChange={(e) => setOurRankEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "ourRank", ourRankEditValue, setEditingOurRankId, setOurRankEditValue); else if (e.key === "Escape") setEditingOurRankId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "ourRank", ourRankEditValue, setEditingOurRankId, setOurRankEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-center col-editable";
-                              }
-                            } else if (col.accessor === "ourValue") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("ourValue")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-center";
-                              } else {
-                                const isEditing = editingOurValueId === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-ourValue`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={ourValueEditValue} onChange={(e) => setOurValueEditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "ourValue", ourValueEditValue, setEditingOurValueId, setOurValueEditValue); else if (e.key === "Escape") setEditingOurValueId(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "ourValue", ourValueEditValue, setEditingOurValueId, setOurValueEditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-center col-editable";
-                              }
-                            } else if (col.accessor === "nameOfRank1") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("nameOfRank1")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-left";
-                              } else {
-                                const isEditing = editingNameOfRank1Id === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-nameOfRank1`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={nameOfRank1EditValue} onChange={(e) => setNameOfRank1EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "nameOfRank1", nameOfRank1EditValue, setEditingNameOfRank1Id, setNameOfRank1EditValue); else if (e.key === "Escape") setEditingNameOfRank1Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "nameOfRank1", nameOfRank1EditValue, setEditingNameOfRank1Id, setNameOfRank1EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-left col-editable";
-                              }
-                            } else if (col.accessor === "valueOfRank1") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("valueOfRank1")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-right";
-                              } else {
-                                const isEditing = editingValueOfRank1Id === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-valueOfRank1`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={valueOfRank1EditValue} onChange={(e) => setValueOfRank1EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "valueOfRank1", valueOfRank1EditValue, setEditingValueOfRank1Id, setValueOfRank1EditValue); else if (e.key === "Escape") setEditingValueOfRank1Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "valueOfRank1", valueOfRank1EditValue, setEditingValueOfRank1Id, setValueOfRank1EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-right col-editable";
-                              }
-                            } else if (col.accessor === "differenceBetweenRank1") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("differenceBetweenRank1")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-right";
-                              } else {
-                                const isEditing = editingDifferenceBetweenRank1Id === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-differenceBetweenRank1`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={differenceBetweenRank1EditValue} onChange={(e) => setDifferenceBetweenRank1EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "differenceBetweenRank1", differenceBetweenRank1EditValue, setEditingDifferenceBetweenRank1Id, setDifferenceBetweenRank1EditValue); else if (e.key === "Escape") setEditingDifferenceBetweenRank1Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "differenceBetweenRank1", differenceBetweenRank1EditValue, setEditingDifferenceBetweenRank1Id, setDifferenceBetweenRank1EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-right col-editable";
-                              }
-                            } else if (col.accessor === "nameOfRank2") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("nameOfRank2")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-left";
-                              } else {
-                                const isEditing = editingNameOfRank2Id === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-nameOfRank2`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={nameOfRank2EditValue} onChange={(e) => setNameOfRank2EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "nameOfRank2", nameOfRank2EditValue, setEditingNameOfRank2Id, setNameOfRank2EditValue); else if (e.key === "Escape") setEditingNameOfRank2Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "nameOfRank2", nameOfRank2EditValue, setEditingNameOfRank2Id, setNameOfRank2EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-left col-editable";
-                              }
-                            } else if (col.accessor === "valueOfRank2") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("valueOfRank2")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-right";
-                              } else {
-                                const isEditing = editingValueOfRank2Id === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-valueOfRank2`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={valueOfRank2EditValue} onChange={(e) => setValueOfRank2EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "valueOfRank2", valueOfRank2EditValue, setEditingValueOfRank2Id, setValueOfRank2EditValue); else if (e.key === "Escape") setEditingValueOfRank2Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "valueOfRank2", valueOfRank2EditValue, setEditingValueOfRank2Id, setValueOfRank2EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-right col-editable";
-                              }
-                            } else if (col.accessor === "differenceBetweenRank2") {
-                              const dispVal = cellVal != null ? String(cellVal) : "";
-                              if (readOnly && !editableColumns.includes("differenceBetweenRank2")) {
-                                cellContent = <span className="docket-display">{dispVal || "-"}</span>;
-                                cellClass = "col-right";
-                              } else {
-                                const isEditing = editingDifferenceBetweenRank2Id === record.id;
-                                const isSaving = !!savingKeys[`${record.id}-differenceBetweenRank2`];
-                                if (isEditing) {
-                                  cellContent = (
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                                      <input type="text" value={differenceBetweenRank2EditValue} onChange={(e) => setDifferenceBetweenRank2EditValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleMergedFieldSave(record, "differenceBetweenRank2", differenceBetweenRank2EditValue, setEditingDifferenceBetweenRank2Id, setDifferenceBetweenRank2EditValue); else if (e.key === "Escape") setEditingDifferenceBetweenRank2Id(null); }} autoFocus disabled={isSaving} className="docket-edit-input" />
-                                      <button onClick={() => handleMergedFieldSave(record, "differenceBetweenRank2", differenceBetweenRank2EditValue, setEditingDifferenceBetweenRank2Id, setDifferenceBetweenRank2EditValue)} disabled={isSaving} className="docket-save-btn" title="Save"><Check size={14} /></button>
-                                    </div>
-                                  );
-                                } else {
-                                  cellContent = <span className="docket-display">{dispVal || "-"}{isSaving && <Loader2 size={12} className="spin" style={{ marginLeft: 4 }} />}</span>;
-                                }
-                                cellClass = "col-right col-editable";
-                              }
                             } else if (col.accessor === "cva") {
                               let parts: string[] = [];
                               if (cellVal != null && cellVal !== "") {
@@ -4059,114 +3412,20 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             className={cellClass}
                             style={{ width: `${columnWidths[col.accessor]}px` }}
                             onClick={
-                              col.accessor === "docketNo" && canEditDocket && editingDocketId !== record.id
-                                ? () => {
-                                    if (!savingKeys[`${record.id}-docket`]) {
-                                      setEditingDocketId(record.id!);
-                                      setDocketEditValue(cellVal != null ? String(cellVal) : "");
-                                    }
-                                  }
-                                : col.accessor === "bgNoUtrNo" && editingBgUtrId !== record.id
-                                  ? () => {
-                                      if (!savingKeys[`${record.id}-bgUtr`]) {
-                                        setEditingBgUtrId(record.id!);
-                                        setBgUtrEditValue(cellVal != null ? String(cellVal) : "");
-                                      }
-                                    }
-                                  : col.accessor === "remarks" && editingRemarksId !== record.id
-                                    ? () => {
-                                        if (!savingKeys[`${record.id}-remarks`]) {
-                                          setEditingRemarksId(record.id!);
-                                          setRemarksEditValue(cellVal != null ? String(cellVal) : "");
-                                        }
-                                      }
-                                    : col.accessor === "diffPercentFromL1" && editingDiffL1Id !== record.id
-                                      ? () => {
-                                          if (!savingKeys[`${record.id}-diffL1`]) {
-                                            setEditingDiffL1Id(record.id!);
-                                            const storedL1 = record.diffPercentFromL1 as number | null;
-                                            const pct = storedL1 !== null ? parseFloat((storedL1 * 100).toFixed(4)) : null;
-                                            setDiffL1EditValue(pct !== null ? String(pct) : "");
-                                          }
-                                        }
-                                      : col.accessor === "diffPercentFromL2" && editingDiffL2Id !== record.id
-                                        ? () => {
-                                            if (!savingKeys[`${record.id}-diffL2`]) {
-                                              setEditingDiffL2Id(record.id!);
-                                              const storedL2 = record.diffPercentFromL2 as number | null;
-                                              const pct = storedL2 !== null ? parseFloat((storedL2 * 100).toFixed(4)) : null;
-                                              setDiffL2EditValue(pct !== null ? String(pct) : "");
-                                            }
-                                          }
-                                        : col.accessor === "loiPoNoAndDate" && editingLoiPoId !== record.id
-                                          ? () => {
-                                              if (!savingKeys[`${record.id}-loiPo`]) {
-                                                setEditingLoiPoId(record.id!);
-                                                setLoiPoEditValue(cellVal != null ? String(cellVal) : "");
-                                              }
-                                            }
-                                          : col.accessor === "competitors" && editingCompetitorsId !== record.id
-                                            ? () => {
-                                                if (!savingKeys[`${record.id}-competitors`]) {
-                                                  setEditingCompetitorsId(record.id!);
-                                                  setCompetitorsEditValue(cellVal != null ? String(cellVal) : "");
-                                                }
-                                              }
-                                                 : col.accessor === "reason" && editingReasonId !== record.id
-                                                   ? () => {
-                                                       if (!savingKeys[`${record.id}-reason`]) {
-                                                         setEditingReasonId(record.id!);
-                                                         setReasonEditValue(cellVal != null ? String(cellVal) : "");
-                                                       }
-                                                 }
-                                               : col.accessor === "beneficiaryBankDetails" && editingBankDetailsId !== record.id
-                                                 ? () => {
-                                                     if (!savingKeys[`${record.id}-bankDetails`]) {
-                                                       setEditingBankDetailsId(record.id!);
-                                                       setBankDetailsEditValue(cellVal != null ? String(cellVal) : "");
-                                                     }
-                                                       }
-                                                  : col.accessor === "miiPurchasePreference" && editingMiiId !== record.id
-                                                    ? () => { if (!savingKeys[`${record.id}-miiPurchasePreference`]) { setEditingMiiId(record.id!); setMiiEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                    : col.accessor === "raQualificationRule" && editingRaRuleId !== record.id
-                                                      ? () => { if (!savingKeys[`${record.id}-raQualificationRule`]) { setEditingRaRuleId(record.id!); setRaRuleEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                      : col.accessor === "startupExemption" && editingStartupId !== record.id
-                                                        ? () => { if (!savingKeys[`${record.id}-startupExemption`]) { setEditingStartupId(record.id!); setStartupEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                        : col.accessor === "minimumAverageAnnualTurnover" && editingTurnoverId !== record.id
-                                                          ? () => { if (!savingKeys[`${record.id}-minimumAverageAnnualTurnover`]) { setEditingTurnoverId(record.id!); setTurnoverEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                          : col.accessor === "yearsOfPastExperience" && editingExperienceId !== record.id
-                                                            ? () => { if (!savingKeys[`${record.id}-yearsOfPastExperience`]) { setEditingExperienceId(record.id!); setExperienceEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "ePbgDurationMonths" && editingEpbgId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-ePbgDurationMonths`]) { setEditingEpbgId(record.id!); setEpbgEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "ourRank" && editingOurRankId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-ourRank`]) { setEditingOurRankId(record.id!); setOurRankEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "ourValue" && editingOurValueId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-ourValue`]) { setEditingOurValueId(record.id!); setOurValueEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "nameOfRank1" && editingNameOfRank1Id !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-nameOfRank1`]) { setEditingNameOfRank1Id(record.id!); setNameOfRank1EditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "valueOfRank1" && editingValueOfRank1Id !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-valueOfRank1`]) { setEditingValueOfRank1Id(record.id!); setValueOfRank1EditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "differenceBetweenRank1" && editingDifferenceBetweenRank1Id !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-differenceBetweenRank1`]) { setEditingDifferenceBetweenRank1Id(record.id!); setDifferenceBetweenRank1EditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "nameOfRank2" && editingNameOfRank2Id !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-nameOfRank2`]) { setEditingNameOfRank2Id(record.id!); setNameOfRank2EditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "valueOfRank2" && editingValueOfRank2Id !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-valueOfRank2`]) { setEditingValueOfRank2Id(record.id!); setValueOfRank2EditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "differenceBetweenRank2" && editingDifferenceBetweenRank2Id !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-differenceBetweenRank2`]) { setEditingDifferenceBetweenRank2Id(record.id!); setDifferenceBetweenRank2EditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "quotationNo" && canEditQuotation && editingQuotationNoId !== record.id
-                                                               ? () => { if (!savingKeys[`${record.id}-quotationNo`]) { setEditingQuotationNoId(record.id!); setQuotationNoEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "contractNo" && canEditContract && editingContractNoId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-contractNo`]) { setEditingContractNoId(record.id!); setContractNoEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "emd" && editingEmdId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-emd`]) { setEditingEmdId(record.id!); setEmdEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "bgDate" && editingBgDateId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-bgDate`]) { setEditingBgDateId(record.id!); setBgDateEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "bgExpiryDate" && editingBgExpiryId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-bgExpiryDate`]) { setEditingBgExpiryId(record.id!); setBgExpiryEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                              : col.accessor === "claimDate" && editingClaimDateId !== record.id
-                                                                ? () => { if (!savingKeys[`${record.id}-claimDate`]) { setEditingClaimDateId(record.id!); setClaimDateEditValue(cellVal != null ? String(cellVal) : ""); } }
-                                                                   : undefined
+                              editableCfg &&
+                              editingCell?.id !== record.id &&
+                              editableCfg.canEdit(
+                                record,
+                                readOnly,
+                                editableColumns,
+                              ) &&
+                              !savingKeys[`${record.id}-${col.accessor}`]
+                                ? () =>
+                                    setEditingCell({
+                                      id: record.id!,
+                                      accessor: col.accessor,
+                                    })
+                                : undefined
                             }
                             title={
                               col.accessor !== "rawMaterials" &&

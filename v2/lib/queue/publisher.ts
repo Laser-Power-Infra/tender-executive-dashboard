@@ -5,6 +5,8 @@ export type TenderTaskPayload = {
   tenderId: number;
   referenceNo?: string;
   timestamp: number;
+  file_type?: "network" | "external";
+  decrypted_fileId?: string;
 } & (
   | { type: "GEM_DOWNLOAD"; gemId: string }
   | { type: "NON_GEM_DOWNLOAD" }
