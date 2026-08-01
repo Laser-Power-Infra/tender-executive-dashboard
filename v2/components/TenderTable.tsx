@@ -674,6 +674,7 @@ interface TenderTableProps {
   readOnly?: boolean;
   showPostParticipationColumns?: boolean;
   editableColumns?: string[];
+  defaultEndDate?: string;
 }
 
 interface ColumnDef {
@@ -709,6 +710,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   readOnly = false,
   showPostParticipationColumns = false,
   editableColumns = [],
+  defaultEndDate,
 }) => {
   // 1. Column Definitions
   const columns: ColumnDef[] = [
@@ -1441,7 +1443,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   >("lastDateOfSubmission");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>(defaultEndDate ?? "");
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(50);
