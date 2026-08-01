@@ -35,6 +35,7 @@ import remarkGfm from "remark-gfm";
 import MergedOfficeEditDialog from "./MergedOfficeEditDialog";
 import WebsiteEditDialog from "./tender-viewer/website-edit-dialog";
 import ReportingOfficersEditDialog from "./ReportingOfficersEditDialog";
+import { countRawMaterials } from "@/lib/rawMaterials";
 import "./TenderTable.css";
 
 const filesCache = new Map<string, any[]>();
@@ -722,6 +723,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
+      header: "Tender Type",
+      accessor: "tenderType",
+      defaultWidth: 100,
+      align: "left",
+      type: "string",
+    },
+    {
       header: "Last Date of Submission",
       accessor: "lastDateOfSubmission",
       defaultWidth: 200,
@@ -739,6 +747,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       header: "Tender / NIT No",
       accessor: "tenderNoNitNo",
       defaultWidth: 180,
+      align: "left",
+      type: "string",
+    },
+    {
+      header: "Tender Brief",
+      accessor: "tenderBrief",
+      defaultWidth: 250,
       align: "left",
       type: "string",
     },
@@ -793,9 +808,16 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     },
     {
       header: "Price",
-      accessor: "priceBasis",
+      accessor: "price",
       defaultWidth: 90,
       align: "center",
+      type: "string",
+    },
+    {
+      header: "Applicable Index",
+      accessor: "applicableIndex",
+      defaultWidth: 120,
+      align: "left",
       type: "string",
     },
     {
@@ -1146,8 +1168,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [officeDialogSaving, setOfficeDialogSaving] = useState(false);
   const [websiteDialogRecord, setWebsiteDialogRecord] = useState<EpcTenderRecord | null>(null);
   const [reportingDialogRecord, setReportingDialogRecord] = useState<EpcTenderRecord | null>(null);
-
-  const [editingPriceBasisId, setEditingPriceBasisId] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -1877,17 +1897,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         let valB: any;
 
         if (sortColumn === "rawMaterials") {
-          const materialFields = [
-            "aluminiumPrice", "aluminiumAlloyPrice", "copperTapePrice",
-            "extrudedSemiconductivePrice", "htXlpePrice", "pvcTypeSt2Price",
-            "galvanisedSteelFlatStripPrice", "fillerPrice",
-          ] as const;
-          valA = materialFields.reduce(
-            (sum, f) => sum + (typeof a[f as keyof EpcTenderRecord] === "number" ? (a[f as keyof EpcTenderRecord] as number) : 0), 0,
-          );
-          valB = materialFields.reduce(
-            (sum, f) => sum + (typeof b[f as keyof EpcTenderRecord] === "number" ? (b[f as keyof EpcTenderRecord] as number) : 0), 0,
-          );
+          valA = countRawMaterials(a.rawMaterials);
+          valB = countRawMaterials(b.rawMaterials);
         } else if (sortColumn === "files") {
           const getFileCount = (r: EpcTenderRecord) => {
             if (!r.tenderFiles) return 0;
@@ -2543,7 +2554,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           onMouseDown={(e) => e.stopPropagation()}
                         >
                           <div className="filter-row">
-                            <span className="filter-row-label">Al:</span>
+                            <span className="filter-row-label">Alu:</span>
                             <input
                               type="number"
                               placeholder="Min"
@@ -2803,13 +2814,28 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               } catch {}
                             }
                           }
-                          cellContent = entries.length > 0 ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                              {entries.map(([key, val], i) => (
-                                <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>
-                                  <strong>{key}</strong>: <strong>{String(val)}</strong>
-                                </div>
-                              ))}
+                          const nonNull = entries.filter(
+                            ([, v]) => v !== null && v !== undefined && String(v) !== "",
+                          );
+                          cellContent = nonNull.length > 0 ? (
+                            <div
+                              className="raw-materials-scroll-cell"
+                              title={nonNull
+                                .map(([k, v]) => `${k}: ${String(v)}`)
+                                .join(" | ")}
+                            >
+                              <div className="raw-materials-grid">
+                                {nonNull.map(([key, val], i) => (
+                                  <div
+                                    className="material-rate-tag"
+                                    key={i}
+                                    title={`${key}: ${String(val)}`}
+                                  >
+                                    <span className="mat-lbl">{key}:</span>
+                                    <span className="mat-val">{String(val)}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           ) : (
                             <span>-</span>
@@ -3088,41 +3114,30 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               </select>
                             );
                             cellClass = "col-center col-editable";
-                          } else if (col.accessor === "priceBasis") {
-                            const isEditing = editingPriceBasisId === record.id;
-                            const isSaving = !!savingKeys[`${record.id}-priceBasis`];
+                          } else if (col.accessor === "price") {
+                            const isSaving = !!savingKeys[`${record.id}-price`];
                             const val = (cellVal as string) || "";
-                            if (isEditing) {
-                              cellContent = (
-                                <select
-                                  value={val}
-                                  disabled={isSaving}
-                                  onChange={(e) => {
-                                    handleMergedFieldSave(record, "priceBasis", e.target.value, () => {}, () => {});
-                                    setEditingPriceBasisId(null);
-                                  }}
-                                  onBlur={() => setEditingPriceBasisId(null)}
-                                  className="table-editable-select status-select"
-                                  style={{ minWidth: "100px", padding: "2px 4px", fontSize: "11px" }}
-                                  autoFocus
-                                >
-                                  <option value="">(Blank)</option>
-                                  <option value="FIRM">FIRM</option>
-                                  <option value="VARIABLE">VARIABLE</option>
-                                </select>
-                              );
-                            } else {
-                              const basis = (cellVal as string) || "Firm";
-                              cellContent = (
-                                <span
-                                  className={`price-basis-badge ${basis.toLowerCase().includes("variable") ? "variable" : "firm"}`}
-                                  onClick={() => setEditingPriceBasisId(record.id ?? null)}
-                                  style={{ cursor: "pointer" }}
-                                >
-                                  {basis}
-                                </span>
-                              );
-                            }
+                            cellContent = val ? (
+                              <span
+                                className={`price-basis-badge ${val.toLowerCase().includes("variable") ? "variable" : "firm"}`}
+                              >
+                                {val}
+                              </span>
+                            ) : (
+                              <select
+                                value=""
+                                disabled={isSaving}
+                                onChange={(e) => {
+                                  handleMergedFieldSave(record, "price", e.target.value, () => {}, () => {});
+                                }}
+                                className="table-editable-select status-select"
+                                style={{ minWidth: "100px", padding: "2px 4px", fontSize: "11px" }}
+                              >
+                                <option value="">(Blank)</option>
+                                <option value="FIRM">FIRM</option>
+                                <option value="VARIABLE">VARIABLE</option>
+                              </select>
+                            );
                             cellClass = "col-center col-editable";
                           } else if (col.type === "currency") {
                             cellContent = formatCurrency(

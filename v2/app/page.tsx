@@ -6,6 +6,7 @@ import { AlertPanel } from "@/components/AlertPanel";
 import { useAppSelector, useAppDispatch } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
+import { matchesRawMaterialRange } from "@/lib/rawMaterials";
 import { syncSheetToMerged } from "@/lib/slices/tendersSlice";
 import { Eraser, ExternalLink, Database, RefreshCw, Loader2, Landmark, Building2 } from "lucide-react";
 import { toast } from "sonner";
@@ -84,21 +85,10 @@ export default function Home() {
         return false;
       }
       if (priceBasisFilter !== "All") {
-        const basis = (record.priceBasis || "Firm").toString().toLowerCase();
+        const basis = (record.price || "Firm").toString().toLowerCase();
         if (basis !== priceBasisFilter.toLowerCase()) return false;
       }
-      if (aluminiumMin.trim() !== "" || aluminiumMax.trim() !== "") {
-        if (record.aluminiumPrice === null || record.aluminiumPrice === undefined) return false;
-        const minAl = aluminiumMin.trim() !== "" ? parseFloat(aluminiumMin) : Number.NEGATIVE_INFINITY;
-        const maxAl = aluminiumMax.trim() !== "" ? parseFloat(aluminiumMax) : Number.POSITIVE_INFINITY;
-        if (record.aluminiumPrice < minAl || record.aluminiumPrice > maxAl) return false;
-      }
-      if (copperMin.trim() !== "" || copperMax.trim() !== "") {
-        if (record.copperTapePrice === null || record.copperTapePrice === undefined) return false;
-        const minCu = copperMin.trim() !== "" ? parseFloat(copperMin) : Number.NEGATIVE_INFINITY;
-        const maxCu = copperMax.trim() !== "" ? parseFloat(copperMax) : Number.POSITIVE_INFINITY;
-        if (record.copperTapePrice < minCu || record.copperTapePrice > maxCu) return false;
-      }
+      if (!matchesRawMaterialRange(record, { aluMin: aluminiumMin, aluMax: aluminiumMax, cuMin: copperMin, cuMax: copperMax })) return false;
       return true;
     });
   }, [primaryDataset, clientSearch, selectedStatuses, selectedEngineer, selectedDecision, valueMin, valueMax, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax]);
@@ -242,7 +232,10 @@ export default function Home() {
           ) : (
             <>
               {/* <AlertPanel alerts={alertData} /> */}
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger} />
+              <TenderTable records={activeDataset} clearTrigger={clearTrigger}
+                aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
+                copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
+              />
             </>
           )}
         </main>

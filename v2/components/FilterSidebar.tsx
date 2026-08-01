@@ -94,7 +94,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           </div>
         </div>
         <div className="filter-section">
-          <label className="filter-label">Price Basis</label>
+          <label className="filter-label">Price</label>
           <select className="filter-select" value={priceBasisFilter} onChange={(e) => setPriceBasisFilter(e.target.value)}>
             <option value="All">All Prices</option>
             <option value="Firm">Firm</option>

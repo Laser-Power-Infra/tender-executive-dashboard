@@ -114,6 +114,17 @@ export const filtersSlice = createSlice({
             boolean: value as boolean | null,
           };
           break;
+        case "rawMaterials":
+          state.columnFilters[accessor] = {
+            ...currentFilter,
+            rawMaterials: value as {
+              aluMin: string;
+              aluMax: string;
+              cuMin: string;
+              cuMax: string;
+            },
+          };
+          break;
       }
     },
     clearColumnFilter(state, action: PayloadAction<{ accessor: string; filterType: ColumnFilterType }>) {
@@ -133,6 +144,9 @@ export const filtersSlice = createSlice({
           break;
         case "boolean":
           state.columnFilters[accessor] = { ...currentFilter, boolean: undefined };
+          break;
+        case "rawMaterials":
+          state.columnFilters[accessor] = { ...currentFilter, rawMaterials: undefined };
           break;
       }
     },

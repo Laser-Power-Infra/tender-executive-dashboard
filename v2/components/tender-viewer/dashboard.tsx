@@ -12,6 +12,7 @@ import {
   fetchTendersIncremental,
   appendTenders,
   updateTenderCell,
+  updateTenderMergedField,
   updateTenderAssignments,
   updateWebsiteMapping,
   bulkAssignUtilityMapping,
@@ -1110,6 +1111,70 @@ export default function Dashboard() {
         };
       }
 
+      if (colLower.replace(/[\s_]/g, "") === "price") {
+        return {
+          header: displayNameMap["price"] ?? "Price",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 110,
+          type: "custom",
+          renderCell: (value: unknown, row: Record<string, unknown>) => {
+            const v = String(value ?? "").trim();
+            if (v) {
+              const upper = v.toUpperCase();
+              return (
+                <span
+                  className={`price-basis-badge ${
+                    upper === "VARIABLE" ? "variable" : "firm"
+                  }`}
+                >
+                  {v}
+                </span>
+              );
+            }
+            const id = String(row.id ?? "");
+            const isSaving = !!updatingCells[`${id}-price`];
+            return (
+              <select
+                className="price-edit-select"
+                value=""
+                disabled={isSaving}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const newVal = e.target.value;
+                  dispatch(
+                    updateTenderMergedField({
+                      rowIndex: 0,
+                      field: "price",
+                      value: newVal,
+                      tenderMergedId: Number(row.id),
+                      oldValue: "",
+                    }),
+                  )
+                    .unwrap()
+                    .then(() => toast.success("Price updated"))
+                    .catch((err: Error) =>
+                      toast.error(err?.message || "Failed to update price"),
+                    );
+                }}
+              >
+                <option value="">(Blank)</option>
+                <option value="FIRM">FIRM</option>
+                <option value="VARIABLE">VARIABLE</option>
+              </select>
+            );
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "FIRM", label: "Firm" },
+              { value: "VARIABLE", label: "Variable" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
       let filterType: "select" | "dateRange" | undefined;
 
       if (
@@ -1123,6 +1188,7 @@ export default function Dashboard() {
       }
 
       const options = selectFilterOptions[col];
+      const isRawMaterials = colLower.replace(/[\s_]/g, "") === "rawmaterials";
       return {
         header: displayNameMap[col] ?? formatColumnName(col),
         accessor: col as keyof Record<string, unknown>,
@@ -1131,10 +1197,15 @@ export default function Dashboard() {
             ? 80
             : col === "deadline" || col === "reportings"
               ? 300
-              : 200
+              : col === "rawMaterials"
+                ? 240
+                : 200
         ),
         searchable:
-          col === "deadline" || col === "organization" || col === "type"
+          col === "deadline" ||
+          col === "organization" ||
+          col === "type" ||
+          isRawMaterials
             ? false
             : undefined,
         hidden: colIndex !== undefined ? !colIndex.visible : true,
@@ -1147,8 +1218,9 @@ export default function Dashboard() {
             }
           : undefined,
         type: filterType === "dateRange" ? "date" : undefined,
-        filter:
-          filterType === "select"
+        filter: isRawMaterials
+          ? ({ type: "rawMaterials" } as const)
+          : filterType === "select"
             ? {
                 type: "select" as const,
                 options: [
