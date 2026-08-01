@@ -761,6 +761,8 @@ model TenderMerged {
   contractNo String?
 
   competitors String?
+  applicableIndex String?
+  publishedDate DateTime?
 
   fileId Int
   file   File @relation(fields: [fileId], references: [id], onDelete: Cascade)

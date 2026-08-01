@@ -18,17 +18,18 @@ export default function ParticipationDeadlineOver() {
     return {
       ...tenderSliceData,
       rows: tenderSliceData.rows.filter(
-        (r) => {
-          
-          const isNotParticipated = r.participated === "false";
-          const deadlineDate = r.deadline ? new Date(r.deadline) : null;
-          const isDeadlineOver = deadlineDate && deadlineDate < referenceDate;
-          return r.apm === "YES" &&isNotParticipated && !!isDeadlineOver;
-        },
+        (r) => r.apm === "YES" && r.participated === "false",
       ),
     };
   }, [tenderSliceData]);
   const mappedRecords = useMemo(() => mapTenderSliceToEpcRecords(postFilteredData), [postFilteredData]);
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
   const [clearTrigger, setClearTrigger] = useState<number>(0);
   const [clientSearch, setClientSearch] = useState<string>("");
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
