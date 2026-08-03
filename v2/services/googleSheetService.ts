@@ -290,7 +290,7 @@ export class GoogleSheetService {
       slNo: tm.slNo ?? 0,
       docketNo: tm.docketNo ?? "",
       tenderFor: tm.tenderFor ?? "",
-      typeOfTender: tm.tenderType === "GEM" ? "GEM" : "NON-GEM",
+      tenderType: tm.tenderType === "GEM" ? "GEM" : "NON-GEM",
       tenderNoNitNo: tm.referenceNo,
       nameOfWorkDescription: tm.tenderBrief ?? undefined,
       totalQuantityMeter: parseNum(tm.size),
@@ -592,7 +592,7 @@ export class GoogleSheetService {
       slNo,
       docketNo: getValue("Docket No-enq"), // Guaranteed to exist by filtering
       tenderFor: getValue("Tender For"),
-      typeOfTender: getValue("Type of Tender"),
+      tenderType: getValue("Type of Tender"),
       tenderNoNitNo: getValue("Tender No / NIT No with Date"),
       nameOfWorkDescription: getValue("Name of Work / Item Description"),
       totalQuantityMeter: parseNumber(getValue("Total Quantity in Meter")),

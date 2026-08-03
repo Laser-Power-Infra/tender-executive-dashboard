@@ -1,4 +1,4 @@
-import { EpcTenderRecord, CurrentStatus, ManagementDecision, TypeOfTender, EMDExchangeMode } from "@/types/tender";
+import { EpcTenderRecord, CurrentStatus, ManagementDecision, EMDExchangeMode } from "@/types/tender";
 
 /**
  * Generates a realistic dataset of 1,120 records to match the exact visual state of the mockup.
@@ -17,7 +17,6 @@ export const generateMockTenders = (): EpcTenderRecord[] => {
       tenderNoNitNo: "ONGC/2026/VALVE/44",
       nameOfTheClient: "ONGC Petro Additions",
       tenderFor: "Supply of Ball Valves",
-      typeOfTender: TypeOfTender.OPEN,
       estimatedCostRs: 15000000, // 1.5 Cr
       emdAmountRs: 300000,
       lastDateOfSubmission: new Date("2026-01-14"),
@@ -49,7 +48,6 @@ export const generateMockTenders = (): EpcTenderRecord[] => {
       tenderNoNitNo: "HPCL/V/123/EXP",
       nameOfTheClient: "HPCL Visakhapatnam",
       tenderFor: "Installation Services",
-      typeOfTender: TypeOfTender.LIMITED,
       estimatedCostRs: 42000000, // 4.2 Cr
       emdAmountRs: 840000,
       lastDateOfSubmission: new Date("2026-01-20"),
@@ -81,7 +79,6 @@ export const generateMockTenders = (): EpcTenderRecord[] => {
       tenderNoNitNo: "GAIL/3A/822/P",
       nameOfTheClient: "GAIL India Ltd",
       tenderFor: "Control Units",
-      typeOfTender: TypeOfTender.OPEN,
       estimatedCostRs: 8500000, // 0.85 Cr
       emdAmountRs: 170000,
       lastDateOfSubmission: new Date("2026-02-04"),
@@ -113,7 +110,6 @@ export const generateMockTenders = (): EpcTenderRecord[] => {
       tenderNoNitNo: "REL/JAM/2026",
       nameOfTheClient: "Reliance Jamnagar",
       tenderFor: "Special Fittings",
-      typeOfTender: TypeOfTender.NOMINATION,
       estimatedCostRs: 21000000, // 2.1 Cr
       emdAmountRs: 0,
       lastDateOfSubmission: new Date("2026-02-10"),
@@ -145,7 +141,6 @@ export const generateMockTenders = (): EpcTenderRecord[] => {
       tenderNoNitNo: "IOCL/RE/20/VAL",
       nameOfTheClient: "Indian Oil Corp",
       tenderFor: "Valve Spare Parts",
-      typeOfTender: TypeOfTender.OPEN,
       estimatedCostRs: 6500000, // 0.65 Cr
       emdAmountRs: 130000,
       lastDateOfSubmission: new Date("2026-02-18"),
@@ -311,7 +306,6 @@ export const generateMockTenders = (): EpcTenderRecord[] => {
     const client = clients[Math.floor(Math.random() * clients.length)];
     const work = works[Math.floor(Math.random() * works.length)];
     const engineer = engineers[Math.floor(Math.random() * engineers.length)];
-    const type = Object.values(TypeOfTender)[Math.floor(Math.random() * Object.values(TypeOfTender).length)];
     const decision = Object.values(ManagementDecision)[Math.floor(Math.random() * Object.values(ManagementDecision).length)];
     const emdMode = Object.values(EMDExchangeMode)[Math.floor(Math.random() * Object.values(EMDExchangeMode).length)];
 
@@ -358,7 +352,6 @@ export const generateMockTenders = (): EpcTenderRecord[] => {
       tenderNoNitNo: `${client}/2026/NIT/${i}`,
       nameOfTheClient: client,
       tenderFor: work,
-      typeOfTender: type,
       estimatedCostRs: estCost,
       emdAmountRs: emdAmount,
       lastDateOfSubmission: new Date(submittedDate.getTime() - 2 * 24 * 60 * 60 * 1000),

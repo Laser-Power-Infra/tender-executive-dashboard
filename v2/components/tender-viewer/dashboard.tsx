@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import {
-  fetchTendersIncremental,
+  fetchAllTenders,
   appendTenders,
   updateTenderCell,
   updateTenderMergedField,
@@ -88,6 +88,13 @@ export default function Dashboard() {
   const [syncingDockets, setSyncingDockets] = useState(false);
   const feedbackSaving = useAppSelector((s) => s.tenders.feedbackSaving);
 
+  const tenderDataRef = useRef(tenderData);
+  tenderDataRef.current = tenderData;
+  const updatingCellsRef = useRef(updatingCells);
+  updatingCellsRef.current = updatingCells;
+  const feedbackSavingRef = useRef(feedbackSaving);
+  feedbackSavingRef.current = feedbackSaving;
+
   const prevTenderDataRef = useRef(tenderData);
   const prevOrderedColsRef = useRef<string[]>([]);
   useEffect(() => {
@@ -106,12 +113,10 @@ export default function Dashboard() {
   });
 
   const refreshTenders = useCallback(() => {
-    if (files.length > 0) {
-      dispatch(fetchTendersIncremental(files.map((f) => f.id)));
-    }
-  }, [files, dispatch]);
+    dispatch(fetchAllTenders());
+  }, [dispatch]);
 
-  const handleSyncDockets = async () => {
+  const handleSyncDockets = useCallback(async () => {
     setSyncingDockets(true);
     try {
       const res = await fetch("/api/sync-dockets", { method: "POST" });
@@ -130,7 +135,7 @@ export default function Dashboard() {
     } finally {
       setSyncingDockets(false);
     }
-  };
+  }, []);
 
   const dateFilteredRows = useMemo(() => {
     if (!tenderData) return [];
@@ -183,8 +188,8 @@ export default function Dashboard() {
 
   const handleAssignmentChange = useCallback(
     (rowIndex: number, type: string, id: string, associationIds: string[]) => {
-      if (!tenderData) return;
-      const oldValue = tenderData.rows[rowIndex]?.assignedTo ?? "";
+      if (!tenderDataRef.current) return;
+      const oldValue = tenderDataRef.current.rows[rowIndex]?.assignedTo ?? "";
       dispatch(
         updateTenderAssignments({
           rowIndex,
@@ -194,7 +199,7 @@ export default function Dashboard() {
         }),
       );
     },
-    [tenderData, dispatch],
+    [dispatch],
   );
 
   const handleDecisionClick = useCallback(
@@ -205,8 +210,8 @@ export default function Dashboard() {
       id: string,
       value: string,
     ) => {
-      if (!tenderData) return;
-      const oldValue = tenderData.rows[rowIndex]?.[col] ?? "";
+      if (!tenderDataRef.current) return;
+      const oldValue = tenderDataRef.current.rows[rowIndex]?.[col] ?? "";
       const newValue = oldValue === value ? "NOT_DECIDED" : value;
       const toastId = toast.loading(`Updating ${col.toUpperCase()}...`);
       dispatch(
@@ -235,7 +240,7 @@ export default function Dashboard() {
           toast.error(`Failed to update: ${err.message}`, { id: toastId });
         });
     },
-    [tenderData, dispatch],
+    [dispatch],
   );
 
   const handleSaveFeedback = useCallback(
@@ -315,14 +320,61 @@ export default function Dashboard() {
   );
 
   const selectFilterOptions = useMemo(() => {
-    if (!tenderData) return {};
+    if (loadingTenders || !tenderDataRef.current) return {};
+    const rows = tenderDataRef.current.rows;
+    if (rows.length === 0) return {};
+
+    const skipCols = new Set([
+      "reportings",
+      "evaluations",
+      "tenderFiles",
+      "rawMaterials",
+      "proposedErpItemName",
+      "proposedErpQuantity",
+      "cva",
+      "competitors",
+      "evaluationTableData",
+      "checklist",
+      "downloadLink",
+      "tenderFileUrl",
+      "costingFileUrl",
+      "website",
+      "assignedTo",
+      "beneficiaryBankDetails",
+      "applicableIndex",
+      "deadline",
+      "app",
+      "aps",
+      "apm",
+      "parseStatus",
+      "parseError",
+      "price",
+    ]);
+    const MAX_OPTIONS = 500;
     const map: Record<string, { value: string; label: string }[]> = {};
-    for (const col of tenderData.columns) {
+    for (const col of tenderDataRef.current.columns) {
+      const norm = col.toLowerCase().trim().replace(/\s+/g, " ");
+      if (
+        skipCols.has(col) ||
+        skipCols.has(norm) ||
+        col.includes("date") ||
+        col.includes("deadline") ||
+        col.includes("submission")
+      )
+        continue;
       const vals = new Set<string>();
-      for (const row of tenderData.rows) {
+      let overLimit = false;
+      for (const row of rows) {
         const v = row[col];
-        if (v != null && v !== "") vals.add(String(v));
+        if (v != null && v !== "") {
+          vals.add(String(v));
+          if (vals.size > MAX_OPTIONS) {
+            overLimit = true;
+            break;
+          }
+        }
       }
+      if (overLimit) continue;
       if (vals.size > 0) {
         map[col] = Array.from(vals)
           .sort((a, b) => a.localeCompare(b))
@@ -330,7 +382,8 @@ export default function Dashboard() {
       }
     }
     return map;
-  }, [tenderData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingTenders, tenderData?.columns, tenderData?.rows.length]);
 
   const orderedColumns = useMemo(() => {
     if (!tenderData) return [];
@@ -385,12 +438,25 @@ export default function Dashboard() {
   const [filteredRows, setFilteredRows] = useState<Record<string, unknown>[]>(
     [],
   );
+  const filteredRowsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const handleFilteredRowsChange = useCallback(
     (rows: Record<string, unknown>[]) => {
-      setFilteredRows(rows);
+      if (filteredRowsTimerRef.current)
+        clearTimeout(filteredRowsTimerRef.current);
+      filteredRowsTimerRef.current = setTimeout(() => {
+        setFilteredRows(rows);
+      }, 250);
     },
     [],
   );
+  useEffect(() => {
+    return () => {
+      if (filteredRowsTimerRef.current)
+        clearTimeout(filteredRowsTimerRef.current);
+    };
+  }, []);
 
   const [showExclusionDropdown, setShowExclusionDropdown] = useState(false);
   const exclusionFilter = useAppSelector((s) => s.filters.exclusionFilter);
@@ -414,6 +480,7 @@ export default function Dashboard() {
   }, [tenderData, exclusionFilter, dateFilteredRows]);
 
   const rowsWithMergedValues = useMemo(() => {
+    if (mergedGroups.length === 0) return excludedRows;
     return excludedRows.map((row) => {
       const newRow = { ...row } as Record<string, unknown>;
       for (const g of mergedGroups) {
@@ -435,8 +502,16 @@ export default function Dashboard() {
     });
   }, [excludedRows, mergedGroups]);
 
+  const rowIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    tenderData?.rows.forEach((r, i) => {
+      map.set(`${String(r.type)}-${String(r.id)}`, i);
+    });
+    return map;
+  }, [tenderData?.rows]);
+
   const columnDefs = useMemo(() => {
-    if (!tenderData) return [];
+    if (!tenderDataRef.current) return [];
 
     const mergedFieldSet = new Set<string>();
     const mergedDefList: {
@@ -468,12 +543,11 @@ export default function Dashboard() {
             const val = String(row[col] ?? "");
             const isYes = val === "YES";
             const isNo = val === "NO";
-            const rowIndex = tenderData.rows.findIndex(
-              (r) => String(r.id) === String(row.id),
-            );
+            const rowIndex =
+              rowIndexMap.get(`${String(row.type)}-${String(row.id)}`) ?? -1;
             const rowType = String(row.type ?? "");
             const rowId = String(row.id ?? "");
-            const isUpdating = updatingCells[`${rowIndex}-${col}`];
+            const isUpdating = updatingCellsRef.current[`${rowIndex}-${col}`];
 
             return (
               <div className="flex gap-1 py-1">
@@ -603,7 +677,7 @@ export default function Dashboard() {
             const isYes = valid === "true";
             const hasFeedback = !!row.aiFeedbackCorrected;
             const feedbackKey = `${row.id}-${row.type === "Gem" ? "Gem" : "NonGem"}`;
-            const isSaving = feedbackSaving[feedbackKey];
+            const isSaving = feedbackSavingRef.current[feedbackKey];
             return (
               <div className="relative group/cell">
                 <div className="">
@@ -676,7 +750,7 @@ export default function Dashboard() {
           filter: {
             type: "select" as const,
             options: [
-              ...tenderData.associations.map((a) => ({
+              ...(tenderDataRef.current?.associations ?? []).map((a) => ({
                 value: String(a.id),
                 label: a.name,
               })),
@@ -689,7 +763,7 @@ export default function Dashboard() {
               .filter(Boolean);
             return ids
               .map((id) => {
-                const a = tenderData.associations.find(
+                const a = (tenderDataRef.current?.associations ?? []).find(
                   (assoc) => assoc.id === parseInt(id),
                 );
                 return a?.name ?? "";
@@ -700,7 +774,8 @@ export default function Dashboard() {
           },
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
             const val = String(row[col] ?? "");
-            const rowIndex = tenderData.rows.findIndex((r) => r.id === row.id);
+            const rowIndex =
+              rowIndexMap.get(`${String(row.type)}-${String(row.id)}`) ?? -1;
             const rowType = String(row.type ?? "");
             const rowId = String(row.id ?? "");
             return (
@@ -714,7 +789,7 @@ export default function Dashboard() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <option value="">None</option>
-                {tenderData.associations.map((a) => (
+                {(tenderDataRef.current?.associations ?? []).map((a) => (
                   <option key={a.id} value={String(a.id)}>
                     {a.name}
                   </option>
@@ -893,7 +968,7 @@ export default function Dashboard() {
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
             const raw = String(row[col] ?? "");
             const websiteKey = `${row.id}-${row.type === "Gem" ? "Gem" : "NonGem"}-website`;
-            const isSaving = updatingCells[websiteKey];
+            const isSaving = updatingCellsRef.current[websiteKey];
             const urls = raw
               ? raw
                   .split(",")
@@ -1132,7 +1207,7 @@ export default function Dashboard() {
               );
             }
             const id = String(row.id ?? "");
-            const isSaving = !!updatingCells[`${id}-price`];
+            const isSaving = !!updatingCellsRef.current[`${id}-price`];
             return (
               <select
                 className="price-edit-select"
@@ -1171,6 +1246,22 @@ export default function Dashboard() {
               { value: "VARIABLE", label: "Variable" },
               { value: "__blank__", label: "Blank" },
             ],
+          },
+        };
+      }
+
+      if (col === "publishedDate" || col === "assignedDate") {
+        const isPublished = col === "publishedDate";
+        return {
+          header: displayNameMap[col] ?? (isPublished ? "Published Date" : "Assigned Date"),
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 130,
+          type: "date" as const,
+          filter: { type: "dateRange" as const },
+          sortValue: (value: unknown) => {
+            if (!value) return null;
+            const date = new Date(String(value));
+            return isNaN(date.getTime()) ? String(value) : date.getTime();
           },
         };
       }
@@ -1379,14 +1470,136 @@ export default function Dashboard() {
   }, [
     orderedColumns,
     selectFilterOptions,
-    tenderData,
-    updatingCells,
+    rowIndexMap,
     handleDecisionClick,
     handleAssignmentChange,
     displayNameMap,
     mergedGroups,
     columnIndices,
   ]);
+
+  const extraToolbarActions = useMemo(
+    () => (
+      <>
+        <div className="column-picker-container">
+          <button
+            className="export-btn"
+            onClick={() => setShowExclusionDropdown((v) => !v)}
+          >
+            {exclusionFilter
+              ? `Excluding: ${exclusionFilter}`
+              : "Exclusions"}
+          </button>
+          {showExclusionDropdown && (
+            <>
+              <div
+                className="column-picker-overlay"
+                onClick={() => setShowExclusionDropdown(false)}
+              />
+              <div
+                className="column-picker-dropdown"
+                style={{ width: 180 }}
+              >
+                {[
+                  { value: "cable", label: "Exclude cables" },
+                  {
+                    value: "conductors",
+                    label: "Exclude conductors",
+                  },
+                  { value: "both", label: "Exclude both" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    className="column-picker-item"
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      fontSize: 12,
+                    }}
+                    onClick={() => {
+                      dispatch(
+                        setExclusionFilter(
+                          exclusionFilter === opt.value
+                            ? null
+                            : opt.value,
+                        ),
+                      );
+                      setShowExclusionDropdown(false);
+                    }}
+                  >
+                    {exclusionFilter === opt.value ? <Check size={12} className="inline mr-1" /> : null}
+                    {opt.label}
+                  </button>
+                ))}
+                {exclusionFilter && (
+                  <button
+                    className="column-picker-item"
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      fontSize: 12,
+                      borderTop: "1px solid var(--color-border)",
+                      marginTop: 4,
+                      paddingTop: 6,
+                    }}
+                    onClick={() => {
+                      dispatch(setExclusionFilter(null));
+                      setShowExclusionDropdown(false);
+                    }}
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        <button className="export-btn" onClick={handleSyncDockets} disabled={syncingDockets}>
+          <Loader2 size={14} className={syncingDockets ? "animate-spin" : ""} />
+          {syncingDockets ? " Syncing Dockets..." : " Sync Dockets"}
+        </button>
+        <ConfirmAnalysisDialog filteredRows={filteredRows} />
+        {feedbackRow && (
+          <AiFeedbackDialog
+            row={feedbackRow}
+            isSaving={
+              feedbackSaving[
+                `${feedbackRow.id}-feedback`
+              ] ?? false
+            }
+            onSave={handleSaveFeedback}
+            onClose={() => setFeedbackRow(null)}
+          />
+        )}
+        {websiteEditRow && (
+          <WebsiteEditDialog
+            row={websiteEditRow}
+            isSaving={
+              updatingCells[
+                `${websiteEditRow.id}-website`
+              ] ?? false
+            }
+            onSave={handleWebsiteSave}
+            onClose={() => setWebsiteEditRow(null)}
+          />
+        )}
+      </>
+    ),
+    [
+      exclusionFilter,
+      showExclusionDropdown,
+      syncingDockets,
+      filteredRows,
+      feedbackRow,
+      feedbackSaving,
+      websiteEditRow,
+      updatingCells,
+      handleSyncDockets,
+      handleSaveFeedback,
+      handleWebsiteSave,
+      dispatch,
+    ],
+  );
 
   return (
     <div className="flex flex-1 overflow-hidden bg-[#f4f6f8]">
@@ -1429,112 +1642,7 @@ export default function Dashboard() {
               <OptimizedTenderTable
                 onFilteredRowsChange={handleFilteredRowsChange}
                 onParseComplete={refreshTenders}
-                extraToolbarActions={
-                  <>
-                    <div className="column-picker-container">
-                      <button
-                        className="export-btn"
-                        onClick={() => setShowExclusionDropdown((v) => !v)}
-                      >
-                        {exclusionFilter
-                          ? `Excluding: ${exclusionFilter}`
-                          : "Exclusions"}
-                      </button>
-                      {showExclusionDropdown && (
-                        <>
-                          <div
-                            className="column-picker-overlay"
-                            onClick={() => setShowExclusionDropdown(false)}
-                          />
-                          <div
-                            className="column-picker-dropdown"
-                            style={{ width: 180 }}
-                          >
-                            {[
-                              { value: "cable", label: "Exclude cables" },
-                              {
-                                value: "conductors",
-                                label: "Exclude conductors",
-                              },
-                              { value: "both", label: "Exclude both" },
-                            ].map((opt) => (
-                              <button
-                                key={opt.value}
-                                className="column-picker-item"
-                                style={{
-                                  width: "100%",
-                                  textAlign: "left",
-                                  fontSize: 12,
-                                }}
-                                onClick={() => {
-                                  dispatch(
-                                    setExclusionFilter(
-                                      exclusionFilter === opt.value
-                                        ? null
-                                        : opt.value,
-                                    ),
-                                  );
-                                  setShowExclusionDropdown(false);
-                                }}
-                              >
-                                {exclusionFilter === opt.value ? <Check size={12} className="inline mr-1" /> : null}
-                                {opt.label}
-                              </button>
-                            ))}
-                            {exclusionFilter && (
-                              <button
-                                className="column-picker-item"
-                                style={{
-                                  width: "100%",
-                                  textAlign: "left",
-                                  fontSize: 12,
-                                  borderTop: "1px solid var(--color-border)",
-                                  marginTop: 4,
-                                  paddingTop: 6,
-                                }}
-                                onClick={() => {
-                                  dispatch(setExclusionFilter(null));
-                                  setShowExclusionDropdown(false);
-                                }}
-                              >
-                                Clear filter
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <button className="export-btn" onClick={handleSyncDockets} disabled={syncingDockets}>
-                      <Loader2 size={14} className={syncingDockets ? "animate-spin" : ""} />
-                      {syncingDockets ? " Syncing Dockets..." : " Sync Dockets"}
-                    </button>
-                    <ConfirmAnalysisDialog filteredRows={filteredRows} />
-                    {feedbackRow && (
-                      <AiFeedbackDialog
-                        row={feedbackRow}
-                        isSaving={
-                          feedbackSaving[
-                            `${feedbackRow.id}-feedback`
-                          ] ?? false
-                        }
-                        onSave={handleSaveFeedback}
-                        onClose={() => setFeedbackRow(null)}
-                      />
-                    )}
-                    {websiteEditRow && (
-                      <WebsiteEditDialog
-                        row={websiteEditRow}
-                        isSaving={
-                          updatingCells[
-                            `${websiteEditRow.id}-website`
-                          ] ?? false
-                        }
-                        onSave={handleWebsiteSave}
-                        onClose={() => setWebsiteEditRow(null)}
-                      />
-                    )}
-                  </>
-                }
+                extraToolbarActions={extraToolbarActions}
                 columns={columnDefs}
                 rows={rowsWithMergedValues as Record<string, unknown>[]}
                 associations={tenderData.associations ?? []}

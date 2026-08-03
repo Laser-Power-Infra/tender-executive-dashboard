@@ -32,7 +32,6 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     slNo: index + 1,
     docketNo: row.docketNo || "",
     tenderFor: "",
-    typeOfTender: row.type === "Gem" ? "Open" : "Open",
     tenderNoNitNo: row.referenceNo || "",
     nameOfWorkDescription: row.tenderBrief || "",
     totalQuantityMeter: parseFloatOrNull(row.totalQuantity ?? row.quantity),
@@ -93,6 +92,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     boqFileId: undefined,
     bgStatus: row.bgStatus || null,
     beneficiaryBankDetails: row.beneficiaryBankDetails || null,
+    issuingBank: row.issuingBank || null,
     emd: row.emd || null,
     bgDate: row.bgDate || null,
     bgExpiryDate: row.bgExpiryDate || null,
@@ -120,5 +120,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     nameOfRank2: row.nameOfRank2 || null,
     valueOfRank2: row.valueOfRank2 || null,
     differenceBetweenRank2: row.differenceBetweenRank2 || null,
+    publishedDate: row.publishedDate ? new Date(row.publishedDate) : null,
+    assignedDate: row.assignedDate ? new Date(row.assignedDate) : null,
   }));
 }

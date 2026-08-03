@@ -315,6 +315,91 @@ export const fetchTendersIncremental = createAsyncThunk(
   },
 );
 
+export const fetchAllTenders = createAsyncThunk(
+  "tenders/fetchAllTenders",
+  async (_, { dispatch, rejectWithValue }) => {
+    dispatch(startFetch(1));
+    try {
+      const res = await fetch("/api/tenders-all");
+      if (!res.ok || !res.body) {
+        throw new Error(`Failed to fetch tenders (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let columns: string[] = [];
+      let batch: TenderMergedRow[] = [];
+
+      const flush = () => {
+        if (batch.length === 0) return;
+        dispatch(appendStreamBatch({ rows: batch }));
+        batch = [];
+      };
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+          if (!line) continue;
+
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(line);
+          } catch {
+            continue;
+          }
+
+          if (Array.isArray(parsed)) {
+            if (columns.length === 0) continue;
+            const row: TenderMergedRow = { type: "", id: "" };
+            for (let i = 0; i < columns.length; i++) {
+              const v = parsed[i];
+              row[columns[i]] = v == null ? "" : String(v);
+            }
+            batch.push(row);
+            if (batch.length >= 100) flush();
+          } else if (
+            parsed &&
+            typeof parsed === "object" &&
+            "columns" in (parsed as Record<string, unknown>)
+          ) {
+            const meta = parsed as {
+              columns: string[];
+              associations: { id: number; name: string; email: string }[];
+              total: number;
+            };
+            columns = meta.columns ?? [];
+            dispatch(setStreamMeta(meta));
+          } else if (
+            parsed &&
+            typeof parsed === "object" &&
+            (parsed as Record<string, unknown>).done
+          ) {
+            const trailer = parsed as { totalGem?: number; totalNonGem?: number };
+            dispatch(finishStream(trailer));
+          }
+        }
+      }
+
+      flush();
+      dispatch(finishStream({}));
+      return true;
+    } catch (err: any) {
+      console.error("[fetchAllTenders] stream error:", err);
+      dispatch(finishStream({}));
+      return rejectWithValue(
+        err instanceof Error ? err.message : "Failed to fetch tenders",
+      );
+    }
+  },
+);
+
 export const saveAiFeedback = createAsyncThunk(
   "tenders/saveAiFeedback",
   async (params: {
@@ -556,6 +641,61 @@ export const tendersSlice = createSlice({
       state.loading = false;
       if (state.data) {
         state.data.fileName = `All Files (${state.completedFiles})`;
+      }
+    },
+    setStreamMeta(
+      state,
+      action: PayloadAction<{
+        columns: string[];
+        associations: { id: number; name: string; email: string }[];
+        total: number;
+      }>,
+    ) {
+      const { columns, associations } = action.payload;
+      if (!state.data) {
+        state.data = {
+          fileName: "All Files (streaming)",
+          columns: [...columns],
+          rows: [],
+          associations: associations ?? [],
+          totalGem: 0,
+          totalNonGem: 0,
+        };
+      } else {
+        const existing = new Set(state.data.columns);
+        for (const col of columns) {
+          if (!existing.has(col)) {
+            state.data.columns.push(col);
+            existing.add(col);
+          }
+        }
+        if (associations && associations.length > 0) {
+          state.data.associations = associations;
+        }
+      }
+      state.completedFiles = 1;
+    },
+    appendStreamBatch(
+      state,
+      action: PayloadAction<{ rows: TenderMergedRow[] }>,
+    ) {
+      if (!state.data) return;
+      state.data.rows.push(...action.payload.rows);
+      state.completedFiles = 1;
+    },
+    finishStream(
+      state,
+      action: PayloadAction<{ totalGem?: number; totalNonGem?: number }>,
+    ) {
+      state.loading = false;
+      if (state.data) {
+        if (action.payload.totalGem !== undefined) {
+          state.data.totalGem = action.payload.totalGem;
+        }
+        if (action.payload.totalNonGem !== undefined) {
+          state.data.totalNonGem = action.payload.totalNonGem;
+        }
+        state.data.fileName = `All Files (${state.data.rows.length})`;
       }
     },
     updateAnalysisResult(
@@ -984,6 +1124,14 @@ export const tendersSlice = createSlice({
   },
 });
 
-export const { startFetch, mergeFile, finishFetch, updateAnalysisResult } =
+export const {
+  startFetch,
+  mergeFile,
+  finishFetch,
+  updateAnalysisResult,
+  setStreamMeta,
+  appendStreamBatch,
+  finishStream,
+} =
   tendersSlice.actions;
 export default tendersSlice.reducer;

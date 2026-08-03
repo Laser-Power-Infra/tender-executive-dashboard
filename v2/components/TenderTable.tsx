@@ -737,6 +737,20 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "date",
     },
     {
+      header: "Published Date",
+      accessor: "publishedDate",
+      defaultWidth: 130,
+      align: "center",
+      type: "date",
+    },
+    {
+      header: "Assigned Date",
+      accessor: "assignedDate",
+      defaultWidth: 130,
+      align: "center",
+      type: "date",
+    },
+    {
       header: "Client Name",
       accessor: "nameOfTheClient",
       defaultWidth: 200,
@@ -798,13 +812,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       defaultWidth: 120,
       align: "center",
       type: "custom",
-    },
-    {
-      header: "Type",
-      accessor: "typeOfTender",
-      defaultWidth: 100,
-      align: "left",
-      type: "string",
     },
     {
       header: "Price",
@@ -879,6 +886,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "Beneficiary Bank Details",
       accessor: "beneficiaryBankDetails",
+      defaultWidth: 180,
+      align: "left",
+      type: "string",
+    },
+    {
+      header: "Issuing Bank",
+      accessor: "issuingBank",
       defaultWidth: 180,
       align: "left",
       type: "string",
@@ -1139,11 +1153,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "ourRank", "ourValue",
     "nameOfRank1", "valueOfRank1", "differenceBetweenRank1",
     "nameOfRank2", "valueOfRank2", "differenceBetweenRank2",
+    "issuingBank",
   ]);
   const postParticipationExcludeAccessors = new Set([
     "merged_office_consignees", "miiPurchasePreference", "tenderDocument",
     "reportings", "website", "raQualificationRule", "startupExemption",
     "minimumAverageAnnualTurnover", "yearsOfPastExperience", "ePbgDurationMonths",
+    "beneficiaryBankDetails",
   ]);
   const visibleColumns = showPostParticipationColumns
     ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor))
@@ -1476,7 +1492,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "lastDateOfSubmission", "attachmentUrl", "files", "boqChart",
     "rawMaterials", "diffPercentFromL1", "diffPercentFromL2",
     "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
-    "itemCategory",
+    "itemCategory", "publishedDate", "assignedDate",
   ]);
 
   const [multiSelectFilters, setMultiSelectFilters] = useState<

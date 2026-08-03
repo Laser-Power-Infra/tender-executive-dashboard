@@ -27,7 +27,12 @@ export default function AiFeedbackDialog({
 }: AiFeedbackDialogProps) {
   const originalAi = String(row.aiRelevanceValid ?? "");
   const isYes = originalAi === "true";
-  const tenderBrief = String(row.tenderBrief ?? "");
+  const tenderBrief = [
+    String(row.tenderBrief ?? "").trim(),
+    String(row.itemCategory ?? "").trim(),
+  ]
+    .filter(Boolean)
+    .join("@");
   const tenderId = Number(row.id);
   const tenderType = String(row.type === "Gem" ? "Gem" : "NonGem");
 

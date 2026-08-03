@@ -12,7 +12,7 @@ const COLUMN_MAPPING: Record<string, string> = {
   "Tender No": "referenceNo",
   "Tender No-2": "referenceNo",
   Remark: "referenceNo",
-  "Bank Name": "beneficiaryBankDetails",
+  "Bank Name": "issuingBank",
   "BG No": "bgNoUtrNo",
   "BG Date": "bgDate",
   "BG Amt(Local)": "emd",
@@ -267,7 +267,7 @@ async function main() {
     select: {
       id: true,
       referenceNo: true,
-      beneficiaryBankDetails: true,
+      issuingBank: true,
       bgNoUtrNo: true,
       bgDate: true,
       emd: true,

@@ -67,6 +67,65 @@ export type {
   ColumnFilterState,
 };
 
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+interface ColumnSearchInputProps {
+  value: string;
+  placeholder: string;
+  onSearch: (text: string) => void;
+  onClear: () => void;
+}
+
+function DebouncedColumnSearch({
+  value,
+  placeholder,
+  onSearch,
+  onClear,
+}: ColumnSearchInputProps) {
+  const [local, setLocal] = useState(value);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+
+  const handleChange = useCallback(
+    (val: string) => {
+      setLocal(val);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        if (val) onSearch(val);
+        else onClear();
+      }, 300);
+    },
+    [onSearch, onClear],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return (
+    <input
+      type="text"
+      className="column-search-input"
+      placeholder={placeholder}
+      value={local}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => handleChange(e.target.value)}
+    />
+  );
+}
+
 export interface ColumnDef<T> {
   header: string;
   accessor: keyof T | string;
@@ -105,7 +164,7 @@ export interface OptimizedTenderTableProps<T extends Record<string, unknown>> {
   onParseComplete?: () => void;
 }
 
-export function OptimizedTenderTable<T extends Record<string, unknown>>({
+function OptimizedTenderTableInner<T extends Record<string, unknown>>({
   columns,
   rows,
   title = "Data Table",
@@ -119,6 +178,8 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
   const [globalSearch, setGlobalSearch] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(50);
+
+  const debouncedGlobalSearch = useDebouncedValue(globalSearch, 300);
 
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -223,10 +284,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       const type = row["type" as keyof T];
       const id = row[rowKey];
       if (id !== undefined) {
-        const base =
-          type !== undefined ? `${String(type)}-${String(id)}` : String(id);
-        const ki = (row as any)._keyIndex;
-        return ki !== undefined ? `${base}-${ki}` : base;
+        return type !== undefined ? `${String(type)}-${String(id)}` : String(id);
       }
       return Math.random().toString();
     },
@@ -234,12 +292,10 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
   );
 
   const processedRows = useMemo(() => {
-    let result = rows.map(
-      (row, idx) => ({ ...row, _keyIndex: idx }) as unknown as T,
-    );
+    let result = rows as unknown as T[];
 
-    if (globalSearch.trim() !== "") {
-      const searchLower = globalSearch.toLowerCase().trim();
+    if (debouncedGlobalSearch.trim() !== "") {
+      const searchLower = debouncedGlobalSearch.toLowerCase().trim();
       result = result.filter((row) => {
         return columns.some((col) => {
           if (col.filter?.type === "boolean") return false;
@@ -448,7 +504,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
       const sortColDef = columns.find((c) => String(c.accessor) === sortColumn);
       const getSortValue = sortColDef?.sortValue ?? ((v: unknown) => v);
 
-      result.sort((a, b) => {
+      result = [...result].sort((a, b) => {
         if (sortColumn === "rawMaterials") {
           const ca = countRawMaterials(a[sortColumn as keyof T]);
           const cb = countRawMaterials(b[sortColumn as keyof T]);
@@ -514,7 +570,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
     }
 
     return result;
-  }, [rows, globalSearch, sortColumn, sortDirection, columns, columnFilters]);
+  }, [rows, debouncedGlobalSearch, sortColumn, sortDirection, columns, columnFilters]);
 
   const gemTendersToDownload = useMemo(() => {
     return processedRows
@@ -1281,30 +1337,26 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
                       }
                     })()}
                     {col.searchable !== false && (
-                      <input
-                        type="text"
-                        className="column-search-input"
+                      <DebouncedColumnSearch
                         placeholder={`Search ${col.header}...`}
                         value={columnFilters[String(col.accessor)]?.text ?? ""}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val) {
-                            dispatch(
-                              setColumnFilter({
-                                accessor: String(col.accessor),
-                                filterType: "text",
-                                value: val,
-                              }),
-                            );
-                          } else {
-                            dispatch(
-                              clearColumnFilterAction({
-                                accessor: String(col.accessor),
-                                filterType: "text",
-                              }),
-                            );
-                          }
+                        onSearch={(text) => {
+                          dispatch(
+                            setColumnFilter({
+                              accessor: String(col.accessor),
+                              filterType: "text",
+                              value: text,
+                            }),
+                          );
+                          setCurrentPage(1);
+                        }}
+                        onClear={() => {
+                          dispatch(
+                            clearColumnFilterAction({
+                              accessor: String(col.accessor),
+                              filterType: "text",
+                            }),
+                          );
                           setCurrentPage(1);
                         }}
                       />
@@ -1517,3 +1569,7 @@ export function OptimizedTenderTable<T extends Record<string, unknown>>({
     </div>
   );
 }
+
+export const OptimizedTenderTable = React.memo(
+  OptimizedTenderTableInner,
+) as typeof OptimizedTenderTableInner;

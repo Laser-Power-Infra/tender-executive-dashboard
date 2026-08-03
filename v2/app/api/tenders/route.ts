@@ -1,107 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-interface TenderFileInfo {
-  id: number;
-  name: string;
-  extension: string;
-  url: string;
-  source: string;
-  tags: string[];
-}
-
-interface FlatRow {
-  type: "Gem" | "Non-Gem";
-  id: string;
-  reportings?: string;
-  evaluations?: string;
-  tenderFiles?: string;
-  [key: string]: string | undefined;
-}
-
-interface AssociationInfo {
-  id: number;
-  name: string;
-}
-
-const SKIP_RELATION_FIELDS = new Set([
-  "extraFields", "tenderAssociations", "reportings", "evaluations",
-  "tenderFiles", "file", "tenderStatus", "utilityMapping",
-]);
-
-interface ReportingInfo {
-  id: number;
-  officer: string;
-  address: string | null;
-  quantity: string | null;
-}
-
-interface EvaluationInfo {
-  id: number;
-  sellerName: string;
-  offeredItem: string | null;
-  totalPrice: string | null;
-  rank: string | null;
-  status: string | null;
-}
-
-function flattenTender(
-  tender: Record<string, unknown>,
-  extraFields: { fieldName: string; fieldValue: string | null }[],
-  type: "Gem" | "Non-Gem",
-  id: number,
-  tenderAssociations: { association: AssociationInfo }[],
-  reportings?: ReportingInfo[],
-  evaluations?: EvaluationInfo[],
-  tenderFiles?: TenderFileInfo[],
-): FlatRow {
-  const assignedIds = tenderAssociations.map((ta) => ta.association.id).join(",");
-  const row: FlatRow = { type, id: String(id) };
-
-  for (const field of Object.keys(tender)) {
-    if (SKIP_RELATION_FIELDS.has(field)) continue;
-    const val = tender[field];
-    if (val instanceof Date) {
-      row[field] = val.toISOString().split("T")[0];
-    } else {
-      row[field] = val == null ? "" : String(val);
-    }
-  }
-
-  row.assignedTo = assignedIds;
-
-  const docFile = tenderFiles?.find((f) => f.tags.includes("tenderDocument"));
-  row.tenderFileUrl = docFile?.url ?? "";
-
-  const costingFile = tenderFiles?.find((f) => f.tags.includes("costingAttachment"));
-  row.costingFileUrl = costingFile?.source && costingFile.source !== 'SHEET_SYNC'
-    ? `/api/executive-files/view/${costingFile.source}`
-    : costingFile?.url ?? "";
-
-  if (tenderFiles && tenderFiles.length > 0) {
-    row.tenderFiles = JSON.stringify(tenderFiles);
-  } else {
-    row.tenderFiles = "";
-  }
-
-  for (const ef of extraFields) {
-    row[ef.fieldName] = ef.fieldValue ?? "";
-  }
-
-  if (reportings && reportings.length > 0) {
-    row.reportings = JSON.stringify(reportings);
-  } else {
-    row.reportings = "";
-  }
-
-  if (evaluations && evaluations.length > 0) {
-    row.evaluations = JSON.stringify(evaluations);
-  } else {
-    row.evaluations = "";
-  }
-
-  return row;
-}
+import { flattenTender } from "@/lib/tender-flatten";
 
 export async function GET(request: NextRequest) {
   try {
@@ -136,7 +35,7 @@ export async function GET(request: NextRequest) {
       prisma.association.findMany({ select: { id: true, name: true, email: true } }),
     ]);
 
-    const rows: FlatRow[] = [];
+    const rows = [];
 
     let totalGem = 0;
     let totalNonGem = 0;
@@ -157,14 +56,6 @@ export async function GET(request: NextRequest) {
         t.tenderFiles,
       ));
     }
-
-    const allExtraFieldNames = [
-      ...new Set(
-        tenderMerged.flatMap((t) =>
-          t.extraFields.map((ef) => ef.fieldName)
-        )
-      ),
-    ];
 
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 

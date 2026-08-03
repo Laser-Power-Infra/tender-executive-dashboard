@@ -68,7 +68,9 @@ export default function ConfirmAnalysisDialog({
       let failCount = 0;
       let stoppedByRateLimit = false;
 
-      for (let i = 0; i < targets.length; i++) {
+      const BATCH_SIZE = 10;
+
+      for (let i = 0; i < targets.length; i += BATCH_SIZE) {
         if (abortRef.current) {
           toast.info(`Analysis stopped (${successCount} completed)`, {
             id: toastId,
@@ -76,100 +78,86 @@ export default function ConfirmAnalysisDialog({
           break;
         }
 
-        const row = targets[i];
-        const brief = String(row.tenderBrief ?? "");
+        const batch = targets.slice(i, i + BATCH_SIZE);
 
-        try {
-          const result = await dispatch(
-            analyzeTender({
-              tenderMergedId: Number(row.id),
-              brief,
-            }),
-          ).unwrap();
+        await Promise.all(
+          batch.map(async (row) => {
+            const brief = [
+              String(row.tenderBrief ?? "").trim(),
+              String(row.itemCategory ?? "").trim(),
+            ]
+              .filter(Boolean)
+              .join("@");
 
-          successCount++;
-          toast.loading(
-            `Analyzing ${targets.length} tender(s)... (${successCount}/${targets.length})`,
-            { id: toastId },
-          );
+            try {
+              const result = await dispatch(
+                analyzeTender({
+                  tenderMergedId: Number(row.id),
+                  brief,
+                }),
+              ).unwrap();
 
-          if (result.valid === "true") {
-            if (row.type === "Gem") {
-              const gemId = row.referenceNo as string | undefined;
-              if (gemId) {
-                try {
-                  const dlResult = await dispatch(
-                    downloadTenderPdf({
-                      tenderMergedId: Number(row.id),
-                      gemId,
-                      referenceNo: gemId,
-                    }),
-                  ).unwrap();
+              successCount++;
+              toast.loading(
+                `Analyzing ${targets.length} tender(s)... (${successCount}/${targets.length})`,
+                { id: toastId },
+              );
 
-                  if (dlResult.tenderFileUrl) {
-                    await dispatch(
-                      parseTenderPdf({
-                        tenderMergedId: Number(row.id),
-                      }),
-                    ).unwrap();
+              if (result.valid === "true") {
+                if (row.type === "Gem") {
+                  const gemId = row.referenceNo as string | undefined;
+                  if (gemId) {
+                    try {
+                      const dlResult = await dispatch(
+                        downloadTenderPdf({
+                          tenderMergedId: Number(row.id),
+                          gemId,
+                          referenceNo: gemId,
+                        }),
+                      ).unwrap();
+
+                      if (dlResult.tenderFileUrl) {
+                        await dispatch(
+                          parseTenderPdf({
+                            tenderMergedId: Number(row.id),
+                          }),
+                        ).unwrap();
+                      }
+                    } catch {
+                      toast.error(`Failed to download/parse PDF for #${row.id}`);
+                    }
                   }
-                } catch {
-                  toast.error(`Failed to download/parse PDF for #${row.id}`);
+                } else if (row.type === "Non-Gem") {
+                  const referenceNo = row.referenceNo as string | undefined;
+
+                  if (referenceNo) {
+                    try {
+                      await dispatch(
+                        downloadTenderPdf({
+                          tenderMergedId: Number(row.id),
+                          referenceNo,
+                        }),
+                      ).unwrap();
+                    } catch {
+                      toast.error(`Failed to queue PDF download for #${row.id}`);
+                    }
+                  }
                 }
               }
-            } else if (row.type === "Non-Gem") {
-              const referenceNo = row.referenceNo as string | undefined;
-              const website = row.website as string | undefined;
-
-              if (referenceNo) {
-                try {
-                  await dispatch(
-                    downloadTenderPdf({
-                      tenderMergedId: Number(row.id),
-                      referenceNo,
-                    }),
-                  ).unwrap();
-                } catch {
-                  toast.error(`Failed to queue PDF download for #${row.id}`);
-                }
+            } catch (err) {
+              failCount++;
+              if (err instanceof Error && err.message === "rate_limit") {
+                abortRef.current = true;
+                stoppedByRateLimit = true;
+                toast.error("OpenAI rate limit reached — analysis stopped");
+              } else {
+                toast.error(`Analysis failed for #${row.id}`);
               }
-
-              // if (referenceNo && website) {
-              //   try {
-              //     const res = await fetch(
-              //       `${process.env.DJANGO_API_KEY}/api/search-tender/`,
-              //       {
-              //         method: "POST",
-              //         headers: { "Content-Type": "application/json" },
-              //         body: JSON.stringify({
-              //           website,
-              //           reference_no: referenceNo,
-              //         }),
-              //       },
-              //     );
-              //     const data = await res.json();
-              //     console.log(
-              //       `[Non-GEM] Django API result for ${referenceNo}:`,
-              //       data,
-              //     );
-              //   } catch (e) {
-              //     toast.error(`Django search failed for #${row.id}`);
-              //   }
-              // }
+            } finally {
+              setAnalysisProgress((prev) => ({ ...prev, done: prev.done + 1 }));
             }
-          }
-        } catch (err) {
-          failCount++;
-          if (err instanceof Error && err.message === "rate_limit") {
-            abortRef.current = true;
-            stoppedByRateLimit = true;
-            toast.error("OpenAI rate limit reached — analysis stopped");
-            break;
-          }
-          toast.error(`Analysis failed for #${row.id}`);
-        }
-
-        setAnalysisProgress((prev) => ({ ...prev, done: prev.done + 1 }));
+          }),
+        );
       }
 
       if (!abortRef.current && !stoppedByRateLimit) {

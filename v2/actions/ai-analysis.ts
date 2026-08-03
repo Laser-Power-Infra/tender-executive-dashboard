@@ -76,12 +76,14 @@ Solar Cables
 Coaxial Cables
 Ethernet/LAN/Data Cables
 Any cable or conductor not explicitly listed under the Eligible Products section
-Response Format
+Output Format
 
-Respond in EXACTLY the following format:
-ANSWER: YES or NO
-REASON: (One concise sentence explaining whether the tender is specifically for the supply of the eligible cables/conductors.)
-Important: Return YES only when the tender clearly involves the supply/procurement of one or more eligible products listed above. In every other case, return NO.`;
+Respond with a single JSON object containing exactly these two fields:
+- "valid": a boolean. true if the tender is specifically for the supply of eligible cables/conductors, false otherwise.
+- "reason": one concise sentence (plain text) explaining whether the tender is specifically for the supply of the eligible cables/conductors.
+
+Do NOT use "ANSWER:", "REASON:", or any other labels/prefixes inside the "reason" value.
+Important: Set "valid" to true only when the tender clearly involves the supply/procurement of one or more eligible products listed above. In every other case, set "valid" to false.`;
 
 export async function analyzeTenderValidity(
   tenderBrief: string,
@@ -95,13 +97,29 @@ export async function analyzeTenderValidity(
       system,
       output: Output.object({
         schema: z.object({
-          valid: z.boolean(),
-          reason: z.string(),
+          valid: z
+            .boolean()
+            .describe(
+              "true if the tender is specifically for the supply of eligible cables/conductors, false otherwise",
+            ),
+          reason: z
+            .string()
+            .describe(
+              "One concise plain-text sentence explaining the decision. No ANSWER:/REASON: labels or prefixes.",
+            ),
         }),
+        name: "tenderValidity",
+        description:
+          "Whether the tender is specifically for the supply of eligible power/control cables or conductors",
       }),
       prompt: `Analyze this tender brief:\n\n${tenderBrief}`,
     });
-    return { success: true, data: output };
+
+    const reason = output.reason
+      .replace(/^ANSWER:\s*(YES|NO)\s*/i, "")
+      .replace(/^REASON:\s*/i, "")
+      .trim();
+    return { success: true, data: { valid: output.valid, reason } };
   } catch (error) {
     if (APICallError.isInstance(error) && error.statusCode === 429) {
       return { success: false, error: "rate_limit" };

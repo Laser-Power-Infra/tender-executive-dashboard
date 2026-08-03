@@ -511,6 +511,34 @@ export async function updateTenderMergedStringField(params: {
     return
   }
 
+  if (field === "bgStatus" || field === "currentStatus") {
+    const current = await prisma.tenderMerged.findUnique({
+      where: { id: tenderMergedId },
+      select: { bgStatus: true, currentStatus: true },
+    })
+
+    const bgStatus = field === "bgStatus" ? value : (current?.bgStatus ?? "")
+    const currentStatus = field === "currentStatus" ? value : (current?.currentStatus ?? "")
+    const tenderUpdateStatus =
+      bgStatus === "RETURNED" || currentStatus === "AWARDED"
+        ? "CLOSED"
+        : "OPEN"
+
+    await prisma.tenderMerged.update({
+      where: { id: tenderMergedId },
+      data: { [field]: value, tenderUpdateStatus: tenderUpdateStatus as any },
+    })
+
+    logActivity({
+      action: "UPDATE",
+      tableName: "TenderMerged",
+      recordId: String(tenderMergedId),
+      details: `Updated ${field} to "${value}" and tenderUpdateStatus to "${tenderUpdateStatus}" on tender #${tenderMergedId}`,
+    })
+
+    return
+  }
+
   await prisma.tenderMerged.update({
     where: { id: tenderMergedId },
     data: { [field]: value },

@@ -200,7 +200,7 @@ function buildTenderData(
   price: "FIRM" | "VARIABLE" | null,
 ) {
   return {
-    tenderType: deriveTenderType(row.typeOfTender),
+    tenderType: deriveTenderType(row.tenderType ?? ""),
     tenderBrief: row.nameOfWorkDescription || null,
     docketNo: row.docketNo || null,
     organization: row.nameOfTheClient || null,
@@ -266,7 +266,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
         {
           tenderNoNitNo: r.tenderNoNitNo,
           docketNo: r.docketNo,
-          typeOfTender: r.typeOfTender,
+          tenderType: r.tenderType,
           nameOfWorkDescription: r.nameOfWorkDescription,
           nameOfTheClient: r.nameOfTheClient,
           lastDateOfSubmission: r.lastDateOfSubmission,

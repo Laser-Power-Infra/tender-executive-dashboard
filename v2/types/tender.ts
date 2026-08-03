@@ -1,11 +1,3 @@
-export enum TypeOfTender {
-  OPEN = "Open",
-  LIMITED = "Limited",
-  SINGLE = "Single",
-  NOMINATION = "Nomination",
-  PROPRIETARY = "Proprietary"
-}
-
 export enum ManagementDecision {
   GO = "Go",
   NO_GO = "No Go",
@@ -41,7 +33,6 @@ export interface EpcTenderRecord {
   slNo: number;
   docketNo: string;
   tenderFor: string;
-  typeOfTender: TypeOfTender | string;
   tenderNoNitNo: string;
   nameOfWorkDescription?: string;
   totalQuantityMeter?: number | null;
@@ -95,6 +86,7 @@ export interface EpcTenderRecord {
   boqFileId?: string;
   bgStatus?: string | null;
   beneficiaryBankDetails?: string | null;
+  issuingBank?: string | null;
   price?: string | null;
   tenderUpdateStatus?: TenderUpdateStatus;
   nextAction?: NextAction | null;
@@ -123,6 +115,8 @@ export interface EpcTenderRecord {
   nameOfRank2?: string | null;
   valueOfRank2?: string | null;
   differenceBetweenRank2?: string | null;
+  publishedDate?: Date | null;
+  assignedDate?: Date | null;
 }
 
 export enum TenderUpdateStatus {
