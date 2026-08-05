@@ -1,7 +1,3 @@
-/**
- * SmartsheetTender - typed interface for a single row from the Smartsheet tender sheet.
- * All fields are nullable since column presence is not guaranteed.
- */
 export interface SmartsheetTender {
   enquiryDate: string | null;
   partyName: string | null;
@@ -11,8 +7,7 @@ export interface SmartsheetTender {
   quotationDate: string | null;
   accountHolder: string | null;
   tenderPurchase: string | null;
-  
-  // Enriched costing details from joined Excel
+
   attachmentUrl?: string | null;
   proposedErpItemName?: string | null;
   proposedQty?: string | null;
@@ -25,5 +20,5 @@ export interface SmartsheetTender {
   pvcTypeSt2Price?: number | null;
   galvanisedSteelFlatStripPrice?: number | null;
   fillerPrice?: number | null;
-  rawMaterials?: any;
+  rawMaterials?: unknown;
 }

@@ -4,8 +4,10 @@ import {
   ManagementDecision,
   CurrentStatus,
   EMDExchangeMode
-} from "../types/tender";
+} from "@/types/tender";
 import { AttachmentJoinService } from "./attachmentJoinService";
+import { prisma } from "@/lib/prisma";
+import { parseDate } from "@/lib/parse-date";
 
 /**
  * Service responsible for connecting to Google Sheets, fetching rows,
@@ -122,25 +124,48 @@ export class GoogleSheetService {
    * Runs strictly in Node.js server-side environments.
    */
   public async fetchTenderRecords(): Promise<EpcTenderRecord[]> {
-    const accessToken = await this.getAccessToken();
-    const range = `${this.worksheetName}!A1:ZZ`;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${encodeURIComponent(range)}`;
+    console.log("[GoogleSheetService] Fetching tender records from DB (TenderMerged with docketNo)...");
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      }
+    const records = await prisma.tenderMerged.findMany({
+      where: { docketNo: { not: null } },
+      include: {
+        tenderAssociations: { include: { association: true } },
+      },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Google Sheets API fetch failed: ${response.statusText}. Details: ${errorText}`);
+    const tenders: EpcTenderRecord[] = records.map((r) => this.tenderMergedToEpcRecord(r));
+    console.log(`[GoogleSheetService] Mapped ${tenders.length} tender records from DB.`);
+
+    // Fetch and join costing attachments from Spreadsheet 2
+    const accessToken = await this.getAccessToken();
+    let costingRows: string[][] = [];
+    try {
+      const costingSpreadsheetId = "1m1ECaxiGYmQrvSPYOBov5YYFq8G-mVNMdPWvGcSfoHs";
+      const costingRange = "TENDER COSTING ATTACHMENT!A1:ZZ";
+      const costingUrl = `https://sheets.googleapis.com/v4/spreadsheets/${costingSpreadsheetId}/values/${encodeURIComponent(costingRange)}`;
+      console.log("[GoogleSheetService] Fetching costing attachment sheet...");
+      const costingResponse = await fetch(costingUrl, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+      if (costingResponse.ok) {
+        const costingData = await costingResponse.json() as { values?: string[][] };
+        costingRows = costingData.values || [];
+        console.log(`[GoogleSheetService] Fetched costing sheet: ${costingRows.length} rows.`);
+      } else {
+        console.warn(`[GoogleSheetService] Failed to fetch costing sheet: ${costingResponse.statusText}. Proceeding without costing links.`);
+      }
+    } catch (err) {
+      console.warn(`[GoogleSheetService] Error fetching costing sheet: ${(err as Error).message}. Proceeding without costing links.`);
     }
 
-    const data = await response.json() as { values?: string[][] };
-    return this.processRawRows(data.values || []);
+    const enriched = AttachmentJoinService.join(tenders, costingRows);
+    const withAttachment = enriched.filter(t => t.attachmentUrl).length;
+    console.log(`[GoogleSheetService] Costing join complete: ${withAttachment} of ${enriched.length} records have attachment URLs.`);
+    return enriched;
   }
 
   // =========================================================================
@@ -238,6 +263,69 @@ export class GoogleSheetService {
   }
 
   // =========================================================================
+  // TenderMerged DB → EpcTenderRecord mapping
+  // =========================================================================
+
+  private tenderMergedToEpcRecord(tm: Record<string, any>): EpcTenderRecord {
+    const findAssociationName = (): string => {
+      const assocs = tm.tenderAssociations;
+      if (Array.isArray(assocs) && assocs.length > 0) {
+        return assocs[0]?.association?.name || "";
+      }
+      return "";
+    };
+
+    const parseNum = (val: string | null | undefined): number | null => {
+      if (val == null) return null;
+      const n = parseFloat(val);
+      return isNaN(n) ? null : n;
+    };
+
+    const apmToDecision = (apm: string | null): ManagementDecision => {
+      if (apm === "YES") return ManagementDecision.GO;
+      if (apm === "NO") return ManagementDecision.NO_GO;
+      return ManagementDecision.PENDING;
+    };
+
+    return {
+      slNo: tm.slNo ?? 0,
+      docketNo: tm.docketNo ?? "",
+      tenderFor: tm.tenderFor ?? "",
+      tenderType: tm.tenderType === "GEM" ? "GEM" : "NON-GEM",
+      tenderNoNitNo: tm.referenceNo,
+      nameOfWorkDescription: tm.tenderBrief ?? undefined,
+      totalQuantityMeter: parseNum(tm.size),
+      nameOfTheClient: tm.organization ?? "",
+      lastDateOfSubmission: tm.deadline,
+      tenderOpeningDate: tm.tenderOpeningDate,
+      costOfTenderFeeRs: parseNum(tm.documentFees),
+      emdAmountRs: parseNum(tm.emd),
+      estimatedCostRs: parseNum(tm.estimatedBidValue),
+      bidValidityDays: tm.bidValidityDays,
+      contractPeriodDays: tm.contractPeriodDays,
+      managementDecision: apmToDecision(tm.apm),
+      participated: tm.participated,
+      tenderPrepareBy: findAssociationName(),
+      currentStatus: tm.currentStatus ?? "",
+      tenderSubmittedDate: null,
+      reverseAuctionApplicable: tm.reverseAuctionApplicable,
+      reverseAuctionDate: tm.reverseAuctionDate,
+      emdPaymentMode: tm.emdPaymentMode as EMDExchangeMode | null,
+      bgNoUtrNo: tm.bgNoUtrNo,
+      emdValidity: tm.emdValidity,
+      loiPoNoAndDate: tm.loiPoNoAndDate,
+      remarks: tm.remarks,
+      bidValidityExpired: tm.bidValidityExpired ?? false,
+      diffPercentFromL1: tm.diffPercentFromL1,
+      diffPercentFromL2: tm.diffPercentFromL2,
+      reason: tm.reason,
+      finalRemarks: tm.finalRemarks,
+      price: tm.price ?? null,
+      attachmentUrl: null,
+    };
+  }
+
+  // =========================================================================
   // COMMON PROCESSING & PARSING CORE
   // =========================================================================
 
@@ -251,7 +339,7 @@ export class GoogleSheetService {
 
     const sheetHeaders = rows[0];
     const headerIndexMap = this.validateAndMapSchema(sheetHeaders);
-    const docketIndex = headerIndexMap.get("Docket No")!;
+    const docketIndex = headerIndexMap.get("Docket No-enq")!;
 
     const records: EpcTenderRecord[] = [];
 
@@ -264,9 +352,9 @@ export class GoogleSheetService {
       }
 
       // Rule 2: Ignore rows without Docket No (missing or empty)
-      if (docketIndex >= row.length || !row[docketIndex] || row[docketIndex].trim() === "") {
-        continue;
-      }
+      // if (docketIndex >= row.length || !row[docketIndex] || row[docketIndex].trim() === "") {
+      //   continue;
+      // }
       
       const record = this.parseRow(row, headerIndexMap, i + 1);
       records.push(record);
@@ -294,7 +382,7 @@ export class GoogleSheetService {
   private validateAndMapSchema(headers: string[]): Map<string, number> {
     const requiredHeaders = [
       "SL No.",
-      "Docket No",
+      "Docket No-enq",
       "Tender For",
       "Type of Tender",
       "Tender No / NIT No with Date",
@@ -324,7 +412,8 @@ export class GoogleSheetService {
       "Diff % from L1",
       "Diff % from L2",
       "Reason",
-      "Final Remarks"
+      "Final Remarks",
+      "PRICE"
     ];
 
     const headerIndexMap = new Map<string, number>();
@@ -445,42 +534,6 @@ export class GoogleSheetService {
       return ["yes", "y", "true", "1", "applicable"].includes(lower);
     };
 
-    const parseDate = (val: string): Date | null => {
-      if (!val || val === "-") return null;
-
-      const standardDate = new Date(val);
-      if (!isNaN(standardDate.getTime())) {
-        return standardDate;
-      }
-
-      const regex = /^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{2,4})$/;
-      const match = val.match(regex);
-      if (match) {
-        const day = parseInt(match[1], 10);
-        const monthStr = match[2].toLowerCase();
-        const yearStr = match[3];
-
-        const months: Record<string, number> = {
-          jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-          jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
-        };
-
-        const month = months[monthStr];
-        if (month !== undefined) {
-          let year = parseInt(yearStr, 10);
-          if (yearStr.length === 2) {
-            year = year >= 70 ? 1900 + year : 2000 + year;
-          }
-          const date = new Date(year, month, day);
-          if (!isNaN(date.getTime())) {
-            return date;
-          }
-        }
-      }
-
-      return null;
-    };
-
     const parseEnum = <T extends Record<string, string>>(
       val: string,
       enumObj: T,
@@ -502,9 +555,9 @@ export class GoogleSheetService {
 
     return {
       slNo,
-      docketNo: getValue("Docket No"), // Guaranteed to exist by filtering
+      docketNo: getValue("Docket No-enq"), // Guaranteed to exist by filtering
       tenderFor: getValue("Tender For"),
-      typeOfTender: getValue("Type of Tender"),
+      tenderType: getValue("Type of Tender"),
       tenderNoNitNo: getValue("Tender No / NIT No with Date"),
       nameOfWorkDescription: getValue("Name of Work / Item Description"),
       totalQuantityMeter: parseNumber(getValue("Total Quantity in Meter")),
@@ -540,7 +593,8 @@ export class GoogleSheetService {
       diffPercentFromL1: parsePercent(getValue("Diff % from L1")),
       diffPercentFromL2: parsePercent(getValue("Diff % from L2")),
       reason: getValue("Reason") || null,
-      finalRemarks: getValue("Final Remarks") || null
+      finalRemarks: getValue("Final Remarks") || null,
+      price: getValue("PRICE") || null
     };
   }
 }

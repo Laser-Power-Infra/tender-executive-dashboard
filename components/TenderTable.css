@@ -168,14 +168,12 @@
   font-weight: 700;
   font-size: 11px;
   text-transform: uppercase;
-  padding: 10px 12px;
+  padding: 12px 8px;
   border-bottom: 2px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   text-align: left;
   user-select: none;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .tender-data-table th:last-child {
@@ -188,6 +186,8 @@
   justify-content: space-between;
   width: 100%;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sort-indicator {
@@ -242,7 +242,7 @@
 }
 
 /* Column Specific Alignments & Typography */
-.col-docket { font-family: monospace; font-weight: 600; color: var(--color-primary); }
+.col-docket { font-family: monospace; font-weight: 600; color: var(--color-primary); cursor: pointer; }
 .col-currency { text-align: right; font-variant-numeric: tabular-nums; }
 .col-percentage { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 .col-center { text-align: center; }
@@ -715,6 +715,48 @@
   font-weight: 500;
 }
 
+.raw-materials-scroll-cell {
+  max-height: 76px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: normal;
+  padding-right: 4px;
+  text-align: left;
+}
+
+.raw-materials-scroll-cell::-webkit-scrollbar {
+  width: 4px;
+}
+
+.raw-materials-scroll-cell::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.raw-materials-scroll-cell::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
+
+.raw-materials-scroll-cell::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.raw-materials-scroll-cell .material-rate-tag {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.raw-materials-scroll-cell .material-rate-tag .mat-lbl,
+.raw-materials-scroll-cell .material-rate-tag .mat-val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raw-materials-scroll-cell .material-rate-tag .mat-val {
+  flex-shrink: 0;
+}
+
 /* Column Specific Price Basis Filter */
 .column-price-basis-filter {
   display: flex;
@@ -852,6 +894,128 @@
   border-color: var(--color-accent);
 }
 
+/* Column Search Input */
+.column-search-input {
+  width: 100%;
+  padding: 4px 6px;
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  height: 24px;
+  box-sizing: border-box;
+  margin-top: 6px;
+}
+
+.column-search-input:focus {
+  border-color: var(--color-accent);
+}
+
+/* Multi-Select Dropdown (matching Supply History Dashboard pattern) */
+.custom-multiselect-container {
+  position: relative;
+  width: 100%;
+}
+
+.multiselect-trigger-btn {
+  width: 100%;
+  padding: 4px 6px;
+  background-color: #ffffff;
+  border: 1px solid #dcdcdc;
+  border-radius: 4px;
+  color: #0a2540;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  text-transform: none;
+}
+
+.multiselect-trigger-btn:focus {
+  border-color: #0070f3;
+}
+
+.multiselect-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 240px;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+              0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.multiselect-actions {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}
+
+.multiselect-action-btn {
+  background: none;
+  border: none;
+  color: #0070f3;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  text-transform: none;
+}
+
+.multiselect-action-btn:hover {
+  background-color: #f1f5f9;
+}
+
+.multiselect-options-list {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.multiselect-option-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #0a2540;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  font-weight: 500;
+  text-transform: none;
+  white-space: normal;
+  text-align: left;
+}
+
+.multiselect-option-label:hover {
+  background-color: #f8fafc;
+}
+
+.multiselect-option-label input[type="checkbox"] {
+  cursor: pointer;
+}
+
 .column-remarks-filter {
   display: flex;
   flex-direction: column;
@@ -899,7 +1063,7 @@
 .filter-row-label {
   font-size: 10px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.7);
+  color: #000000;
   width: 20px;
   text-align: right;
 }
@@ -926,7 +1090,7 @@
 
 .filter-row-dash {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.45);
   font-weight: 600;
 }
 
@@ -1122,81 +1286,6 @@
   letter-spacing: 0.3px;
 }
 
-/* Beautiful Premium Toast Notifications */
-.premium-toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  pointer-events: none;
-}
-
-.premium-toast {
-  pointer-events: auto;
-  min-width: 320px;
-  max-width: 400px;
-  padding: 14px 18px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.85); /* Slate 900 Glass */
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  transform: translateY(20px);
-  opacity: 0;
-  animation: toast-slide-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transition: all 0.25s ease;
-}
-
-.premium-toast.error {
-  border-left: 4px solid #ff453a;
-  background: linear-gradient(135deg, rgba(28, 10, 10, 0.85), rgba(15, 23, 42, 0.85));
-}
-
-.premium-toast.success {
-  border-left: 4px solid #30d158;
-  background: linear-gradient(135deg, rgba(10, 28, 15, 0.85), rgba(15, 23, 42, 0.85));
-}
-
-.premium-toast-icon {
-  font-size: 20px;
-}
-
-.premium-toast-content {
-  flex: 1;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.premium-toast-close {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.5);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px;
-  transition: color 0.2s;
-}
-
-.premium-toast-close:hover {
-  color: #fff;
-}
-
-@keyframes toast-slide-in {
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
 /* ── Diff L1 / L2 Editable Cells ─────────────────────────────────────────── */
 
 .diff-col {
@@ -1339,4 +1428,71 @@
 
 .diff-sign-toggle:active {
   background: #cbd5e1;
+}
+
+/* Editable Docket Number Input */
+.docket-edit-input {
+  width: 100%;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--color-accent);
+  background-color: #fff;
+  color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 112, 243, 0.12);
+}
+
+.docket-edit-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #f1f5f9;
+}
+
+.docket-save-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  background-color: var(--color-accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.docket-save-btn:hover:not(:disabled) {
+  background-color: #0058c7;
+}
+
+.docket-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.docket-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
+}
+
+.docket-display:hover {
+  background-color: rgba(0, 112, 243, 0.08);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
 }

@@ -1,0 +1,1703 @@
+"use client";
+
+import React, {
+  useEffect,
+  useCallback,
+  useMemo,
+  useState,
+  useRef,
+} from "react";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import {
+  fetchAllTenders,
+  appendTenders,
+  updateTenderCell,
+  updateTenderMergedField,
+  updateTenderAssignments,
+  updateWebsiteMapping,
+  bulkAssignUtilityMapping,
+  saveFeedbackAndReanalyze,
+} from "@/lib/slices/tendersSlice";
+import { setExclusionFilter } from "@/lib/slices/filtersSlice";
+import { toast } from "sonner";
+import TenderSidebar from "@/components/tender-viewer/tender-sidebar";
+import ConfirmAnalysisDialog from "@/components/tender-viewer/confirm-analysis-dialog";
+import AiFeedbackDialog from "@/components/tender-viewer/ai-feedback-dialog";
+import DashboardSkeleton from "@/components/tender-viewer/dashboard-skeleton";
+import WebsiteEditDialog from "@/components/tender-viewer/website-edit-dialog";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, MessageSquare, Pencil, Check, FileText } from "lucide-react";
+import { getDisplayNameMap } from "@/lib/tender-columns";
+import {
+  OptimizedTenderTable,
+  ColumnDef,
+} from "@/components/tender-viewer/optimized-tender-table/OptimizedTenderTable";
+
+const normalizeKey = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
+
+function formatColumnName(name: string): string {
+  if (name === "t247Id") return "Portal ID";
+  return name
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (s) => s.toUpperCase())
+    .trim();
+}
+
+export default function Dashboard() {
+  const dispatch = useAppDispatch();
+  const selectedDateFrom = useAppSelector((s) => s.files.selectedDateFrom);
+  const selectedDateTo = useAppSelector((s) => s.files.selectedDateTo);
+  const files = useAppSelector((s) => s.files.items);
+  const loadingFiles = useAppSelector((s) => s.files.loading);
+  const tenderData = useAppSelector((s) => s.tenders.data);
+  const loadingTenders = useAppSelector((s) => s.tenders.loading);
+  const totalFiles = useAppSelector((s) => s.tenders.totalFiles);
+  const completedFiles = useAppSelector((s) => s.tenders.completedFiles);
+  const updatingCells = useAppSelector((s) => s.tenders.updatingCells);
+  const uploadResults = useAppSelector((s) => s.upload.results);
+
+  const [displayNameMap, setDisplayNameMap] = useState<Record<string, string>>({});
+  // const [mergedGroups, setMergedGroups] = useState<{
+  //   label: string;
+  //   separator: string;
+  //   fields: string[];
+  // }[]>([]);
+  const [columnIndices, setColumnIndices] = useState<{
+    columnName: string;
+    displayOrder: number;
+    visible: boolean;
+    width: number | null;
+    frozen: boolean;
+    createdAt: string;
+  }[]>([]);
+  const [mergedGroups, setMergedGroups] = useState<{
+    label: string;
+    separator: string;
+    fields: string[];
+  }[]>([]);
+  const [feedbackRow, setFeedbackRow] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [websiteEditRow, setWebsiteEditRow] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [syncingDockets, setSyncingDockets] = useState(false);
+  const feedbackSaving = useAppSelector((s) => s.tenders.feedbackSaving);
+
+  const tenderDataRef = useRef(tenderData);
+  tenderDataRef.current = tenderData;
+  const updatingCellsRef = useRef(updatingCells);
+  updatingCellsRef.current = updatingCells;
+  const feedbackSavingRef = useRef(feedbackSaving);
+  feedbackSavingRef.current = feedbackSaving;
+
+  const prevTenderDataRef = useRef(tenderData);
+  const prevOrderedColsRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (prevTenderDataRef.current !== tenderData) {
+      const added = tenderData?.columns.filter(
+        (c) => !prevTenderDataRef.current?.columns.includes(c),
+      );
+      // console.log(
+      //   `[tenderData changed] identity=${Object.is(prevTenderDataRef.current, tenderData)}`,
+      //   `prevCols=${prevTenderDataRef.current?.columns.length ?? 0}`,
+      //   `newCols=${tenderData?.columns.length ?? 0}`,
+      //   `added=${added?.length ? JSON.stringify(added) : "none"}`,
+      // );
+      prevTenderDataRef.current = tenderData;
+    }
+  });
+
+  const refreshTenders = useCallback(() => {
+    dispatch(fetchAllTenders());
+  }, [dispatch]);
+
+  const handleSyncDockets = useCallback(async () => {
+    setSyncingDockets(true);
+    try {
+      const res = await fetch("/api/sync-dockets", { method: "POST" });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(`Docket sync failed: ${data.error}`);
+      } else {
+        const s = data.stats;
+        toast.success(
+          `Dockets synced: ${s.foundInEmailSubject + s.foundInEnquiryTender} filled, ` +
+          `${s.notFound} not found, ${s.errors} errors`,
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Docket sync failed");
+    } finally {
+      setSyncingDockets(false);
+    }
+  }, []);
+
+  const dateFilteredRows = useMemo(() => {
+    if (!tenderData) return [];
+    const selectedFileIds = new Set(
+      files
+        .filter((f) => {
+          const updatedAt = new Date(f.updatedAt);
+          const from = new Date(selectedDateFrom);
+          const to = new Date(selectedDateTo);
+          to.setHours(23, 59, 59, 999);
+          return updatedAt >= from && updatedAt <= to;
+        })
+        .map((f) => String(f.id)),
+    );
+    return tenderData.rows.filter((r) => r.fileId && selectedFileIds.has(r.fileId));
+  }, [tenderData, files, selectedDateFrom, selectedDateTo]);
+
+  useEffect(() => {
+    if (uploadResults && uploadResults.length > 0) {
+      const fileIds = uploadResults.map((r) => r.fileId);
+      dispatch(appendTenders(fileIds));
+    }
+  }, [uploadResults, dispatch]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/column-mappings").then((r) => r.json()),
+      fetch("/api/column-groups").then((r) => r.json()),
+      fetch("/api/column-indices").then((r) => r.json()),
+    ])
+      .then(([mappingData, groupsData, indicesData]) => {
+        if (mappingData.mappings) {
+          setDisplayNameMap(getDisplayNameMap(mappingData.mappings));
+        }
+        if (groupsData.groups) {
+          setMergedGroups(
+            groupsData.groups.map((g: { label: string; separator: string; fields: string }) => ({
+              label: g.label,
+              separator: g.separator,
+              fields: JSON.parse(g.fields),
+            })),
+          );
+        }
+        if (indicesData.indices) {
+          setColumnIndices(indicesData.indices);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleAssignmentChange = useCallback(
+    (rowIndex: number, type: string, id: string, associationIds: string[]) => {
+      if (!tenderDataRef.current) return;
+      const oldValue = tenderDataRef.current.rows[rowIndex]?.assignedTo ?? "";
+      dispatch(
+        updateTenderAssignments({
+          rowIndex,
+          tenderMergedId: parseInt(id, 10),
+          associationIds: associationIds.map(Number),
+          oldValue,
+        }),
+      );
+    },
+    [dispatch],
+  );
+
+  const handleDecisionClick = useCallback(
+    (
+      col: string,
+      rowIndex: number,
+      type: string,
+      id: string,
+      value: string,
+    ) => {
+      if (!tenderDataRef.current) return;
+      const oldValue = tenderDataRef.current.rows[rowIndex]?.[col] ?? "";
+      const newValue = oldValue === value ? "NOT_DECIDED" : value;
+      const toastId = toast.loading(`Updating ${col.toUpperCase()}...`);
+      dispatch(
+        updateTenderCell({
+          rowIndex,
+          field: col,
+          value: newValue,
+          tenderMergedId: parseInt(id, 10),
+          oldValue,
+        }),
+      )
+        .unwrap()
+        .then((result) => {
+          toast.success(`${col.toUpperCase()} set to ${newValue}`, {
+            id: toastId,
+          });
+          if (result?.webhookTriggered) {
+            const ref = result.referenceNo ?? "";
+            if (result.webhookResponse?.message) {
+              const toastFn = result.webhookResponse.success ? toast.success : toast.error;
+              toastFn(`${ref}: ${result.webhookResponse.message}`);
+            }
+          }
+        })
+        .catch((err: Error) => {
+          toast.error(`Failed to update: ${err.message}`, { id: toastId });
+        });
+    },
+    [dispatch],
+  );
+
+  const handleSaveFeedback = useCallback(
+    (params: {
+      tenderMergedId: number;
+      tenderType: string;
+      briefText: string;
+      originalAi: string;
+      correctedAi: string;
+      feedbackReason: string;
+    }) => {
+      const toastId = toast.loading("Saving feedback and re-analyzing...");
+      dispatch(saveFeedbackAndReanalyze(params))
+        .unwrap()
+        .then(() => {
+          toast.success("Feedback saved, tender re-analyzed", { id: toastId });
+        })
+        .catch((err: Error) => {
+          const msg =
+            err.message === "rate_limit"
+              ? "Re-analysis rate limited, try again later"
+              : `Failed: ${err.message}`;
+          toast.error(msg, { id: toastId });
+        })
+        .finally(() => {
+          setFeedbackRow(null);
+        });
+    },
+    [dispatch],
+  );
+
+  const handleWebsiteSave = useCallback(
+    (params: {
+      tenderMergedId: number;
+      website: string;
+      oldValue: string;
+    }) => {
+      const toastId = toast.loading("Saving website...");
+      dispatch(
+        updateWebsiteMapping({
+          tenderMergedId: params.tenderMergedId,
+          website: params.website,
+          oldValue: params.oldValue,
+        }),
+      )
+        .unwrap()
+        .then((result) => {
+          toast.success("Website saved", { id: toastId });
+          setWebsiteEditRow(null);
+          dispatch(
+            bulkAssignUtilityMapping({
+              organization: result.organization,
+              website: params.website,
+              utilityMappingId: result.utilityMappingId,
+              excludeTenderMergedId: params.tenderMergedId,
+            }),
+          )
+            .unwrap()
+            .then((bulkResult) => {
+              const total = bulkResult.updatedIds.length;
+              if (total > 0) {
+                toast.success(
+                  `Updated ${total} tender${total > 1 ? "s" : ""} with same organization`,
+                );
+              }
+            })
+            .catch((err: Error) => {
+              toast.error(`Bulk update failed: ${err.message}`);
+            });
+        })
+        .catch((err: Error) => {
+          toast.error(`Failed: ${err.message}`, { id: toastId });
+          setWebsiteEditRow(null);
+        });
+    },
+    [dispatch],
+  );
+
+  const selectFilterOptions = useMemo(() => {
+    if (loadingTenders || !tenderDataRef.current) return {};
+    const rows = tenderDataRef.current.rows;
+    if (rows.length === 0) return {};
+
+    const skipCols = new Set([
+      "reportings",
+      "evaluations",
+      "tenderFiles",
+      "rawMaterials",
+      "proposedErpItemName",
+      "proposedErpQuantity",
+      "cva",
+      "competitors",
+      "evaluationTableData",
+      "checklist",
+      "downloadLink",
+      "tenderFileUrl",
+      "costingFileUrl",
+      "website",
+      "assignedTo",
+      "beneficiaryBankDetails",
+      "applicableIndex",
+      "deadline",
+      "app",
+      "aps",
+      "apm",
+      "parseStatus",
+      "parseError",
+      "price",
+    ]);
+    const MAX_OPTIONS = 500;
+    const map: Record<string, { value: string; label: string }[]> = {};
+    for (const col of tenderDataRef.current.columns) {
+      const norm = col.toLowerCase().trim().replace(/\s+/g, " ");
+      if (
+        skipCols.has(col) ||
+        skipCols.has(norm) ||
+        col.includes("date") ||
+        col.includes("deadline") ||
+        col.includes("submission")
+      )
+        continue;
+      const vals = new Set<string>();
+      let overLimit = false;
+      for (const row of rows) {
+        const v = row[col];
+        if (v != null && v !== "") {
+          vals.add(String(v));
+          if (vals.size > MAX_OPTIONS) {
+            overLimit = true;
+            break;
+          }
+        }
+      }
+      if (overLimit) continue;
+      if (vals.size > 0) {
+        map[col] = Array.from(vals)
+          .sort((a, b) => a.localeCompare(b))
+          .map((v) => ({ value: v, label: v }));
+      }
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingTenders, tenderData?.columns, tenderData?.rows.length]);
+
+  const orderedColumns = useMemo(() => {
+    if (!tenderData) return [];
+    const skipCols = new Set([
+      "sr. no.",
+      "sr no",
+      "s.no",
+      "s. no",
+      "serial no",
+      "serial no.",
+      "sn",
+      "sno",
+      "s r. n o.",
+      "excluded category",
+      "excludedcategory",
+      "ai relevance",
+      "ai relevance valid",
+      "ai relevance reason",
+      "searchkey",
+      "ready",
+    ]);
+    const seen = new Set<string>();
+    let cols = [...tenderData.columns].filter((col) => {
+      const normalized = col.toLowerCase().trim().replace(/\s+/g, " ");
+      if (skipCols.has(normalized)) return false;
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+
+    const indexMap = new Map(columnIndices.map((idx) => [normalizeKey(idx.columnName), idx]));
+    cols.sort((a, b) => {
+      const ia = indexMap.get(normalizeKey(a));
+      const ib = indexMap.get(normalizeKey(b));
+      if (ia && ib) {
+        const orderDiff = ia.displayOrder - ib.displayOrder;
+        if (orderDiff !== 0) return orderDiff;
+        return new Date(ia.createdAt).getTime() - new Date(ib.createdAt).getTime();
+      }
+      if (ia) return -1;
+      if (ib) return 1;
+      return 0;
+    });
+
+    const prev = prevOrderedColsRef.current;
+    if (prev.length !== cols.length || prev.some((c, i) => c !== cols[i])) {
+      prevOrderedColsRef.current = cols;
+    }
+    return cols;
+  }, [tenderData, columnIndices]);
+
+  const [filteredRows, setFilteredRows] = useState<Record<string, unknown>[]>(
+    [],
+  );
+  const filteredRowsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const handleFilteredRowsChange = useCallback(
+    (rows: Record<string, unknown>[]) => {
+      if (filteredRowsTimerRef.current)
+        clearTimeout(filteredRowsTimerRef.current);
+      filteredRowsTimerRef.current = setTimeout(() => {
+        setFilteredRows(rows);
+      }, 250);
+    },
+    [],
+  );
+  useEffect(() => {
+    return () => {
+      if (filteredRowsTimerRef.current)
+        clearTimeout(filteredRowsTimerRef.current);
+    };
+  }, []);
+
+  const [showExclusionDropdown, setShowExclusionDropdown] = useState(false);
+  const exclusionFilter = useAppSelector((s) => s.filters.exclusionFilter);
+
+  const excludedRows = useMemo(() => {
+    if (!tenderData) return [];
+    if (!exclusionFilter) return dateFilteredRows;
+    return dateFilteredRows.filter((row) => {
+      const cat = row.excludedCategory;
+      if (!cat) return true;
+      if (exclusionFilter === "cable" && cat.includes("cable")) return false;
+      if (exclusionFilter === "conductors" && cat.includes("conductors"))
+        return false;
+      if (
+        exclusionFilter === "both" &&
+        (cat.includes("cable") || cat.includes("conductors"))
+      )
+        return false;
+      return true;
+    });
+  }, [tenderData, exclusionFilter, dateFilteredRows]);
+
+  const rowsWithMergedValues = useMemo(() => {
+    if (mergedGroups.length === 0) return excludedRows;
+    return excludedRows.map((row) => {
+      const newRow = { ...row } as Record<string, unknown>;
+      for (const g of mergedGroups) {
+        if (g.fields.length >= 2) {
+          const isConcatenated = g.separator.trim().length > 0;
+          if (isConcatenated) {
+            const parts = g.fields
+              .map((f) => String(row[f as keyof typeof row] ?? ""))
+              .filter(Boolean);
+            newRow[g.label] = parts.join(g.separator);
+          } else {
+            const firstField = g.fields[0];
+            const val = row[firstField as keyof typeof row];
+            newRow[g.label] = val != null && val !== "" ? String(val) : "";
+          }
+        }
+      }
+      return newRow;
+    });
+  }, [excludedRows, mergedGroups]);
+
+  const rowIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    tenderData?.rows.forEach((r, i) => {
+      map.set(`${String(r.type)}-${String(r.id)}`, i);
+    });
+    return map;
+  }, [tenderData?.rows]);
+
+  const columnDefs = useMemo(() => {
+    if (!tenderDataRef.current) return [];
+
+    const mergedFieldSet = new Set<string>();
+    const mergedDefList: {
+      label: string;
+      separator: string;
+      fields: string[];
+      firstField: string;
+    }[] = [];
+    for (const g of mergedGroups) {
+      if (g.fields.length >= 2) {
+        for (const f of g.fields) mergedFieldSet.add(f);
+        mergedDefList.push({ ...g, firstField: g.fields[0] });
+      }
+    }
+
+    const indexMap = new Map(columnIndices.map((idx) => [normalizeKey(idx.columnName), idx]));
+    const filteredCols = orderedColumns.filter((c) => !mergedFieldSet.has(c));
+    const individualDefs = filteredCols.map((col): ColumnDef<Record<string, unknown>> => {
+      const colLower = col.toLowerCase();
+      const colIndex = indexMap.get(normalizeKey(col));
+
+      if (col === "app" || col === "aps" || col === "apm") {
+        return {
+          header: col,
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 120,
+          sortable: false,
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const val = String(row[col] ?? "");
+            const isYes = val === "YES";
+            const isNo = val === "NO";
+            const rowIndex =
+              rowIndexMap.get(`${String(row.type)}-${String(row.id)}`) ?? -1;
+            const rowType = String(row.type ?? "");
+            const rowId = String(row.id ?? "");
+            const isUpdating = updatingCellsRef.current[`${rowIndex}-${col}`];
+
+            return (
+              <div className="flex gap-1 py-1">
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() =>
+                    handleDecisionClick(col, rowIndex, rowType, rowId, "YES")
+                  }
+                  className={`w-7 h-7 rounded text-xs font-bold border-2 transition-colors cursor-pointer ${
+                    isUpdating
+                      ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-400 border-slate-300"
+                      : isYes
+                        ? "bg-green-500 text-white border-green-600"
+                        : "bg-white text-slate-400 border-slate-300 hover:border-slate-400"
+                  }`}
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    "Y"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() =>
+                    handleDecisionClick(col, rowIndex, rowType, rowId, "NO")
+                  }
+                  className={`w-7 h-7 rounded text-xs font-bold border-2 transition-colors cursor-pointer ${
+                    isUpdating
+                      ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-400 border-slate-300"
+                      : isNo
+                        ? "bg-red-500 text-white border-red-600"
+                        : "bg-white text-slate-400 border-slate-300 hover:border-slate-400"
+                  }`}
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    "N"
+                  )}
+                </button>
+              </div>
+            );
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "YES", label: "Yes" },
+              { value: "NO", label: "No" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
+      if (col.toLowerCase().trim().replace(/\s+/g, " ") === "quantity / size") {
+        return {
+          header: "Size",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          renderCell: (value, row) => {
+            const str = value != null && value !== "" ? String(value) : "-";
+            if (str === "-") return str;
+            if (String((row as Record<string, unknown>)?.type ?? "") === "Gem") {
+              return (
+                <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
+                </div>
+              );
+            }
+            let items: string[];
+            if (Array.isArray(value)) {
+              items = value.map(String);
+            } else {
+              try {
+                const parsed = JSON.parse(str);
+                items = Array.isArray(parsed) ? parsed.map(String) : [str];
+              } catch {
+                items = [str];
+              }
+            }
+            if (items.length <= 1) return str;
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {items.map((part, i) => (
+                  <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>
+                ))}
+              </div>
+            );
+          },
+          sortValue: (value: unknown) => {
+            const num = parseFloat(String(value ?? ""));
+            return isNaN(num) ? String(value ?? "") : num;
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
+      if (col === "aiRelevanceValid") {
+        return {
+          header: "AI Relevance",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          sortable: false,
+          searchable: false,
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "true", label: "Yes" },
+              { value: "false", label: "No" },
+              { value: "not_analysed", label: "Not Analysed" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const valid = String(row.aiRelevanceValid ?? "");
+            const reason = String(row.aiRelevanceReason ?? "");
+            if (!valid) return <span className="text-slate-300">-</span>;
+            const isYes = valid === "true";
+            const hasFeedback = !!row.aiFeedbackCorrected;
+            const feedbackKey = `${row.id}-${row.type === "Gem" ? "Gem" : "NonGem"}`;
+            const isSaving = feedbackSavingRef.current[feedbackKey];
+            return (
+              <div className="relative group/cell">
+                <div className="">
+                  <div
+                    className="flex flex-col gap-0.5"
+                    style={{
+                      maxHeight: 70,
+                      overflowY: "auto",
+                      whiteSpace: "normal",
+                    }}
+                  >
+                    <Badge
+                      className={`inline-flex w-fit text-[10px] font-medium ${
+                        isYes
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                          : "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-100"
+                      }`}
+                    >
+                      {isYes ? "YES" : "NO"}
+                    </Badge>
+                    <span className="text-[11px] text-slate-500 leading-snug">
+                      {reason}
+                    </span>
+                    {hasFeedback && (
+                      <Badge className="inline-flex w-fit text-[10px] font-medium bg-red-50 text-red-600 border-red-200">
+                        Feedback Given
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                {!hasFeedback && (
+                  <button
+                    className="opacity-0 group-hover/cell:opacity-100 transition-all absolute top-0 right-0 w-8 h-8 rounded-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 p-1 shadow-sm cursor-pointer"
+                    title="Provide Feedback"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFeedbackRow(row);
+                    }}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    ) : (
+                      <MessageSquare className="w-4 h-4 text-white" />
+                    )}
+                  </button>
+                )}
+              </div>
+            );
+          },
+        };
+      }
+
+      if (col === "aiRelevanceReason") {
+        return {
+          header: "AI Reason",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          hidden: true,
+          sortable: false,
+          searchable: false,
+        };
+      }
+
+      if (col === "assignedTo") {
+        return {
+          header: "Assigned To",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          searchable: false,
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(tenderDataRef.current?.associations ?? []).map((a) => ({
+                value: String(a.id),
+                label: a.name,
+              })),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          sortValue: (value: unknown) => {
+            const ids = String(value ?? "")
+              .split(",")
+              .filter(Boolean);
+            return ids
+              .map((id) => {
+                const a = (tenderDataRef.current?.associations ?? []).find(
+                  (assoc) => assoc.id === parseInt(id),
+                );
+                return a?.name ?? "";
+              })
+              .filter(Boolean)
+              .sort()
+              .join(", ");
+          },
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const val = String(row[col] ?? "");
+            const rowIndex =
+              rowIndexMap.get(`${String(row.type)}-${String(row.id)}`) ?? -1;
+            const rowType = String(row.type ?? "");
+            const rowId = String(row.id ?? "");
+            return (
+              <Select
+                value={val}
+                onValueChange={(v) => {
+                  const ids = v ? [v] : [];
+                  handleAssignmentChange(rowIndex, rowType, rowId, ids);
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="assignment-select w-full"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <SelectValue placeholder="None">
+                    {(value) => {
+                      const ids = String(value ?? "")
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      const names = ids
+                        .map((id) => {
+                          const a = (
+                            tenderDataRef.current?.associations ?? []
+                          ).find((assoc) => assoc.id === parseInt(id, 10));
+                          return a?.name;
+                        })
+                        .filter(Boolean);
+                      return names.length > 0 ? names.join(", ") : "None";
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {(tenderDataRef.current?.associations ?? []).map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          },
+        };
+      }
+
+      if (col === "parseStatus") {
+        const statusColors: Record<string, string> = {
+          COMPLETED:
+            "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50",
+          FAILED: "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-100",
+          RATE_LIMITED:
+            "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-50",
+          PROCESSING:
+            "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50",
+        };
+        return {
+          header: "Parse Status",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 150,
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "COMPLETED", label: "Completed" },
+              { value: "FAILED", label: "Failed" },
+              { value: "RATE_LIMITED", label: "Rate Limited" },
+              { value: "PROCESSING", label: "Processing" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const status = String(row.parseStatus ?? "");
+            const error = String(row.parseError ?? "");
+            if (!status) return <span className="text-slate-300">-</span>;
+            const colorClass =
+              statusColors[status] ??
+              "bg-slate-50 text-slate-600 border-slate-200";
+            return (
+              <div className="flex flex-col gap-0.5" title={error}>
+                <Badge
+                  className={`inline-flex w-fit text-[10px] font-medium ${colorClass}`}
+                >
+                  {status}
+                </Badge>
+              </div>
+            );
+          },
+        };
+      }
+
+      if (col === "parseError") {
+        return {
+          header: "Parse Error",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          hidden: true,
+          sortable: false,
+          searchable: false,
+        };
+      }
+
+      if (col === "tenderFileUrl") {
+        return {
+          header: "Tender Document",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 250,
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "Available", label: "Available" },
+              { value: "Not Available", label: "Not Available" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const filesRaw = row.tenderFiles as string | undefined;
+            const files: Array<{ url: string; tags: string[] }> = filesRaw
+              ? JSON.parse(filesRaw)
+              : [];
+            const docFile = files.find((f) =>
+              f.tags?.includes("tenderDocument"),
+            );
+            const url = docFile?.url ?? "";
+
+            if (!url) return <span className="text-slate-300">-</span>;
+            return (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 border-2 border-rose-500 text-rose-500 px-3 py-1.5 text-xs font-medium  hover:bg-rose-500 hover:text-rose-100 transition-colors mr-auto"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Show Tender Document
+              </a>
+            );
+          },
+        };
+      }
+
+      if (col === "reportings") {
+        return {
+          header: "Reporting Officers",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          filter: {
+            type: "select" as const,
+            options: [{ value: "__blank__", label: "Blank" }],
+          },
+          sortValue: (value: unknown) => {
+            if (!value) return "";
+            try {
+              const entries = JSON.parse(String(value));
+              if (Array.isArray(entries) && entries.length > 0) {
+                return entries[0]?.officer ?? "";
+              }
+            } catch {}
+            return "";
+          },
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const raw = String(row[col] ?? "");
+            if (!raw) return <span className="text-slate-300">-</span>;
+            let entries: {
+              officer: string;
+              address?: string;
+              quantity?: string;
+            }[];
+            try {
+              entries = JSON.parse(raw);
+            } catch {
+              return <span className="text-slate-300">-</span>;
+            }
+            if (!entries.length)
+              return <span className="text-slate-300">-</span>;
+            return (
+              <div
+                className="flex flex-col gap-1 text-xs"
+                style={{
+                  maxHeight: 80,
+                  overflowY: "auto",
+                  whiteSpace: "normal",
+                }}
+              >
+                {entries.map((e, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="font-medium">{e.officer}</span>
+                    {e.quantity && (
+                      <span className="text-slate-500">qty: {e.quantity}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          },
+        };
+      }
+
+      if (col === "website") {
+        return {
+          header: "Website",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "Available", label: "Available" },
+              { value: "Not Available", label: "Not Available" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const raw = String(row[col] ?? "");
+            const websiteKey = `${row.id}-${row.type === "Gem" ? "Gem" : "NonGem"}-website`;
+            const isSaving = updatingCellsRef.current[websiteKey];
+            const urls = raw
+              ? raw
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [];
+            return (
+              <div className="relative group/cell h-full">
+                <div
+                  className="h-full"
+                  style={{
+                    height: 70,
+                    maxHeight: 70,
+                    overflowY: "auto",
+                    whiteSpace: "normal",
+                  }}
+                >
+                  {urls.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {urls.map((url, i) => (
+                        <a
+                          key={i}
+                          href={url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 underline hover:text-blue-800 text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {url}
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-300">-</span>
+                  )}
+                </div>
+                <button
+                  className="opacity-0 group-hover/cell:opacity-100 transition-all absolute top-0 right-0 w-8 h-8 rounded-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 p-1 shadow-sm cursor-pointer"
+                  title="Edit Website"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setWebsiteEditRow(row);
+                  }}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  ) : (
+                    <Pencil className="w-4 h-4 text-white" />
+                  )}
+                </button>
+              </div>
+            );
+          },
+        };
+      }
+
+      if (col === "location") {
+        return {
+          header: "Location",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 200,
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          sortValue: (value: unknown, row: Record<string, unknown>) => {
+            const reportingsRaw = String(row.reportings ?? "");
+            const addresses: string[] = [];
+            const origLoc = String(value ?? "").trim();
+            if (origLoc) addresses.push(origLoc);
+            if (reportingsRaw) {
+              try {
+                const entries = JSON.parse(reportingsRaw);
+                if (Array.isArray(entries)) {
+                  entries.forEach((e: { address?: string }) => {
+                    if (e.address && !addresses.includes(e.address)) {
+                      addresses.push(e.address);
+                    }
+                  });
+                }
+              } catch {}
+            }
+            return addresses.join(" | ");
+          },
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const reportingsRaw = String(row.reportings ?? "");
+            const addresses: string[] = [];
+            const origLoc = String(row.location ?? "").trim();
+            if (origLoc) addresses.push(origLoc);
+            if (reportingsRaw) {
+              try {
+                const entries = JSON.parse(reportingsRaw);
+                if (Array.isArray(entries)) {
+                  entries.forEach((e: { address?: string }) => {
+                    if (e.address && !addresses.includes(e.address)) {
+                      addresses.push(e.address);
+                    }
+                  });
+                }
+              } catch {}
+            }
+            if (addresses.length === 0) {
+              return <span className="text-slate-300">-</span>;
+            }
+            return (
+              <div
+                style={{
+                  maxHeight: 80,
+                  overflowY: "auto",
+                  whiteSpace: "normal",
+                }}
+              >
+                {addresses.join(" | ")}
+              </div>
+            );
+          },
+        };
+      }
+
+      if (col === "referenceNo") {
+        return {
+          header: displayNameMap[col] ?? "Reference No",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 170,
+          searchable: false,
+          frozen: true,
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const val = String(_value ?? "");
+            const apm = String(row.apm ?? "");
+            const participated = String(row.participated ?? "");
+
+            let badge: { label: string; className: string } | null = null;
+            if (apm === "YES") {
+              if (participated === "true") {
+                badge = {
+                  label: "POST",
+                  className:
+                    "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50",
+                };
+              } else if (participated === "false") {
+                badge = {
+                  label: "NOT_PARTICIPATED",
+                  className:
+                    "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-100",
+                };
+              } else {
+                badge = {
+                  label: "PRE",
+                  className:
+                    "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50",
+                };
+              }
+            }
+
+            return (
+              <div className="flex flex-col gap-1">
+                {val ? (
+                  <span className="text-xs font-mono">{val}</span>
+                ) : (
+                  <span className="text-slate-300">-</span>
+                )}
+                {badge && (
+                  <Badge
+                    className={`inline-flex w-fit text-[10px] font-medium ${badge.className}`}
+                  >
+                    {badge.label}
+                  </Badge>
+                )}
+              </div>
+            );
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
+      if (col === "type") {
+        return {
+          header: "Type",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 100,
+          searchable: false,
+          frozen: true,
+          renderCell: (value: unknown) => {
+            const val = String(value ?? "");
+            if (!val) return <span className="text-slate-300">-</span>;
+            const isGem = val === "Gem";
+            return (
+              <Badge
+                className={`text-[10px] font-medium ${
+                  isGem
+                    ? "bg-blue-100 text-blue-800 border-blue-200"
+                    : "bg-slate-100 text-slate-600 border-slate-200"
+                }`}
+              >
+                {val}
+              </Badge>
+            );
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
+      if (colLower.replace(/[\s_]/g, "") === "price") {
+        return {
+          header: displayNameMap["price"] ?? "Price",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 110,
+          type: "custom",
+          renderCell: (value: unknown, row: Record<string, unknown>) => {
+            const v = String(value ?? "").trim();
+            if (v) {
+              const upper = v.toUpperCase();
+              return (
+                <span
+                  className={`price-basis-badge ${
+                    upper === "VARIABLE" ? "variable" : "firm"
+                  }`}
+                >
+                  {v}
+                </span>
+              );
+            }
+            const id = String(row.id ?? "");
+            const isSaving = !!updatingCellsRef.current[`${id}-price`];
+            return (
+              <Select
+                value=""
+                disabled={isSaving}
+                onValueChange={(v) => {
+                  const newVal = v ?? "";
+                  dispatch(
+                    updateTenderMergedField({
+                      rowIndex: 0,
+                      field: "price",
+                      value: newVal,
+                      tenderMergedId: Number(row.id),
+                      oldValue: "",
+                    }),
+                  )
+                    .unwrap()
+                    .then(() => toast.success("Price updated"))
+                    .catch((err: Error) =>
+                      toast.error(err?.message || "Failed to update price"),
+                    );
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="price-edit-select w-full"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <SelectValue placeholder="(Blank)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">(Blank)</SelectItem>
+                  <SelectItem value="FIRM">FIRM</SelectItem>
+                  <SelectItem value="VARIABLE">VARIABLE</SelectItem>
+                </SelectContent>
+              </Select>
+            );
+          },
+          filter: {
+            type: "select" as const,
+            options: [
+              { value: "FIRM", label: "Firm" },
+              { value: "VARIABLE", label: "Variable" },
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+        };
+      }
+
+      if (col === "publishedDate" || col === "assignedDate") {
+        const isPublished = col === "publishedDate";
+        return {
+          header: displayNameMap[col] ?? (isPublished ? "Published Date" : "Assigned Date"),
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: 130,
+          type: "date" as const,
+          filter: { type: "dateRange" as const },
+          sortValue: (value: unknown) => {
+            if (!value) return null;
+            const date = new Date(String(value));
+            return isNaN(date.getTime()) ? String(value) : date.getTime();
+          },
+        };
+      }
+
+      let filterType: "select" | "dateRange" | undefined;
+
+      if (
+        colLower.includes("date") ||
+        colLower.includes("deadline") ||
+        colLower.includes("submission")
+      ) {
+        filterType = "dateRange";
+      } else {
+        filterType = "select";
+      }
+
+      const options = selectFilterOptions[col];
+      const isRawMaterials = colLower.replace(/[\s_]/g, "") === "rawmaterials";
+      return {
+        header:
+          col === "reason"
+            ? "Reason for not participation"
+            : displayNameMap[col] ?? formatColumnName(col),
+        accessor: col as keyof Record<string, unknown>,
+        defaultWidth: colIndex?.width ?? (
+          col === "id"
+            ? 80
+            : col === "deadline" || col === "reportings"
+              ? 300
+              : col === "rawMaterials"
+                ? 240
+                : 200
+        ),
+        searchable:
+          col === "deadline" ||
+          col === "organization" ||
+          col === "type" ||
+          isRawMaterials
+            ? false
+            : undefined,
+        hidden: colIndex !== undefined ? !colIndex.visible : true,
+        frozen: col === "organization" || col === "tenderBrief" || col === "itemCategory" || col === "size" ? true : undefined,
+        sortValue: col === "deadline"
+          ? (value: unknown) => {
+              if (!value) return null;
+              const date = new Date(String(value));
+              return isNaN(date.getTime()) ? String(value) : date.getTime();
+            }
+          : undefined,
+        type: filterType === "dateRange" ? "date" : undefined,
+        filter: isRawMaterials
+          ? ({ type: "rawMaterials" } as const)
+          : filterType === "select"
+            ? {
+                type: "select" as const,
+                options: [
+                  ...(options ?? []),
+                  { value: "__blank__", label: "Blank" },
+                ],
+                ...(col === "organization"
+                  ? { searchable: true as const }
+                  : {}),
+              }
+            : filterType === "dateRange"
+              ? { type: "dateRange" as const }
+              : undefined,
+      };
+    });
+
+    const processedGroups = new Set<string>();
+    const mergedDefs = mergedDefList
+      .filter((g) => {
+        const idx = orderedColumns.indexOf(g.firstField);
+        const alreadyIn = processedGroups.has(g.label);
+        processedGroups.add(g.label);
+        return idx >= 0 && !alreadyIn;
+      })
+      .sort(
+        (a, b) =>
+          orderedColumns.indexOf(a.firstField) -
+          orderedColumns.indexOf(b.firstField),
+      )
+      .map((g) => {
+        const firstField = g.fields[0];
+        const isConcatenated = g.separator.trim().length > 0;
+        const isOrgDeptGroup =
+          g.fields.includes("organization") &&
+          g.fields.includes("departmentName");
+        const isBriefCatGroup =
+          g.fields.includes("tenderBrief") &&
+          g.fields.includes("itemCategory");
+        const isSizeGroup = g.fields.includes("size");
+        return {
+          header: isConcatenated
+            ? (displayNameMap[g.label] ?? g.label)
+            : (displayNameMap[firstField] ?? firstField),
+          accessor: g.label as keyof Record<string, unknown>,
+          defaultWidth: 250,
+          frozen: isOrgDeptGroup || isBriefCatGroup || g.fields.includes("size") ? true : undefined,
+          filter: {
+            type: "select" as const,
+            options: [{ value: "__blank__", label: "Blank" }],
+          },
+          sortValue: (_: unknown, row: Record<string, unknown>) => {
+            if (isConcatenated) {
+              const parts = g.fields
+                .map((f) => String(row[f as keyof typeof row] ?? ""))
+                .filter(Boolean);
+              return parts.join(g.separator);
+            }
+            return String(row[firstField as keyof typeof row] ?? "");
+          },
+          renderCell: (_: unknown, row: Record<string, unknown>) => {
+            if (isOrgDeptGroup) {
+              const org = String(row.organization ?? "");
+              const dept = String(row.departmentName ?? "");
+              if (!org && !dept) return <span className="text-slate-300">-</span>;
+              return (
+                <div className="flex flex-col leading-tight">
+                  <span className="text-xs font-medium">{org || "-"}</span>
+                  {dept && (
+                    <span className="text-[11px] text-slate-500">{dept}</span>
+                  )}
+                </div>
+              );
+            }
+            if (isSizeGroup) {
+              const val = row[firstField as keyof typeof row];
+              const str = val != null && val !== "" ? String(val) : "-";
+              if (str === "-") return str;
+              if (String(row.type ?? "") === "Gem") {
+                return (
+                  <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{str}</ReactMarkdown>
+                  </div>
+                );
+              }
+              let items: string[];
+              if (Array.isArray(val)) {
+                items = val.map(String);
+              } else {
+                try {
+                  const parsed = JSON.parse(str);
+                  items = Array.isArray(parsed) ? parsed.map(String) : [str];
+                } catch {
+                  items = [str];
+                }
+              }
+              if (items.length <= 1) return str;
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {items.map((part, i) => (
+                    <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>
+                  ))}
+                </div>
+              );
+            }
+            if (isConcatenated) {
+              const parts = g.fields
+                .map((f) => String(row[f as keyof typeof row] ?? ""))
+                .filter(Boolean);
+              return parts.length > 0 ? parts.join(g.separator) : "-";
+            }
+            const val = row[firstField as keyof typeof row];
+            return val != null && val !== "" ? String(val) : "-";
+          },
+        } as ColumnDef<Record<string, unknown>>;
+      });
+
+    const result: ColumnDef<Record<string, unknown>>[] = [];
+    let mergedIdx = 0;
+    let indivIdx = 0;
+    const mergedByPos = mergedDefs.map((d) => {
+      const firstField = mergedDefList[mergedDefs.indexOf(d)]!.firstField;
+      return { def: d, pos: orderedColumns.indexOf(firstField) };
+    });
+
+    for (let i = 0; i < orderedColumns.length; i++) {
+      while (mergedIdx < mergedByPos.length && mergedByPos[mergedIdx].pos === i) {
+        result.push(mergedByPos[mergedIdx].def);
+        mergedIdx++;
+      }
+      if (!mergedFieldSet.has(orderedColumns[i])) {
+        result.push(individualDefs[indivIdx]);
+        indivIdx++;
+      }
+    }
+    while (mergedIdx < mergedByPos.length) {
+      result.push(mergedByPos[mergedIdx].def);
+      mergedIdx++;
+    }
+
+    result.sort((a, b) => {
+      const keyA = normalizeKey(String(a.accessor));
+      const keyB = normalizeKey(String(b.accessor));
+      const idxA = indexMap.get(keyA);
+      const idxB = indexMap.get(keyB);
+      if (idxA && idxB) {
+        const orderDiff = idxA.displayOrder - idxB.displayOrder;
+        if (orderDiff !== 0) return orderDiff;
+        return new Date(idxA.createdAt).getTime() - new Date(idxB.createdAt).getTime();
+      }
+      if (idxA) return -1;
+      if (idxB) return 1;
+      return 0;
+    });
+
+    return result;
+  }, [
+    orderedColumns,
+    selectFilterOptions,
+    rowIndexMap,
+    handleDecisionClick,
+    handleAssignmentChange,
+    displayNameMap,
+    mergedGroups,
+    columnIndices,
+  ]);
+
+  const extraToolbarActions = useMemo(
+    () => (
+      <>
+        <div className="column-picker-container">
+          <button
+            className="export-btn"
+            onClick={() => setShowExclusionDropdown((v) => !v)}
+          >
+            {exclusionFilter
+              ? `Excluding: ${exclusionFilter}`
+              : "Exclusions"}
+          </button>
+          {showExclusionDropdown && (
+            <>
+              <div
+                className="column-picker-overlay"
+                onClick={() => setShowExclusionDropdown(false)}
+              />
+              <div
+                className="column-picker-dropdown"
+                style={{ width: 180 }}
+              >
+                {[
+                  { value: "cable", label: "Exclude cables" },
+                  {
+                    value: "conductors",
+                    label: "Exclude conductors",
+                  },
+                  { value: "both", label: "Exclude both" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    className="column-picker-item"
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      fontSize: 12,
+                    }}
+                    onClick={() => {
+                      dispatch(
+                        setExclusionFilter(
+                          exclusionFilter === opt.value
+                            ? null
+                            : opt.value,
+                        ),
+                      );
+                      setShowExclusionDropdown(false);
+                    }}
+                  >
+                    {exclusionFilter === opt.value ? <Check size={12} className="inline mr-1" /> : null}
+                    {opt.label}
+                  </button>
+                ))}
+                {exclusionFilter && (
+                  <button
+                    className="column-picker-item"
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      fontSize: 12,
+                      borderTop: "1px solid var(--color-border)",
+                      marginTop: 4,
+                      paddingTop: 6,
+                    }}
+                    onClick={() => {
+                      dispatch(setExclusionFilter(null));
+                      setShowExclusionDropdown(false);
+                    }}
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        {/* <button className="export-btn" onClick={handleSyncDockets} disabled={syncingDockets}>
+          <Loader2 size={14} className={syncingDockets ? "animate-spin" : ""} />
+          {syncingDockets ? " Syncing Dockets..." : " Sync Dockets"}
+        </button> */}
+        <ConfirmAnalysisDialog filteredRows={filteredRows} />
+        {feedbackRow && (
+          <AiFeedbackDialog
+            row={feedbackRow}
+            isSaving={
+              feedbackSaving[
+                `${feedbackRow.id}-feedback`
+              ] ?? false
+            }
+            onSave={handleSaveFeedback}
+            onClose={() => setFeedbackRow(null)}
+          />
+        )}
+        {websiteEditRow && (
+          <WebsiteEditDialog
+            row={websiteEditRow}
+            isSaving={
+              updatingCells[
+                `${websiteEditRow.id}-website`
+              ] ?? false
+            }
+            onSave={handleWebsiteSave}
+            onClose={() => setWebsiteEditRow(null)}
+          />
+        )}
+      </>
+    ),
+    [
+      exclusionFilter,
+      showExclusionDropdown,
+      syncingDockets,
+      filteredRows,
+      feedbackRow,
+      feedbackSaving,
+      websiteEditRow,
+      updatingCells,
+      handleSyncDockets,
+      handleSaveFeedback,
+      handleWebsiteSave,
+      dispatch,
+    ],
+  );
+
+  return (
+    <div className="flex flex-1 overflow-hidden bg-[#f4f6f8]">
+      <TenderSidebar
+        rows={dateFilteredRows}
+        associations={tenderData?.associations ?? []}
+      />
+
+      <div className="flex flex-col flex-1 min-w-0">
+        <main className="flex-1 overflow-auto p-6">
+          {loadingFiles && (
+            <div className="flex items-center justify-center py-12 text-sm text-slate-400">
+              <svg
+                className="size-5 animate-spin mr-2 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              Loading files...
+            </div>
+          )}
+
+          {loadingTenders && !tenderData && <DashboardSkeleton />}
+
+          {tenderData && (
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <OptimizedTenderTable
+                onFilteredRowsChange={handleFilteredRowsChange}
+                onParseComplete={refreshTenders}
+                extraToolbarActions={extraToolbarActions}
+                columns={columnDefs}
+                rows={rowsWithMergedValues as Record<string, unknown>[]}
+                associations={tenderData.associations ?? []}
+                title="Tender Table"
+              />
+            </div>
+          )}
+
+          {!loadingFiles && files.length > 0 && !tenderData && !loadingTenders && (
+            <div className="flex items-center justify-center py-12 text-sm text-slate-400 bg-white rounded-sm border border-slate-200">
+              No tender data found
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}

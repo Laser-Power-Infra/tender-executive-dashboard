@@ -1,4 +1,4 @@
-import { EpcTenderRecord, CurrentStatus } from "../types/tender";
+import { EpcTenderRecord, CurrentStatus } from "@/types/tender";
 
 function isRecordStatusActive(status: string): boolean {
   if (!status) return false;

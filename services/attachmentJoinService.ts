@@ -1,4 +1,4 @@
-import { EpcTenderRecord } from "../types/tender";
+import { EpcTenderRecord } from "@/types/tender";
 
 /**
  * Service responsible for performing a left join between the primary EPC Tender records
@@ -108,15 +108,11 @@ export class AttachmentJoinService {
       const normalizedTenderNo = this.normalizeKey(tender.tenderNoNitNo);
       
       let attachmentUrl: string | null = null;
-      let docketNo = "-";
       let itemCategory: string | null = null;
 
       if (normalizedTenderNo && lookupMap.has(normalizedTenderNo)) {
         const match = lookupMap.get(normalizedTenderNo)!;
         attachmentUrl = match.url;
-        if (match.extractedDocket) {
-          docketNo = match.extractedDocket;
-        }
         itemCategory = match.itemCategory;
         matchCount++;
       }
@@ -124,7 +120,6 @@ export class AttachmentJoinService {
       return {
         ...tender,
         attachmentUrl,
-        docketNo,
         itemCategory
       };
     });

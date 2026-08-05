@@ -1,9 +1,6 @@
-// hooks/useSmartsheetTenders.ts
-// Fetches from /api/smartsheet-tenders with 30s polling.
-// The server uses SWR (Stale-While-Revalidate) caching,
-// so most requests return instantly with cached data.
+"use client";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { SmartsheetTender } from "../types/smartsheetTender";
+import { SmartsheetTender } from "@/types/smartsheetTender";
 
 interface UseSmartsheetTendersResult {
   data: SmartsheetTender[];
@@ -19,7 +16,6 @@ export const useSmartsheetTenders = (): UseSmartsheetTendersResult => {
   const hasData = useRef(false);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
-    // Only show loading on initial fetch or manual refresh, not background polls
     if (forceRefresh || !hasData.current) {
       setLoading(true);
     }
@@ -31,7 +27,6 @@ export const useSmartsheetTenders = (): UseSmartsheetTendersResult => {
       const json = await response.json();
 
       if (!response.ok || !json.success) {
-        // Use the server's meaningful error message
         const msg = json.error || `Server error (${response.status})`;
         throw new Error(msg);
       }
@@ -46,7 +41,6 @@ export const useSmartsheetTenders = (): UseSmartsheetTendersResult => {
     }
   }, []);
 
-  // Initial fetch + polling every 30 seconds
   useEffect(() => {
     fetchData();
     const interval = setInterval(() => fetchData(), 30_000);

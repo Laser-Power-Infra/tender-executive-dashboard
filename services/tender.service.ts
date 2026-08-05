@@ -6,8 +6,8 @@
  * Returns clean typed SmartsheetTender records. If a column is missing, returns null for that field.
  */
 
-import { fetchSmartsheet, SmartsheetSheetData, SmartsheetColumn, SmartsheetCell } from "../lib/smartsheet";
-import { SmartsheetTender } from "../types/smartsheetTender";
+import { fetchSmartsheet, SmartsheetSheetData, SmartsheetColumn, SmartsheetCell } from "@/lib/smartsheet";
+import { SmartsheetTender } from "@/types/smartsheetTender";
 
 /** Map of SmartsheetTender field names to the actual Smartsheet column titles */
 const COLUMN_MAP: Record<"enquiryDate" | "partyName" | "docketNumber" | "utility" | "quotationNumber" | "quotationDate" | "accountHolder" | "tenderPurchase", string> = {
