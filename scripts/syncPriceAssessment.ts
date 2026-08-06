@@ -107,6 +107,14 @@ function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/[\s_-]+/g, "");
 }
 
+function extractRank(value: string): string {
+  const ranks = value
+    .split(/[/,\s&+-]+/)
+    .map((part) => part.match(/\d+/)?.[0])
+    .filter((n): n is string => Boolean(n));
+  return ranks.length > 0 ? ranks.join("/") : value;
+}
+
 function findHeaderRow(rows: string[][]): { headerIndex: number; colIndex: Record<string, number> } | null {
   const headersToFind = Object.keys(COLUMN_MAPPING);
   const normalizedHeaders = headersToFind.map(normalize);
@@ -184,7 +192,7 @@ async function main() {
       if (idx === -1) continue;
       const value = (row[idx] ?? "").trim();
       if (!value) continue;
-      data[field] = value;
+      data[field] = field === "ourRank" ? extractRank(value) : value;
     }
 
     if (Object.keys(data).length === 0) continue;

@@ -24,6 +24,7 @@ function buildColumns(tenderMerged: any[]): string[] {
     "tenderFiles",
     "reportings",
     "evaluations",
+    "itemSchedules",
   ];
 }
 
@@ -36,6 +37,7 @@ export async function GET(_req: NextRequest) {
         reportings: true,
         evaluations: true,
         tenderFiles: true,
+        CostingSheetDetails: { select: { itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true } },
       },
     }),
     prisma.association.findMany({ select: { id: true, name: true, email: true } }),

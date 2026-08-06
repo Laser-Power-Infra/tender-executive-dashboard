@@ -17,7 +17,6 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
-  ChevronRight,
   BarChart3,
   FileSpreadsheet,
   Download,
@@ -117,6 +116,15 @@ const matchesErpItemCategory = (
     );
   }
   return false;
+};
+
+const parseListValue = (raw: string | undefined | null): string => {
+  if (raw == null || raw === "") return "";
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(String).join(" | ");
+  } catch {}
+  return String(raw);
 };
 
 const FilesCell: React.FC<{
@@ -688,9 +696,10 @@ interface TenderTableProps {
 
 interface ColumnDef {
   header: string;
-  accessor: keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument";
+  accessor: keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument" | "itemSchedules";
   defaultWidth: number;
   align: "left" | "right" | "center";
+  sticky?: boolean;
   type:
     | "string"
     | "number"
@@ -727,16 +736,26 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "Docket No",
       accessor: "docketNo",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "left",
       type: "string",
+      sticky: true,
     },
     {
       header: "Tender Type",
       accessor: "tenderType",
-      defaultWidth: 100,
+      defaultWidth: 180,
       align: "left",
       type: "string",
+      sticky: true,
+    },
+    {
+      header: "Tender / NIT No",
+      accessor: "tenderNoNitNo",
+      defaultWidth: 180,
+      align: "left",
+      type: "string",
+      sticky: true,
     },
     {
       header: "Last Date of Submission",
@@ -748,14 +767,14 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "Published Date",
       accessor: "publishedDate",
-      defaultWidth: 130,
+      defaultWidth: 180,
       align: "center",
       type: "date",
     },
     {
       header: "Assigned Date",
       accessor: "assignedDate",
-      defaultWidth: 130,
+      defaultWidth: 180,
       align: "center",
       type: "date",
     },
@@ -767,13 +786,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
-      header: "Tender / NIT No",
-      accessor: "tenderNoNitNo",
-      defaultWidth: 180,
-      align: "left",
-      type: "string",
-    },
-    {
       header: "Tender Brief",
       accessor: "tenderBrief",
       defaultWidth: 250,
@@ -781,11 +793,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
-      header: "Item Category",
-      accessor: "itemCategory",
-      defaultWidth: 150,
+      header: "Item Schedule",
+      accessor: "itemSchedules",
+      defaultWidth: 220,
       align: "left",
-      type: "string",
+      type: "custom",
     },
     {
       header: "Proposed ERP Item Name",
@@ -797,42 +809,42 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "Proposed ERP Quantity",
       accessor: "proposedErpQuantity",
-      defaultWidth: 120,
+      defaultWidth: 280,
       align: "left",
       type: "custom",
     },
     {
       header: "Costing File",
       accessor: "attachmentUrl",
-      defaultWidth: 115,
+      defaultWidth: 180,
       align: "center",
       type: "custom",
     },
     {
       header: "Files",
       accessor: "files",
-      defaultWidth: 115,
+      defaultWidth: 180,
       align: "center",
       type: "custom",
     },
     {
       header: "Comparative Chart",
       accessor: "boqChart",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "center",
       type: "custom",
     },
     {
       header: "Price",
       accessor: "price",
-      defaultWidth: 90,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
     {
       header: "Applicable Index",
       accessor: "applicableIndex",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
@@ -846,49 +858,49 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "EMD Payment Mode",
       accessor: "emdPaymentMode",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
     {
       header: "emd",
       accessor: "emd",
-      defaultWidth: 130,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
     {
       header: "bgDate",
       accessor: "bgDate",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
     {
       header: "bgExpiryDate",
       accessor: "bgExpiryDate",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
     {
       header: "claimDate",
       accessor: "claimDate",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
     {
       header: "BG / UTR No",
       accessor: "bgNoUtrNo",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
     {
       header: "BG Status",
       accessor: "bgStatus",
-      defaultWidth: 110,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
@@ -909,14 +921,14 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "Current Status",
       accessor: "currentStatus",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "center",
       type: "status",
     },
     {
       header: "Status Category",
       accessor: "statusCategory",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
@@ -930,42 +942,42 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "RA?",
       accessor: "reverseAuctionApplicable",
-      defaultWidth: 60,
+      defaultWidth: 180,
       align: "center",
       type: "boolean",
     },
     {
       header: "LOI / PO No.",
       accessor: "loiPoNoAndDate",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
     {
       header: "Quotation No",
       accessor: "quotationNo",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
     {
       header: "Contract No",
       accessor: "contractNo",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
     {
       header: "Diff L1 (%)",
       accessor: "diffPercentFromL1",
-      defaultWidth: 110,
+      defaultWidth: 180,
       align: "right",
       type: "custom",
     },
     {
       header: "Diff L2 (%)",
       accessor: "diffPercentFromL2",
-      defaultWidth: 110,
+      defaultWidth: 180,
       align: "right",
       type: "custom",
     },
@@ -977,23 +989,16 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "custom",
     },
     {
-      header: "Remarks",
-      accessor: "remarks",
-      defaultWidth: 200,
-      align: "left",
-      type: "string",
-    },
-    {
       header: "Our Rank",
       accessor: "ourRank",
-      defaultWidth: 100,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
     {
       header: "Our Value",
       accessor: "ourValue",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
@@ -1007,14 +1012,14 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "L1 Price",
       accessor: "valueOfRank1",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
     {
       header: "L1 Diff (%)",
       accessor: "differenceBetweenRank1",
-      defaultWidth: 110,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
@@ -1028,21 +1033,21 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "L2 Price",
       accessor: "valueOfRank2",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
     {
       header: "L2 Diff (%)",
       accessor: "differenceBetweenRank2",
-      defaultWidth: 110,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
     {
       header: "Tender Update Status",
       accessor: "tenderUpdateStatus",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "center",
       type: "custom",
     },
@@ -1056,28 +1061,28 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "CVA",
       accessor: "cva",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "center",
       type: "string",
     },
     {
       header: "Mgmt Dec.",
       accessor: "managementDecision",
-      defaultWidth: 100,
+      defaultWidth: 180,
       align: "center",
       type: "decision",
     },
     {
       header: "Prep By",
       accessor: "tenderPrepareBy",
-      defaultWidth: 120,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
     {
       header: "Participated?",
       accessor: "participated",
-      defaultWidth: 100,
+      defaultWidth: 180,
       align: "center",
       type: "boolean",
     },
@@ -1092,7 +1097,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "Mii Purchase Preference",
       accessor: "miiPurchasePreference",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
@@ -1120,35 +1125,35 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     {
       header: "RA Qualification Rule",
       accessor: "raQualificationRule",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "left",
       type: "string",
     },
     {
       header: "Startup Exemption",
       accessor: "startupExemption",
-      defaultWidth: 130,
+      defaultWidth: 180,
       align: "center",
       type: "custom",
     },
     {
       header: "Minimum Avg Annual Turnover",
       accessor: "minimumAverageAnnualTurnover",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
     {
       header: "Years of Past Experience",
       accessor: "yearsOfPastExperience",
-      defaultWidth: 140,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
     {
       header: "e-PBG Duration (Months)",
       accessor: "ePbgDurationMonths",
-      defaultWidth: 150,
+      defaultWidth: 180,
       align: "right",
       type: "string",
     },
@@ -1484,7 +1489,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   const [globalSearch, setGlobalSearch] = useState<string>("");
   const [sortColumn, setSortColumn] = useState<
-    keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument" | null
+    keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument" | "itemSchedules" | null
   >("lastDateOfSubmission");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [startDate, setStartDate] = useState<string>("");
@@ -1501,7 +1506,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "lastDateOfSubmission", "attachmentUrl", "files", "boqChart",
     "rawMaterials", "diffPercentFromL1", "diffPercentFromL2",
     "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
-    "itemCategory", "publishedDate", "assignedDate",
+    "itemCategory", "publishedDate", "assignedDate", "itemSchedules",
   ]);
 
   const [multiSelectFilters, setMultiSelectFilters] = useState<
@@ -1589,12 +1594,14 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         const client = record.nameOfTheClient || "";
         const nit = record.tenderNoNitNo || "";
         const category = record.itemCategory || "";
+        const schedules = (record.itemSchedules ?? []).join(" ");
         const comps = record.competitors || "";
         return (
           docNo.toLowerCase().includes(searchLower) ||
           client.toLowerCase().includes(searchLower) ||
           nit.toLowerCase().includes(searchLower) ||
           category.toLowerCase().includes(searchLower) ||
+          schedules.toLowerCase().includes(searchLower) ||
           comps.toLowerCase().includes(searchLower)
         );
       });
@@ -1731,7 +1738,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     },
   );
 
-  const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
+  // Sticky left offsets for pinned columns (accumulate widths of sticky columns)
+  const stickyLeftOffsets = useMemo(() => {
+    const offsets: Record<string, number> = {};
+    let acc = 0;
+    for (const col of visibleColumns) {
+      if (col.sticky) {
+        offsets[col.accessor] = acc;
+        acc += columnWidths[col.accessor] ?? col.defaultWidth;
+      }
+    }
+    return offsets;
+  }, [visibleColumns, columnWidths]);
 
   // DOM Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1776,7 +1794,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   // 4. Sorting Handler
   const handleSort = (
-    column: keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument",
+    column: keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument" | "itemSchedules",
   ) => {
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -1791,14 +1809,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     setSortColumn(null);
     setSortDirection("desc");
     setCurrentPage(1);
-  };
-
-  // Toggle Row Expansion
-  const toggleRowExpansion = (slNo: number) => {
-    setExpandedRows((prev) => ({
-      ...prev,
-      [slNo]: !prev[slNo],
-    }));
   };
 
   // 5. Processing Data (Filtering & Sorting)
@@ -1818,6 +1828,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           record.currentStatus.toLowerCase().includes(searchLower) ||
           (record.itemCategory &&
             record.itemCategory.toLowerCase().includes(searchLower)) ||
+          ((record.itemSchedules ?? []).join(" ").toLowerCase().includes(searchLower)) ||
           (record.remarks &&
             record.remarks.toLowerCase().includes(searchLower)) ||
           (record.competitors &&
@@ -2057,6 +2068,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
               (m) => m.price !== null && m.price !== undefined && m.price !== 0,
             );
             val = activeRates.map((m) => `${m.label}: ₹${m.price}`).join(" | ");
+          } else if (col.accessor === "itemSchedules") {
+            val = (rec.itemSchedules ?? []).join(" | ");
+          } else if (col.accessor === "proposedErpItemName" || col.accessor === "proposedErpQuantity" || col.accessor === "cva") {
+            val = parseListValue(rec[col.accessor as keyof EpcTenderRecord] as string | undefined);
           } else {
             val = rec[col.accessor as keyof EpcTenderRecord];
           }
@@ -2124,6 +2139,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
               val = activeRates
                 .map((m) => `${m.label}: ${m.price}`)
                 .join(" | ");
+            } else if (col.accessor === "itemSchedules") {
+              val = (rec.itemSchedules ?? []).join(" | ");
+            } else if (col.accessor === "proposedErpItemName" || col.accessor === "proposedErpQuantity" || col.accessor === "cva") {
+              val = parseListValue(rec[col.accessor as keyof EpcTenderRecord] as string | undefined);
             } else {
               val = rec[col.accessor as keyof EpcTenderRecord];
             }
@@ -2334,22 +2353,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         <table className="tender-data-table">
           <thead>
             <tr>
-              {[
+              {visibleColumns.map((col) => (
                 <th
-                  key="expand"
-                  style={{ width: "40px" }}
-                  className="col-center"
-                ></th>,
-                ...visibleColumns.map((col) => (
-                  <th
-                    key={col.accessor}
-                    style={{
-                      width: `${columnWidths[col.accessor]}px`,
-                      ...(openDropdown === col.accessor
-                        ? { zIndex: 100 }
-                        : {}),
-                    }}
-                  >
+                  key={col.accessor}
+                  className={col.sticky ? "sticky-col" : undefined}
+                  style={{
+                    width: `${columnWidths[col.accessor]}px`,
+                    ...(col.sticky ? { left: stickyLeftOffsets[col.accessor] } : {}),
+                    ...(openDropdown === col.accessor
+                      ? { zIndex: 100 }
+                      : {}),
+                  }}
+                >
                     <div
                       className="header-content"
                       onClick={() => handleSort(col.accessor)}
@@ -2683,15 +2698,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                       }
                     />
                   </th>
-                )),
-              ]}
+                ))
+              }
             </tr>
           </thead>
           <tbody>
             {paginatedRecords.length === 0 ? (
               <tr>
                 <td
-                  colSpan={visibleColumns.length + 1}
+                  colSpan={visibleColumns.length}
                   style={{
                     textAlign: "center",
                     padding: "40px",
@@ -2702,33 +2717,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                 </td>
               </tr>
             ) : (
-              paginatedRecords.map((record) => {
-                const isExpanded = !!expandedRows[record.slNo];
-
-                return (
-                  <React.Fragment key={record.id ?? record.slNo}>
-                    {/* Collapsed Primary Row */}
-                    <tr
-                      className={`tender-row ${isExpanded ? "expanded-row" : ""}`}
-                    >
-                      <td className="col-center">
-                        <button
-                          className="details-link"
-                          onClick={() => toggleRowExpansion(record.slNo)}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          {isExpanded ? (
-                            <ChevronDown size={14} />
-                          ) : (
-                            <ChevronRight size={14} />
-                          )}
-                        </button>
-                      </td>
-
-                      {visibleColumns.map((col) => {
+              paginatedRecords.map((record) => (
+                <tr key={record.id ?? record.slNo} className="tender-row">
+                  {visibleColumns.map((col) => {
                         let cellVal: any;
                         let cellContent: React.ReactNode = "-";
                         let cellClass = "";
@@ -2950,6 +2941,28 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           cellContent = parts.length > 0 ? (
                             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                               {parts.map((part, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>)}
+                            </div>
+                          ) : (
+                            <span>-</span>
+                          );
+                          cellClass = "col-left";
+                        } else if (col.accessor === "itemSchedules") {
+                          const raw: unknown = record.itemSchedules;
+                          let schedules: string[] = [];
+                          if (Array.isArray(raw)) {
+                            schedules = raw.map(String);
+                          } else if (typeof raw === "string" && raw.trim() !== "") {
+                            try {
+                              const parsed = JSON.parse(raw);
+                              schedules = Array.isArray(parsed) ? parsed.map(String) : [];
+                            } catch {
+                              schedules = raw.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+                            }
+                          }
+                          schedules = Array.from(new Set(schedules.filter((s) => s.trim() !== "")));
+                          cellContent = schedules.length > 0 ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              {schedules.map((schedule, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{schedule}</div>)}
                             </div>
                           ) : (
                             <span>-</span>
@@ -3552,8 +3565,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         return (
                           <td
                             key={col.accessor}
-                            className={cellClass}
-                            style={{ width: `${columnWidths[col.accessor]}px` }}
+                            className={col.sticky ? `${cellClass} sticky-col` : cellClass}
+                            style={{
+                              width: `${columnWidths[col.accessor]}px`,
+                              ...(col.sticky ? { left: stickyLeftOffsets[col.accessor] } : {}),
+                            }}
                             onClick={
                               editableCfg &&
                               editingCell?.id !== record.id &&
@@ -3584,167 +3600,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         );
                       })}
                     </tr>
-
-                    {/* Expandable Details Row */}
-                    {isExpanded && (
-                      <tr className="details-panel-row">
-                        <td colSpan={visibleColumns.length + 1}>
-                          <div className="details-panel-content">
-                            <div className="details-grid">
-                              {/* 1. Name of Work / Item Description */}
-                              <div className="details-item span-full">
-                                <span className="details-label">
-                                  Name of Work / Item Description
-                                </span>
-                                <span className="details-value">
-                                  {record.nameOfWorkDescription}
-                                </span>
-                              </div>
-
-                              {/* 2. Total Quantity in Meter */}
-                              <div className="details-item">
-                                <span className="details-label">
-                                  Total Quantity (in Meters)
-                                </span>
-                                <span className="details-value">
-                                  {record.totalQuantityMeter !== null &&
-                                  record.totalQuantityMeter !== undefined
-                                    ? new Intl.NumberFormat("en-IN").format(
-                                        record.totalQuantityMeter,
-                                      )
-                                    : "-"}
-                                </span>
-                              </div>
-
-                              {/* 3. Bid Validity */}
-                              <div className="details-item">
-                                <span className="details-label">
-                                  Bid Validity
-                                </span>
-                                <span className="details-value">
-                                  {record.bidValidityDays !== null
-                                    ? `${record.bidValidityDays} Days`
-                                    : "-"}
-                                </span>
-                              </div>
-
-                              {/* 4. Contract Period in Days */}
-                              <div className="details-item">
-                                <span className="details-label">
-                                  Contract Period
-                                </span>
-                                <span className="details-value">
-                                  {record.contractPeriodDays !== null
-                                    ? `${record.contractPeriodDays} Days`
-                                    : "-"}
-                                </span>
-                              </div>
-
-                              {/* 5. Cost of Tender / Tender Fee (In Rs) */}
-                              <div className="details-item">
-                                <span className="details-label">
-                                  Tender Fee / Cost
-                                </span>
-                                <span className="details-value">
-                                  {record.costOfTenderFeeRs !== null
-                                    ? `₹ ${formatCurrency(record.costOfTenderFeeRs)}`
-                                    : "-"}
-                                </span>
-                              </div>
-
-                              {/* 6. EMD Payment Through BG / NEFT */}
-                              <div className="details-item">
-                                <span className="details-label">
-                                  EMD Payment Mode
-                                </span>
-                                <span className="details-value">
-                                  {record.emdPaymentMode || "-"}
-                                </span>
-                              </div>
-
-                              {/* 7. BG No / UTR No */}
-                              <div className="details-item">
-                                <span className="details-label">
-                                  BG No / UTR No
-                                </span>
-                                <span className="details-value">
-                                  {record.bgNoUtrNo || "-"}
-                                </span>
-                              </div>
-
-                              {/* 8. EMD Validity */}
-                              <div className="details-item">
-                                <span className="details-label">
-                                  EMD Validity Date
-                                </span>
-                                <span className="details-value">
-                                  {formatDate(record.emdValidity)}
-                                </span>
-                              </div>
-
-                              {/* 9. Remarks */}
-                              <div className="details-item span-full">
-                                <span className="details-label">Remarks</span>
-                                <span className="details-value">
-                                  {record.remarks || "-"}
-                                </span>
-                              </div>
-
-                              {/* 10. Final Remarks */}
-                              <div className="details-item span-full">
-                                <span className="details-label">
-                                  Final Remarks
-                                </span>
-                                <span className="details-value">
-                                  {record.finalRemarks || "-"}
-                                </span>
-                              </div>
-
-                              {/* 11. Costing Attachment Link */}
-                              {record.attachmentUrl && (
-                                <div className="details-item span-full">
-                                  <span className="details-label">
-                                    Costing Attachment
-                                  </span>
-                                  <span
-                                    className="details-value"
-                                    style={{
-                                      display: "flex",
-                                      flexDirection: "column",
-                                      gap: "10px",
-                                      alignItems: "flex-start",
-                                      marginTop: "6px",
-                                    }}
-                                  >
-                                    <a
-                                      href={record.attachmentUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="costing-attachment-link"
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                      }}
-                                    >
-                                      <FileText size={14} /> View Costing
-                                      Attachment
-                                    </a>
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })
-            )}
-
-            {/* No virtual spacers needed - native scroll enabled */}
-          </tbody>
+                  ))
+                )}
+            </tbody>
         </table>
       </div>
 

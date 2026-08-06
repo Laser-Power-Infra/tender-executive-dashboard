@@ -8,6 +8,7 @@ import {
 import { AttachmentJoinService } from "./attachmentJoinService";
 import { prisma } from "@/lib/prisma";
 import { parseDate } from "@/lib/parse-date";
+import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 
 /**
  * Service responsible for connecting to Google Sheets, fetching rows,
@@ -123,11 +124,24 @@ export class GoogleSheetService {
    * PATH A: Fetches records using Service Account credentials.
    * Runs strictly in Node.js server-side environments.
    */
-  public async fetchTenderRecords(): Promise<EpcTenderRecord[]> {
+  public async fetchTenderRecords(options?: {
+    onlyTendersMissingCosting?: boolean;
+  }): Promise<EpcTenderRecord[]> {
     console.log("[GoogleSheetService] Fetching tender records from DB (TenderMerged with docketNo)...");
 
     const records = await prisma.tenderMerged.findMany({
-      where: { docketNo: { not: null } },
+      where: {
+        docketNo: { not: null },
+        ...(options?.onlyTendersMissingCosting
+          ? {
+              NOT: {
+                tenderFiles: {
+                  some: { tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT } },
+                },
+              },
+            }
+          : {}),
+      },
       include: {
         tenderAssociations: { include: { association: true } },
       },

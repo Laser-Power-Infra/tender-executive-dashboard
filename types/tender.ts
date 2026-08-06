@@ -80,6 +80,7 @@ export interface EpcTenderRecord {
   rawMaterials?: string;
   statusCategory?: StatusCategory;
   itemCategory?: string | null;
+  itemSchedules?: string[];
   competitors?: string | null;
   fileCount?: number;
   hasBoqChart?: boolean;

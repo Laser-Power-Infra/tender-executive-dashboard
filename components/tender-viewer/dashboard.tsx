@@ -336,6 +336,7 @@ export default function Dashboard() {
       "evaluations",
       "tenderFiles",
       "rawMaterials",
+      "itemSchedules",
       "proposedErpItemName",
       "proposedErpQuantity",
       "cva",
@@ -356,6 +357,7 @@ export default function Dashboard() {
       "parseStatus",
       "parseError",
       "price",
+      "remarks",
     ]);
     const MAX_OPTIONS = 500;
     const map: Record<string, { value: string; label: string }[]> = {};
@@ -411,6 +413,8 @@ export default function Dashboard() {
       "ai relevance reason",
       "searchkey",
       "ready",
+      "remarks",
+      "remark",
     ]);
     const seen = new Set<string>();
     let cols = [...tenderData.columns].filter((col) => {
@@ -882,6 +886,30 @@ export default function Dashboard() {
           hidden: true,
           sortable: false,
           searchable: false,
+        };
+      }
+
+      if (
+        col === "itemSchedules" ||
+        col === "proposedErpItemName" ||
+        col === "proposedErpQuantity" ||
+        col === "cva"
+      ) {
+        const widthMap: Record<string, number> = {
+          itemSchedules: 220,
+          proposedErpItemName: 250,
+          proposedErpQuantity: 280,
+          cva: 180,
+        };
+        return {
+          header:
+            col === "itemSchedules"
+              ? "Item Schedule"
+              : (displayNameMap[col] ?? formatColumnName(col)),
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: widthMap[col],
+          searchable: false,
+          hidden: false,
         };
       }
 

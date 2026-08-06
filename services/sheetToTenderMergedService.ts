@@ -8,6 +8,8 @@ import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import { encryptRelativePath } from "@/lib/fileCrypto";
 import { parseDate } from "@/lib/parse-date";
 import { format } from "date-fns";
+import { publishTenderParsingTask } from "@/lib/queue/publisher";
+import { describeTenderFile } from "@/lib/tenderFileDescriptor";
 import type { EpcTenderRecord } from "@/types/tender";
 // import { syncDocketFromSmartsheet } from "./smartsheetDocketSync";
 
@@ -23,6 +25,7 @@ interface FlatRow {
   reportings?: string;
   evaluations?: string;
   tenderFiles?: string;
+  itemSchedules?: string;
   [key: string]: string | undefined;
 }
 
@@ -53,6 +56,7 @@ const SKIP_RELATION_FIELDS = new Set([
   "file",
   "tenderStatus",
   "utilityMapping",
+  "CostingSheetDetails",
 ]);
 
 function flattenTender(
@@ -76,7 +80,66 @@ function flattenTender(
   } else {
     row.tenderFiles = "";
   }
+  const costingDetailsVal = tender["CostingSheetDetails"];
+  if (Array.isArray(costingDetailsVal)) {
+    const schedules = Array.from(
+      new Set(
+        costingDetailsVal
+          .map((c) => (c as { itemSchedule?: string | null })?.itemSchedule)
+          .filter((s): s is string => s != null && s.trim() !== ""),
+      ),
+    );
+    row.itemSchedules = JSON.stringify(schedules);
+
+    const byName = new Map<string, { qty: number; count: number; numeric: boolean }>();
+    for (const c of costingDetailsVal) {
+      const detail = c as { proposedErpItemName?: string | null; proposedErpQuantity?: string | null };
+      const name = detail.proposedErpItemName?.trim();
+      if (!name) continue;
+      const qtyNum = parseFloat(detail.proposedErpQuantity ?? "");
+      const entry = byName.get(name) ?? { qty: 0, count: 0, numeric: false };
+      if (!isNaN(qtyNum)) {
+        entry.qty += qtyNum;
+        entry.numeric = true;
+      }
+      entry.count += 1;
+      byName.set(name, entry);
+    }
+    row.proposedErpItemName =
+      byName.size > 0 ? JSON.stringify(Array.from(byName.keys())) : "";
+    row.proposedErpQuantity =
+      byName.size > 0
+        ? JSON.stringify(
+            Array.from(byName.entries()).map(([name, { qty, count, numeric }]) =>
+              numeric
+                ? count > 1
+                  ? `${name} (${count}) - ${formatQty(qty)}`
+                  : `${name} - ${formatQty(qty)}`
+                : name,
+            ),
+          )
+        : "";
+
+    const cvaValues = Array.from(
+      new Set(
+        costingDetailsVal
+          .map((c) => (c as { cva?: string | null })?.cva)
+          .filter((s): s is string => s != null && s.trim() !== ""),
+      ),
+    );
+    row.cva = cvaValues.length > 0 ? JSON.stringify(cvaValues) : "";
+  } else {
+    row.itemSchedules = "";
+    row.proposedErpItemName = "";
+    row.proposedErpQuantity = "";
+    row.cva = "";
+  }
   return row;
+}
+
+function formatQty(val: number): string {
+  if (!isFinite(val)) return "0";
+  return String(Math.round(val * 1000) / 1000);
 }
 
 function deriveTenderType(typeOfTender: string): "GEM" | "NON_GEM" {
@@ -232,6 +295,50 @@ function buildTenderData(
   };
 }
 
+async function publishCostingParsingJob(params: {
+  tenderMergedId: number;
+  referenceNo?: string;
+  file: { source: string | null; url: string | null };
+}): Promise<void> {
+  try {
+    if (!params.referenceNo || params.referenceNo.trim() === "") {
+      console.warn(
+        `[SheetSync] Tender ${params.tenderMergedId} has no referenceNo, skipping CVA parse job`,
+      );
+      return;
+    }
+    const { file_type, decrypted_fileId } = describeTenderFile(params.file);
+    if (!decrypted_fileId) {
+      console.warn(
+        `[SheetSync] No decrypted file id for costing of tender ${params.tenderMergedId}, skipping CVA parse job`,
+      );
+      return;
+    }
+    const ok = await publishTenderParsingTask({
+      type: "COSTING_ATTACHMENT_PARSING",
+      tenderId: params.tenderMergedId,
+      referenceNo: params.referenceNo,
+      file_link: params.file.url ?? "",
+      file_type,
+      decrypted_fileId,
+      timestamp: Date.now(),
+    });
+    if (!ok) {
+      console.warn(
+        `[SheetSync] Failed to publish CVA parse job for tender ${params.tenderMergedId}`,
+      );
+    } else {
+      console.log(
+        `[SheetSync] Published CVA parse job for tender ${params.tenderMergedId} (referenceNo="${params.referenceNo}", file_type="${file_type}", decrypted_fileId="${decrypted_fileId}")`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[SheetSync] Error publishing CVA parse job for tender ${params.tenderMergedId}: ${(err as Error).message}`,
+    );
+  }
+}
+
 export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   const summary = {
     total: 0,
@@ -247,7 +354,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   const sheetService = new GoogleSheetService();
   let records: EpcTenderRecord[];
   try {
-    records = await sheetService.fetchTenderRecords();
+    records = await sheetService.fetchTenderRecords({ onlyTendersMissingCosting: true });
   } catch (e) {
     throw new Error(`Failed to fetch sheet data: ${(e as Error).message}`);
   }
@@ -346,6 +453,11 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
         url: urlStr,
         tenderMergedId: mergedId,
       });
+      await publishCostingParsingJob({
+        tenderMergedId: mergedId,
+        referenceNo: refNo,
+        file: { source: "SHEET_SYNC", url: urlStr },
+      });
     }
   }
   summary.created = costingCount;
@@ -354,8 +466,15 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   try {
     const folderIndex = await getNetworkFolderIndex();
     const networkTenders = await prisma.tenderMerged.findMany({
-      where: { docketNo: { not: null } },
-      select: { id: true, docketNo: true },
+      where: {
+        docketNo: { not: null },
+        NOT: {
+          tenderFiles: {
+            some: { tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT } },
+          },
+        },
+      },
+      select: { id: true, docketNo: true, referenceNo: true },
     });
 
     const matchedTenders = networkTenders.filter((tm) => {
@@ -418,6 +537,17 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
                 tenderMergedId: tm.id,
               },
             });
+
+            if (isCostingFile) {
+              await publishCostingParsingJob({
+                tenderMergedId: tm.id,
+                referenceNo: tm.referenceNo ?? undefined,
+                file: {
+                  source: encryptRelativePath("costing", relativePath),
+                  url: relativePath,
+                },
+              });
+            }
           }
         }),
       );
@@ -557,6 +687,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
       reportings: true,
       evaluations: true,
       tenderFiles: true,
+      CostingSheetDetails: { select: { itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true } },
     },
   });
 

@@ -25,6 +25,23 @@ function resolveAssociationNames(
   return names.join(", ");
 }
 
+function parseItemSchedules(val: string | undefined): string[] {
+  if (!val) return [];
+  try {
+    const parsed = JSON.parse(val);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map(String)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  } catch {}
+  return val
+    .split(/[\n,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTenderRecord[] {
   if (!tenderData) return [];
   return tenderData.rows.map((row, index) => ({
@@ -86,6 +103,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     rawMaterials: row.rawMaterials || undefined,
     statusCategory: row.statusCategory as StatusCategory | undefined,
     itemCategory: row.itemCategory || null,
+    itemSchedules: parseItemSchedules(row.itemSchedules),
     competitors: row.competitors || null,
     fileCount: undefined,
     hasBoqChart: undefined,
@@ -101,7 +119,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     nextAction: (row.nextAction || null) as NextAction | null,
     quotationNo: row.quotationNo || null,
     contractNo: row.contractNo || null,
-    cva: null,
+    cva: row.cva || undefined,
     officeName: row.officeName || "",
     consigneesReportingOfficer: row.consigneesReportingOfficer || "",
     miiPurchasePreference: row.miiPurchasePreference || null,

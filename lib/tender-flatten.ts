@@ -41,13 +41,20 @@ export interface FlatRow {
   reportings?: string;
   evaluations?: string;
   tenderFiles?: string;
+  itemSchedules?: string;
+  costingDetails?: string;
   assignedDate?: string;
   [key: string]: string | undefined;
 }
 
+function formatQty(val: number): string {
+  if (!isFinite(val)) return "0";
+  return String(Math.round(val * 1000) / 1000);
+}
+
 export const SKIP_RELATION_FIELDS = new Set([
   "extraFields", "tenderAssociations", "reportings", "evaluations",
-  "tenderFiles", "file", "tenderStatus", "utilityMapping",
+  "tenderFiles", "file", "tenderStatus", "utilityMapping", "CostingSheetDetails",
 ]);
 
 export function flattenTender(
@@ -110,6 +117,63 @@ export function flattenTender(
     row.evaluations = JSON.stringify(evaluations);
   } else {
     row.evaluations = "";
+  }
+
+  const costingDetailsVal = tender["CostingSheetDetails"];
+  if (Array.isArray(costingDetailsVal) && costingDetailsVal.length > 0) {
+    row.costingDetails = JSON.stringify(costingDetailsVal);
+    const schedules = Array.from(
+      new Set(
+        costingDetailsVal
+          .map((c) => (c as { itemSchedule?: string | null })?.itemSchedule)
+          .filter((s): s is string => s != null && s.trim() !== ""),
+      ),
+    );
+    row.itemSchedules = JSON.stringify(schedules);
+
+    const byName = new Map<string, { qty: number; count: number; numeric: boolean }>();
+    for (const c of costingDetailsVal) {
+      const detail = c as { proposedErpItemName?: string | null; proposedErpQuantity?: string | null };
+      const name = detail.proposedErpItemName?.trim();
+      if (!name) continue;
+      const qtyNum = parseFloat(detail.proposedErpQuantity ?? "");
+      const entry = byName.get(name) ?? { qty: 0, count: 0, numeric: false };
+      if (!isNaN(qtyNum)) {
+        entry.qty += qtyNum;
+        entry.numeric = true;
+      }
+      entry.count += 1;
+      byName.set(name, entry);
+    }
+    row.proposedErpItemName =
+      byName.size > 0 ? JSON.stringify(Array.from(byName.keys())) : "";
+    row.proposedErpQuantity =
+      byName.size > 0
+        ? JSON.stringify(
+            Array.from(byName.entries()).map(([name, { qty, count, numeric }]) =>
+              numeric
+                ? count > 1
+                  ? `${name} (${count}) - ${formatQty(qty)}`
+                  : `${name} - ${formatQty(qty)}`
+                : name,
+            ),
+          )
+        : "";
+
+    const cvaValues = Array.from(
+      new Set(
+        costingDetailsVal
+          .map((c) => (c as { cva?: string | null })?.cva)
+          .filter((s): s is string => s != null && s.trim() !== ""),
+      ),
+    );
+    row.cva = cvaValues.length > 0 ? JSON.stringify(cvaValues) : "";
+  } else {
+    row.costingDetails = "";
+    row.itemSchedules = "";
+    row.proposedErpItemName = "";
+    row.proposedErpQuantity = "";
+    row.cva = "";
   }
 
   return row;

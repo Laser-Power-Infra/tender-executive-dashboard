@@ -216,10 +216,33 @@ export const updateTenderDecision = withLog(
 export const updateDocketNumber = withLog(
   async (params: { tenderMergedId: number; docketNo: string }) => {
     console.log(`[action:updateDocketNumber] called with:`, params);
+    const docketNo = params.docketNo.trim();
+
+    if (docketNo) {
+      if (!/^ENQ-\d+-(\d{2}|\d{4})-\1$/i.test(docketNo)) {
+        throw new Error(
+          'Docket No must match format ENQ-{number}-{year}-{year} (e.g., ENQ-12345-2026-2026).',
+        );
+      }
+
+      const existing = await prisma.tenderMerged.findFirst({
+        where: {
+          docketNo: { equals: docketNo, mode: "insensitive" },
+          id: { not: params.tenderMergedId },
+        },
+        select: { id: true, referenceNo: true },
+      });
+      if (existing) {
+        throw new Error(
+          `Docket No "${docketNo}" already exists on tender ${existing.referenceNo ?? existing.id}. Docket numbers must be unique.`,
+        );
+      }
+    }
+
     try {
       const updated = await prisma.tenderMerged.update({
         where: { id: params.tenderMergedId },
-        data: { docketNo: params.docketNo },
+        data: { docketNo },
         select: { id: true, referenceNo: true },
       });
       console.log(

@@ -690,6 +690,21 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
         const accessor = String(col.accessor);
         const label = col.header;
         let val = String(row[accessor as keyof T] ?? "");
+        if (
+          accessor === "itemSchedules" ||
+          accessor === "proposedErpItemName" ||
+          accessor === "proposedErpQuantity" ||
+          accessor === "cva"
+        ) {
+          try {
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed)) {
+              val = parsed.map(String).join(" | ");
+            }
+          } catch {
+            // not JSON, keep raw string
+          }
+        }
         if (accessor === "assignedTo") {
           const ids = (val || "").split(",").filter(Boolean);
           val = ids
@@ -1083,6 +1098,9 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
       };
 
       const accStr = String(col.accessor);
+      if (accStr === "itemSchedules") {
+        return renderStacked(parseJsonOrSplit(value, /\n+/));
+      }
       if (accStr === "proposedErpItemName") {
         return renderStacked(parseJsonOrSplit(value, /\n+/, true));
       }
