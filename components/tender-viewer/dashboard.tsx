@@ -35,7 +35,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, MessageSquare, Pencil, Check, FileText } from "lucide-react";
+import {
+  Loader2,
+  MessageSquare,
+  Pencil,
+  Check,
+  FileText,
+  Lock,
+} from "lucide-react";
 import { getDisplayNameMap } from "@/lib/tender-columns";
 import {
   OptimizedTenderTable,
@@ -785,6 +792,7 @@ export default function Dashboard() {
           },
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
             const val = String(row[col] ?? "");
+            const isAssigned = Boolean(val);
             const rowIndex =
               rowIndexMap.get(`${String(row.type)}-${String(row.id)}`) ?? -1;
             const rowType = String(row.type ?? "");
@@ -792,6 +800,7 @@ export default function Dashboard() {
             return (
               <Select
                 value={val}
+                disabled={isAssigned}
                 onValueChange={(v) => {
                   const ids = v ? [v] : [];
                   handleAssignmentChange(rowIndex, rowType, rowId, ids);
@@ -800,6 +809,11 @@ export default function Dashboard() {
                 <SelectTrigger
                   size="sm"
                   className="assignment-select w-full"
+                  title={
+                    isAssigned
+                      ? "Assignment is locked once a person is allocated"
+                      : undefined
+                  }
                   onClick={(e) => e.stopPropagation()}
                 >
                   <SelectValue placeholder="None">
@@ -816,7 +830,14 @@ export default function Dashboard() {
                           return a?.name;
                         })
                         .filter(Boolean);
-                      return names.length > 0 ? names.join(", ") : "None";
+                      return (
+                        <>
+                          {names.length > 0 ? names.join(", ") : "None"}
+                          {isAssigned && (
+                            <Lock className="size-3.5 shrink-0 text-muted-foreground" />
+                          )}
+                        </>
+                      );
                     }}
                   </SelectValue>
                 </SelectTrigger>

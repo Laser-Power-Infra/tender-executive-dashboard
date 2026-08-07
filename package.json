@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3125",
+    "dev": "npx prisma generate && next dev --port 3125",
     "build": "next build",
     "build-start": "npx prisma generate && next build && next start --port 3126",
     "start": "next start --port 3126",
