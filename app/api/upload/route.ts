@@ -21,6 +21,13 @@ const SHEET_CONCURRENCY = 3;
 const INSERT_BATCH_SIZE = 50;
 const TX_TIMEOUT = 10 * 60 * 1000;
 
+const OVERWRITE_FIELDS = new Set([
+  "nameOfRank1", "valueOfRank1", "differenceBetweenRank1",
+  "nameOfRank2", "valueOfRank2", "differenceBetweenRank2",
+  "ourRank", "ourValue",
+]);
+const COMPETITORS_SEPARATOR = " - ";
+
 interface SheetResult {
   sheetName: string;
   count: number;
@@ -281,6 +288,32 @@ async function insertTenderMerged(
 
       for (const [key, value] of Object.entries(p.createData)) {
         if (SKIP_KEYS.has(key)) continue;
+
+        if (key === "competitors") {
+          const newValue = String(value).trim();
+          if (newValue) {
+            const existing = (old.competitors ?? "").toString().trim();
+            const seen = new Set(
+              existing
+                ? existing.split(COMPETITORS_SEPARATOR).map((s) => s.trim()).filter(Boolean)
+                : [],
+            );
+            if (!seen.has(newValue)) {
+              updateData.competitors = existing
+                ? `${existing}${COMPETITORS_SEPARATOR}${newValue}`
+                : newValue;
+            }
+          }
+          continue;
+        }
+
+        if (OVERWRITE_FIELDS.has(key)) {
+          if (value != null && value !== "") {
+            updateData[key] = value;
+          }
+          continue;
+        }
+
         const oldVal = (old as any)[key];
         if ((oldVal == null || oldVal === "") && value != null && value !== "") {
           updateData[key] = value;
@@ -316,6 +349,13 @@ async function insertTenderMerged(
         webhookQueue.push(old.referenceNo);
       }
     } else {
+      const hasBrief =
+        p.createData.tenderBrief != null &&
+        String(p.createData.tenderBrief).trim() !== "";
+      if (!hasBrief) {
+        console.log(`[SKIP] ${p.refNo} - missing tender brief`);
+        continue;
+      }
       if (seenRefs.has(p.refNo)) {
         console.log(`[SKIP] Duplicate refNo in same batch: ${p.refNo}`);
         continue;

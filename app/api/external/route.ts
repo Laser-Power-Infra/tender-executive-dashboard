@@ -15,12 +15,19 @@ function isAuthorized(req: NextRequest): boolean {
 const TENDER_MERGED_SELECT = {
   referenceNo: true,
   docketNo: true,
-  proposedErpItemName: true,
-  proposedErpQuantity: true,
-  cva: true,
   rawMaterials: true,
   price: true,
   applicableIndex: true,
+  CostingSheetDetails: {
+    select: {
+      itemSchedule: true,
+      proposedErpItemName: true,
+      proposedErpQuantity: true,
+      cva: true,
+      priceOfFullQuantity: true,
+      location: true,
+    },
+  },
 } as const;
 
 type TenderMergedSummary = Awaited<
@@ -29,9 +36,6 @@ type TenderMergedSummary = Awaited<
 
 const RESPONSE_FIELDS = [
   "referenceNo",
-  "proposedErpItemName",
-  "proposedErpQuantity",
-  "cva",
   "rawMaterials",
   "price",
   "applicableIndex",
@@ -48,6 +52,9 @@ async function lookupTenders(identifiers: string[]) {
       select: TENDER_MERGED_SELECT,
     }),
   ])) as [TenderMergedSummary[], TenderMergedSummary[]];
+
+
+  console.log(docketRows.find(d=>d.docketNo?.includes("20443")))
 
   const mergedByRef = new Map<string, TenderMergedSummary>();
   for (const row of [...refRows, ...docketRows]) {
@@ -67,6 +74,7 @@ async function lookupTenders(identifiers: string[]) {
     for (const field of RESPONSE_FIELDS) {
       summary[field] = row[field];
     }
+    summary.costingSheetDetails = row.CostingSheetDetails;
     return summary;
   });
 
@@ -82,7 +90,7 @@ const lookupTendersWithLog = withLog(
   (result, identifiers) => ({
     action: "READ",
     tableName: "TenderMerged",
-    details: `External lookup of ${identifiers.length} identifiers (${result.tenders.length} found, ${result.notFound.length} not found)`,
+    details: `External lookup of ${identifiers.length} identifiers (${result.tenders.length} found, ${result.notFound.length} not found) with costing sheet details`,
   }),
 );
 

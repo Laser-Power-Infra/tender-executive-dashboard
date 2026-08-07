@@ -5,9 +5,12 @@ import { sendTenderWebhook } from "@/lib/webhook";
 import { withLog, logActivity } from "@/lib/activity-logger";
 import {
   triggerEmdPaymentWebhook,
-  EMD_VALID_VALUES,
+  resolveEmdAttachment,
 } from "@/lib/integrations/n8n";
+import type { EmdWebhookAttachment } from "@/lib/integrations/n8n";
 import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
+import { auth } from "@/auth";
+import { format } from "date-fns";
 
 export async function updateTenderAssignmentsAction(params: {
   tenderMergedId: number;
@@ -501,20 +504,41 @@ export async function updateBeneficiaryBankDetails(params: {
 type EmdPayloadSelect = {
   emdPaymentMode: string | null;
   referenceNo: string | null;
-  proposedErpItemName: string | null;
-  proposedErpQuantity: string | null;
   deadline: Date | null;
   documentFees: string | null;
   emd: string | null;
+  docketNo: string | null;
+  tenderBrief: string | null;
+  tenderOpeningDate: Date | null;
+  remarks: string | null;
+  beneficiaryBankDetails: string | null;
+  CostingSheetDetails: {
+    itemSchedule: string | null;
+    proposedErpItemName: string | null;
+    proposedErpQuantity: string | null;
+  }[];
+  tenderFiles: {
+    name: string;
+    extension: string;
+    url: string;
+    source: string;
+    tags: string[];
+  }[];
 };
 
 function validateEmdPayloadData(record: EmdPayloadSelect) {
   const missing: string[] = [];
 
   if (!record.referenceNo) missing.push("Reference No.");
-  if (!record.proposedErpItemName) missing.push("Proposed ERP Item Name");
-  if (!record.proposedErpQuantity || Number(record.proposedErpQuantity) <= 0)
-    missing.push("Proposed ERP Quantity");
+  const hasItemName = (record.CostingSheetDetails ?? []).some(
+    (c) => c.proposedErpItemName && c.proposedErpItemName.trim() !== "",
+  );
+  if (!hasItemName) missing.push("Proposed ERP Item Name");
+  const hasValidQuantity = (record.CostingSheetDetails ?? []).some((c) => {
+    const qty = parseFloat(c.proposedErpQuantity ?? "");
+    return !isNaN(qty) && qty > 0;
+  });
+  if (!hasValidQuantity) missing.push("Proposed ERP Quantity");
   if (!record.deadline) missing.push("Last Date of Submission");
   if (!record.documentFees || Number(record.documentFees) <= 0)
     missing.push("Document Fee");
@@ -530,21 +554,36 @@ export async function updateTenderMergedStringField(params: {
 }) {
   const { tenderMergedId, field, value } = params;
 
-  if (
-    field === "emdPaymentMode" &&
-    value &&
-    (EMD_VALID_VALUES as readonly string[]).includes(value)
-  ) {
+  if (field === "emdPaymentMode" && value && value.trim() !== "") {
     const current = await prisma.tenderMerged.findUnique({
       where: { id: tenderMergedId },
       select: {
         emdPaymentMode: true,
         referenceNo: true,
-        proposedErpItemName: true,
-        proposedErpQuantity: true,
         deadline: true,
         documentFees: true,
         emd: true,
+        docketNo: true,
+        tenderBrief: true,
+        tenderOpeningDate: true,
+        remarks: true,
+        beneficiaryBankDetails: true,
+        CostingSheetDetails: {
+          select: {
+            itemSchedule: true,
+            proposedErpItemName: true,
+            proposedErpQuantity: true,
+          },
+        },
+        tenderFiles: {
+          select: {
+            name: true,
+            extension: true,
+            url: true,
+            source: true,
+            tags: true,
+          },
+        },
       },
     });
 
@@ -573,17 +612,51 @@ export async function updateTenderMergedStringField(params: {
     });
 
     try {
-      await triggerEmdPaymentWebhook({
-        referenceNo: current.referenceNo ?? "",
-        proposedErpItemName: current.proposedErpItemName ?? "",
-        proposedErpQuantity: current.proposedErpQuantity
-          ? Number(current.proposedErpQuantity)
-          : 0,
-        lastDateOfSubmission: current.deadline?.toISOString() ?? "",
-        documentFee: current.documentFees ? Number(current.documentFees) : 0,
-        emdAmount: current.emd ? Number(current.emd) : 0,
-        emdPaymentMode: value,
-      });
+      const itemList = (current.CostingSheetDetails ?? [])
+        .filter((c) => c.proposedErpItemName && c.proposedErpItemName.trim() !== "")
+        .map((c, index) => ({
+          sl: index + 1,
+          name: c.proposedErpItemName,
+          qty: c.proposedErpQuantity ?? null,
+          unit: null,
+        }));
+
+      const tenderDocument = current.tenderFiles.find((f) =>
+        f.tags.includes(TENDER_FILE_TYPES.TENDER_DOCUMENT),
+      );
+
+      const attachments: EmdWebhookAttachment[] = [];
+      if (tenderDocument) {
+        const resolved = await resolveEmdAttachment(tenderDocument);
+        if (resolved) attachments.push(resolved);
+      }
+
+      const session = await auth();
+
+      await triggerEmdPaymentWebhook(
+        {
+          tenderEnquiryNo: current.docketNo ?? "",
+          tenderReferenceNo: current.referenceNo ?? "",
+          itemDescription: null,
+          itemList,
+          bidSubmissionEndDate: current.deadline
+            ? format(current.deadline, "yyyy-MM-dd")
+            : null,
+          tenderFeeLastDate: null,
+          tenderFee: null,
+          bank: { bankName: current.beneficiaryBankDetails ?? null },
+          emdAmount: current.emd ?? null,
+          bgValidityDays: null,
+          bgInstructions: "In the form of BG / Online NEFT / RTGS transfer only.",
+          hardCopySubmissionDate: null,
+          remarks: null,
+          hasAttachments: !!tenderDocument,
+          senderName: session?.user?.name ?? "",
+          senderDesignation: null,
+          companyName: null,
+        },
+        attachments,
+      );
     } catch (error) {
       console.error("[EMD Webhook] Failed to trigger webhook:", error);
     }

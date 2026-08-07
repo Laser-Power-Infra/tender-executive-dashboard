@@ -17,12 +17,13 @@ const links = [
   { href: "/tenders", label: "Tenders" },
   { href: "/", label: "Pre Participation" },
   { href: "/post-participation", label: "Post Participation" },
-  { href: "/supply-history", label: "Supply History Dashboard" },
   {
     href: "/not-participated",
     label: "Not Participated",
   },
+  { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/activity", label: "Activity" },
+  { href: "/sop", label: "SOP" },
   { href: "/merge-conflict", label: "Merge Conflict" },
 ];
 

@@ -1,37 +1,180 @@
 import "server-only"
 import { z } from "zod"
+import fs from "fs"
+import path from "path"
+import { describeTenderFile } from "@/lib/tenderFileDescriptor"
 
-export interface EmdWebhookPayload {
-  referenceNo: string
-  proposedErpItemName: string
-  proposedErpQuantity: number
-  lastDateOfSubmission: string
-  documentFee: number
-  emdAmount: number
-  emdPaymentMode: string
+export interface EmdWebhookItem {
+  sl: number
+  name: string | null
+  qty: string | null
+  unit: string | null
 }
 
-export const EMD_VALID_VALUES = ["Draft", "Online", "Bank Guarantee"] as const
+export interface EmdWebhookBank {
+  accountName?: string | null
+  bankName?: string | null
+  accountNo?: string | null
+  ifsc?: string | null
+}
 
-export async function triggerEmdPaymentWebhook(payload: EmdWebhookPayload) {
+export interface EmdWebhookPayload {
+  tenderEnquiryNo: string
+  tenderReferenceNo: string
+  itemDescription: string | null
+  itemList: EmdWebhookItem[]
+  bidSubmissionEndDate: string | null
+  tenderFeeLastDate: string | null
+  tenderFee: string | null
+  bank: EmdWebhookBank
+  emdAmount: string | null
+  bgValidityDays: number | null
+  bgInstructions: string | null
+  hardCopySubmissionDate: string | null
+  remarks: string | null
+  hasAttachments: boolean
+  senderName: string
+  senderDesignation: string | null
+  companyName: string | null
+}
+
+export interface EmdWebhookAttachment {
+  buffer: Buffer
+  filename: string
+}
+
+export interface EmdWebhookAttachmentFile {
+  source: string | null
+  url: string | null
+  name: string
+  extension: string
+}
+
+function resolveNetworkFilePath(decrypted: string): string {
+  const pipeIdx = decrypted.indexOf("|")
+  if (pipeIdx === -1) {
+    const supplyRoot = process.env.SUPPLY_NETWORK_PATH
+    const driveMatch = decrypted.match(/^[a-zA-Z]:\\/)
+    if (supplyRoot && driveMatch) {
+      return path.resolve(
+        supplyRoot.replace(/\\+$/, "") + "\\" + decrypted.substring(3),
+      )
+    }
+    return path.resolve(decrypted)
+  }
+  const type = decrypted.slice(0, pipeIdx)
+  const relative = decrypted.slice(pipeIdx + 1)
+  let base: string
+  if (type === "condutor") {
+    base = process.env.CONDUTOR_PATH ?? ""
+  } else {
+    base = process.env.INDEXER_NETWORK_PATH ?? ""
+  }
+  if (!base) throw new Error(`Unable to resolve base path for type "${type}"`)
+  return path.resolve(path.join(base, relative))
+}
+
+export async function resolveEmdAttachment(
+  file: EmdWebhookAttachmentFile,
+): Promise<{ buffer: Buffer; filename: string } | null> {
+  const filename =
+    file.name + (file.extension ? `.${file.extension}` : "")
+
+  try {
+    const descriptor = describeTenderFile(file)
+
+    if (descriptor.file_type === "network") {
+      const absolutePath = resolveNetworkFilePath(descriptor.decrypted_fileId)
+      if (!fs.existsSync(absolutePath)) {
+        console.warn(`[n8n] Attachment not found on disk: ${absolutePath}`)
+        return null
+      }
+      const buffer = await fs.promises.readFile(absolutePath)
+      return { buffer, filename }
+    }
+
+    const response = await fetch(descriptor.decrypted_fileId)
+    if (!response.ok) {
+      console.warn(
+        `[n8n] Attachment fetch returned ${response.status}: ${descriptor.decrypted_fileId}`,
+      )
+      return null
+    }
+    const buffer = Buffer.from(await response.arrayBuffer())
+    return { buffer, filename }
+  } catch (error) {
+    console.warn(`[n8n] Failed to resolve attachment "${filename}":`, error)
+    return null
+  }
+}
+
+function appendFormField(
+  formData: FormData,
+  key: string,
+  value: string | number | boolean | null,
+): void {
+  formData.append(key, value == null ? "" : String(value))
+}
+
+export async function triggerEmdPaymentWebhook(
+  payload: EmdWebhookPayload,
+  attachments: EmdWebhookAttachment[] = [],
+) {
   const url = process.env.N8N_EMD_WEBHOOK_URL
   if (!url) {
     console.warn("[n8n] N8N_EMD_WEBHOOK_URL not configured, skipping webhook")
     return
   }
 
-  console.log(`EMD webhook triggered for referenceNo ${payload.referenceNo}`)
+  console.log(`EMD webhook triggered for referenceNo ${payload.tenderReferenceNo}`)
 
   if (process.env.ENVIRONMENT !== "PROD") {
     console.log("[n8n] EMD webhook payload:", JSON.stringify(payload, null, 2))
   }
 
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
+    let response: Response
+
+    if (payload.hasAttachments && attachments.length > 0) {
+      const formData = new FormData()
+      appendFormField(formData, "tenderEnquiryNo", payload.tenderEnquiryNo)
+      appendFormField(formData, "tenderReferenceNo", payload.tenderReferenceNo)
+      appendFormField(formData, "itemDescription", payload.itemDescription)
+      formData.append("itemList", JSON.stringify(payload.itemList))
+      appendFormField(formData, "bidSubmissionEndDate", payload.bidSubmissionEndDate)
+      appendFormField(formData, "tenderFeeLastDate", payload.tenderFeeLastDate)
+      appendFormField(formData, "tenderFee", payload.tenderFee)
+      formData.append("bank", JSON.stringify(payload.bank))
+      appendFormField(formData, "emdAmount", payload.emdAmount)
+      appendFormField(formData, "bgValidityDays", payload.bgValidityDays)
+      appendFormField(formData, "bgInstructions", payload.bgInstructions)
+      appendFormField(formData, "hardCopySubmissionDate", payload.hardCopySubmissionDate)
+      appendFormField(formData, "remarks", payload.remarks)
+      appendFormField(formData, "hasAttachments", payload.hasAttachments)
+      appendFormField(formData, "senderName", payload.senderName)
+      appendFormField(formData, "senderDesignation", payload.senderDesignation)
+      appendFormField(formData, "companyName", payload.companyName)
+
+      for (const attachment of attachments) {
+        const { buffer } = attachment
+        const arrayBuffer = buffer.buffer.slice(
+          buffer.byteOffset,
+          buffer.byteOffset + buffer.byteLength,
+        ) as ArrayBuffer
+        formData.append("attachments", new Blob([arrayBuffer]), attachment.filename)
+      }
+
+      response = await fetch(url, {
+        method: "POST",
+        body: formData,
+      })
+    } else {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    }
 
     console.log(`[n8n] EMD webhook response status: ${response.status}`)
 
