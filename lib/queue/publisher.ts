@@ -63,3 +63,14 @@ export async function publishNonGemBoqParsingTask(
 ): Promise<boolean> {
   return publishToQueue(QUEUES.TENDER_PARSING, payload);
 }
+
+export type GemPdfParsingPayload = {
+  type: "GEM_PDF_PARSING";
+  referenceNo: string;
+};
+
+export async function publishGemPdfParsingTask(
+  payload: GemPdfParsingPayload,
+): Promise<boolean> {
+  return publishToQueue(QUEUES.TENDER_PARSING, payload);
+}

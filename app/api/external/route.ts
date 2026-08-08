@@ -7,13 +7,14 @@ export const runtime = "nodejs";
 const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || "dhinchakpuja";
 
 function isAuthorized(req: NextRequest): boolean {
-  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const bearer =
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   const apiKey = req.headers.get("x-api-key") ?? "";
   return bearer === EXTERNAL_API_KEY || apiKey === EXTERNAL_API_KEY;
 }
 
 const TENDER_MERGED_SELECT = {
-  referenceNo: true,
+  id: true,
   docketNo: true,
   rawMaterials: true,
   price: true,
@@ -31,42 +32,33 @@ const TENDER_MERGED_SELECT = {
 } as const;
 
 type TenderMergedSummary = Awaited<
-  ReturnType<typeof prisma.tenderMerged.findMany<{ select: typeof TENDER_MERGED_SELECT }>>
+  ReturnType<
+    typeof prisma.tenderMerged.findMany<{ select: typeof TENDER_MERGED_SELECT }>
+  >
 >[number];
 
 const RESPONSE_FIELDS = [
-  "referenceNo",
+  "docketNo",
   "rawMaterials",
   "price",
   "applicableIndex",
 ] as const;
 
 async function lookupTenders(identifiers: string[]) {
-  const [refRows, docketRows] = (await Promise.all([
-    prisma.tenderMerged.findMany({
-      where: { referenceNo: { in: identifiers } },
-      select: TENDER_MERGED_SELECT,
-    }),
-    prisma.tenderMerged.findMany({
-      where: { docketNo: { in: identifiers } },
-      select: TENDER_MERGED_SELECT,
-    }),
-  ])) as [TenderMergedSummary[], TenderMergedSummary[]];
+  const docketRows = await prisma.tenderMerged.findMany({
+    where: { docketNo: { in: identifiers } },
+    select: TENDER_MERGED_SELECT,
+  });
 
+  const seen = new Set<number>();
+  const rows = docketRows.filter((row) => {
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
+    return true;
+  });
 
-  console.log(docketRows.find(d=>d.docketNo?.includes("20443")))
-
-  const mergedByRef = new Map<string, TenderMergedSummary>();
-  for (const row of [...refRows, ...docketRows]) {
-    if (!mergedByRef.has(row.referenceNo)) mergedByRef.set(row.referenceNo, row);
-  }
-  const rows = [...mergedByRef.values()];
-
-  const matchedRefNos = new Set(refRows.map((row) => row.referenceNo));
   const matchedDocketNos = new Set(
-    docketRows
-      .map((row) => row.docketNo)
-      .filter((d): d is string => !!d),
+    docketRows.map((row) => row.docketNo).filter((d): d is string => !!d),
   );
 
   const tenders = rows.map((row) => {
@@ -78,21 +70,16 @@ async function lookupTenders(identifiers: string[]) {
     return summary;
   });
 
-  const notFound = identifiers.filter(
-    (id) => !matchedRefNos.has(id) && !matchedDocketNos.has(id),
-  );
+  const notFound = identifiers.filter((id) => !matchedDocketNos.has(id));
 
   return { tenders, notFound };
 }
 
-const lookupTendersWithLog = withLog(
-  lookupTenders,
-  (result, identifiers) => ({
-    action: "READ",
-    tableName: "TenderMerged",
-    details: `External lookup of ${identifiers.length} identifiers (${result.tenders.length} found, ${result.notFound.length} not found) with costing sheet details`,
-  }),
-);
+const lookupTendersWithLog = withLog(lookupTenders, (result, identifiers) => ({
+  action: "READ",
+  tableName: "TenderMerged",
+  details: `External lookup of ${identifiers.length} identifiers (${result.tenders.length} found, ${result.notFound.length} not found) with costing sheet details`,
+}));
 
 export async function POST(req: NextRequest) {
   if (!isAuthorized(req)) {
@@ -128,5 +115,6 @@ export async function POST(req: NextRequest) {
   }
 
   const { tenders, notFound } = await lookupTendersWithLog(normalized);
+  console.log(tenders)
   return NextResponse.json({ tenders, notFound });
 }

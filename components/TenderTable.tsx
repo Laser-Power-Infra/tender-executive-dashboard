@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import * as XLSX from "xlsx";
 import MergedOfficeEditDialog from "./MergedOfficeEditDialog";
 import WebsiteEditDialog from "./tender-viewer/website-edit-dialog";
 import ReportingOfficersEditDialog from "./ReportingOfficersEditDialog";
@@ -2110,95 +2111,52 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   };
 
   const handleExportExcel = () => {
-    // Generates a well-formed HTML Table formatted spreadsheet that Microsoft Excel parses cleanly
-    const tableHeader = visibleColumns
-      .map(
-        (c) =>
-          `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;">${c.header}</th>`,
-      )
-      .join("");
-    const tableRows = processedRecords
-      .map((rec) => {
-        const cells = visibleColumns
-          .map((col) => {
-            let val: any;
-            if (col.accessor === "rawMaterials") {
-              const activeRates = [
-                { label: "Al", price: rec.aluminiumPrice },
-                { label: "Al Alloy", price: rec.aluminiumAlloyPrice },
-                { label: "Cu", price: rec.copperTapePrice },
-                { label: "Semicon", price: rec.extrudedSemiconductivePrice },
-                { label: "XLPE", price: rec.htXlpePrice },
-                { label: "ST-2", price: rec.pvcTypeSt2Price },
-                { label: "Steel", price: rec.galvanisedSteelFlatStripPrice },
-                { label: "Filler", price: rec.fillerPrice },
-              ].filter(
-                (m) =>
-                  m.price !== null && m.price !== undefined && m.price !== 0,
-              );
-              val = activeRates
-                .map((m) => `${m.label}: ${m.price}`)
-                .join(" | ");
-            } else if (col.accessor === "itemSchedules") {
-              val = (rec.itemSchedules ?? []).join(" | ");
-            } else if (col.accessor === "proposedErpItemName" || col.accessor === "proposedErpQuantity" || col.accessor === "cva") {
-              val = parseListValue(rec[col.accessor as keyof EpcTenderRecord] as string | undefined);
-            } else {
-              val = rec[col.accessor as keyof EpcTenderRecord];
-            }
-            if (val === null || val === undefined) return "<td></td>";
-            if (val instanceof Date)
-              return `<td>${val.toLocaleDateString("en-GB")}</td>`;
-            if (col.type === "currency")
-              return `<td style="text-align:right;">${val}</td>`;
-            if (col.type === "percentage")
-              return `<td style="text-align:right;">${((val as number) * 100).toFixed(1)}%</td>`;
-            return `<td>${String(val)}</td>`;
-          })
-          .join("");
-        return `<tr>${cells}</tr>`;
-      })
-      .join("");
+    const exportData = processedRecords.map((rec) => {
+      const obj: Record<string, string | number> = {};
+      for (const col of visibleColumns) {
+        let val: any;
+        if (col.accessor === "rawMaterials") {
+          const activeRates = [
+            { label: "Al", price: rec.aluminiumPrice },
+            { label: "Al Alloy", price: rec.aluminiumAlloyPrice },
+            { label: "Cu", price: rec.copperTapePrice },
+            { label: "Semicon", price: rec.extrudedSemiconductivePrice },
+            { label: "XLPE", price: rec.htXlpePrice },
+            { label: "ST-2", price: rec.pvcTypeSt2Price },
+            { label: "Steel", price: rec.galvanisedSteelFlatStripPrice },
+            { label: "Filler", price: rec.fillerPrice },
+          ].filter(
+            (m) =>
+              m.price !== null && m.price !== undefined && m.price !== 0,
+          );
+          val = activeRates
+            .map((m) => `${m.label}: ${m.price}`)
+            .join(" | ");
+        } else if (col.accessor === "itemSchedules") {
+          val = (rec.itemSchedules ?? []).join(" | ");
+        } else if (col.accessor === "proposedErpItemName" || col.accessor === "proposedErpQuantity" || col.accessor === "cva") {
+          val = parseListValue(rec[col.accessor as keyof EpcTenderRecord] as string | undefined);
+        } else {
+          val = rec[col.accessor as keyof EpcTenderRecord];
+        }
+        if (val === null || val === undefined) {
+          obj[col.header] = "";
+        } else if (val instanceof Date) {
+          obj[col.header] = val.toLocaleDateString("en-GB");
+        } else if (col.type === "percentage") {
+          obj[col.header] = `${((val as number) * 100).toFixed(1)}%`;
+        } else {
+          obj[col.header] = String(val);
+        }
+      }
+      return obj;
+    });
 
-    const excelHtml = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta http-equiv="Content-type" content="text/html;charset=utf-8" />
-        <!--[if gte o4 9]>
-        <xml>
-          <x:ExcelWorkbook>
-            <x:ExcelWorksheets>
-              <x:ExcelWorksheet>
-                <x:Name>Tenders</x:Name>
-                <x:WorksheetOptions>
-                  <x:DisplayGridlines/>
-                </x:WorksheetOptions>
-              </x:ExcelWorksheet>
-            </x:ExcelWorksheets>
-          </x:ExcelWorkbook>
-        </xml>
-        <![endif]-->
-      </head>
-      <body>
-        <table border="1">
-          <thead><tr>${tableHeader}</tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `Tender_Participation_Data_${new Date().toISOString().split("T")[0]}.xls`,
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Tenders");
+    const date = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `Tender_Participation_Data_${date}.xlsx`);
   };
 
   // Formatting Helper Utilities

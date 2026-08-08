@@ -88,6 +88,29 @@ export const updateTenderAssignments = createAsyncThunk(
   },
 );
 
+export const uploadTenderDocument = createAsyncThunk(
+  "tenders/uploadTenderDocument",
+  async (params: { tenderMergedId: number; file: File; fileType: string }) => {
+    const formData = new FormData();
+    formData.append("file", params.file);
+    formData.append("fileType", params.fileType);
+    const res = await fetch(
+      `/api/executive-tenders/${params.tenderMergedId}/document`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+    return {
+      tenderMergedId: params.tenderMergedId,
+      url: data.url as string,
+      fileType: data.fileType as string,
+    };
+  },
+);
+
 export const updateWebsiteMapping = createAsyncThunk(
   "tenders/updateWebsiteMapping",
   async (params: {
@@ -946,6 +969,20 @@ export const tendersSlice = createSlice({
         const row = state.data.rows.find((r) => Number(r.id) === tenderMergedId);
         if (row) row.website = oldValue;
       }
+    });
+
+    // uploadTenderDocument
+    builder.addCase(uploadTenderDocument.pending, (state, action) => {
+      const key = `${action.meta.arg.tenderMergedId}-tenderDocument`;
+      state.updatingCells[key] = true;
+    });
+    builder.addCase(uploadTenderDocument.fulfilled, (state, action) => {
+      const key = `${action.meta.arg.tenderMergedId}-tenderDocument`;
+      state.updatingCells[key] = false;
+    });
+    builder.addCase(uploadTenderDocument.rejected, (state, action) => {
+      const key = `${action.meta.arg.tenderMergedId}-tenderDocument`;
+      state.updatingCells[key] = false;
     });
 
     // updateTenderMergedField (generic)

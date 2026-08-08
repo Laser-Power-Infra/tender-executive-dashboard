@@ -1,0 +1,44 @@
+services:
+  laser-tender:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laser-tender
+    ports:
+      - "3126:3126"
+    environment:
+      NODE_ENV: production
+      PORT: 3126
+      HOSTNAME: 0.0.0.0
+
+      GOOGLE_CLIENT_EMAIL: ${GOOGLE_CLIENT_EMAIL}
+      GOOGLE_PRIVATE_KEY: ${GOOGLE_PRIVATE_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+
+      SMARTSHEET_API_TOKEN: ${SMARTSHEET_API_TOKEN}
+      SMARTSHEET_SHEET_ID: ${SMARTSHEET_SHEET_ID}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      GDRIVE_CLIENT_EMAIL : ${GDRIVE_CLIENT_EMAIL}
+      GDRIVE_PRIVATE_KEY: ${GDRIVE_PRIVATE_KEY}
+      GOOGLE_SPREADSHEET_ID: ${GOOGLE_SPREADSHEET_ID}
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL}
+
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}
+      N8N_WEBHOOK_URL_TEST: ${N8N_WEBHOOK_URL_TEST}
+
+      ENVIRONMENT: ${ENVIRONMENT}
+      DJANGO_API_KEY: ${DJANGO_API_KEY}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+
+
+      AUTH_SECRET: ${AUTH_SECRET}
+      
+      CONDUTOR_PATH: ${CONDUTOR_PATH}
+
+
+
+
+
+    restart: unless-stopped

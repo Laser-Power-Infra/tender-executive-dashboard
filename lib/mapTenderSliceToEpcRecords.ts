@@ -1,5 +1,5 @@
 import { TenderData } from "@/lib/slices/tendersSlice";
-import { EpcTenderRecord, ManagementDecision, NextAction, StatusCategory } from "@/types/tender";
+import { EpcTenderRecord, ManagementDecision, NextAction, StatusCategory, EMDExchangeMode } from "@/types/tender";
 
 function parseFloatOrNull(val: string | undefined | null): number | null {
   if (val == null || val === "") return null;
@@ -73,7 +73,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
           ? false
           : null,
     reverseAuctionDate: null,
-    emdPaymentMode: null,
+    emdPaymentMode: (row.emdPaymentMode as EMDExchangeMode) || null,
     bgNoUtrNo: row.bgNoUtrNo || null,
     emdValidity: null,
     loiPoNoAndDate: row.loiPoNoAndDate || null,

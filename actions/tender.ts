@@ -512,6 +512,7 @@ type EmdPayloadSelect = {
   tenderOpeningDate: Date | null;
   remarks: string | null;
   beneficiaryBankDetails: string | null;
+  organization: string | null;
   CostingSheetDetails: {
     itemSchedule: string | null;
     proposedErpItemName: string | null;
@@ -568,6 +569,7 @@ export async function updateTenderMergedStringField(params: {
         tenderOpeningDate: true,
         remarks: true,
         beneficiaryBankDetails: true,
+        organization: true,
         CostingSheetDetails: {
           select: {
             itemSchedule: true,
@@ -637,6 +639,7 @@ export async function updateTenderMergedStringField(params: {
         {
           tenderEnquiryNo: current.docketNo ?? "",
           tenderReferenceNo: current.referenceNo ?? "",
+          clientName: current.organization ?? null,
           itemDescription: null,
           itemList,
           bidSubmissionEndDate: current.deadline

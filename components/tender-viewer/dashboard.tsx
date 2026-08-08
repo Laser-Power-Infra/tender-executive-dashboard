@@ -17,6 +17,7 @@ import {
   updateWebsiteMapping,
   bulkAssignUtilityMapping,
   saveFeedbackAndReanalyze,
+  uploadTenderDocument,
 } from "@/lib/slices/tendersSlice";
 import { setExclusionFilter } from "@/lib/slices/filtersSlice";
 import { toast } from "sonner";
@@ -25,6 +26,7 @@ import ConfirmAnalysisDialog from "@/components/tender-viewer/confirm-analysis-d
 import AiFeedbackDialog from "@/components/tender-viewer/ai-feedback-dialog";
 import DashboardSkeleton from "@/components/tender-viewer/dashboard-skeleton";
 import WebsiteEditDialog from "@/components/tender-viewer/website-edit-dialog";
+import TenderDocumentUploadDialog from "@/components/tender-viewer/tender-document-upload-dialog";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +91,10 @@ export default function Dashboard() {
     unknown
   > | null>(null);
   const [websiteEditRow, setWebsiteEditRow] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [documentUploadRow, setDocumentUploadRow] = useState<Record<
     string,
     unknown
   > | null>(null);
@@ -324,6 +330,30 @@ export default function Dashboard() {
         });
     },
     [dispatch],
+  );
+
+  const handleDocumentUpload = useCallback(
+    (params: { tenderMergedId: number; file: File; fileType: string }) => {
+      const toastId = toast.loading("Uploading tender file...");
+      dispatch(
+        uploadTenderDocument({
+          tenderMergedId: params.tenderMergedId,
+          file: params.file,
+          fileType: params.fileType,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          toast.success("Tender file uploaded", { id: toastId });
+          setDocumentUploadRow(null);
+          refreshTenders();
+        })
+        .catch((err: Error) => {
+          toast.error(`Failed: ${err.message}`, { id: toastId });
+          setDocumentUploadRow(null);
+        });
+    },
+    [dispatch, refreshTenders],
   );
 
   const selectFilterOptions = useMemo(() => {
@@ -935,19 +965,43 @@ export default function Dashboard() {
               f.tags?.includes("tenderDocument"),
             );
             const url = docFile?.url ?? "";
+            const isSaving = updatingCellsRef.current[
+              `${row.id}-tenderDocument`
+            ];
 
-            if (!url) return <span className="text-slate-300">-</span>;
             return (
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 border-2 border-rose-500 text-rose-500 px-3 py-1.5 text-xs font-medium  hover:bg-rose-500 hover:text-rose-100 transition-colors mr-auto"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                Show Tender Document
-              </a>
+              <div className="relative group/cell h-full">
+                <div className="flex items-center h-full gap-1.5">
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 border-2 border-rose-500 text-rose-500 px-3 py-1.5 text-xs font-medium hover:bg-rose-500 hover:text-rose-100 transition-colors"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Show Tender Document
+                    </a>
+                  ) : (
+                    <span className="text-slate-300">-</span>
+                  )}
+                  <button
+                    className="opacity-0 group-hover/cell:opacity-100 transition-all w-8 h-8 rounded-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 p-1 shadow-sm cursor-pointer shrink-0"
+                    title="Upload Tender Document"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDocumentUploadRow(row);
+                    }}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    ) : (
+                      <Pencil className="w-4 h-4 text-white" />
+                    )}
+                  </button>
+                </div>
+              </div>
             );
           },
         };
@@ -1651,6 +1705,18 @@ export default function Dashboard() {
             onClose={() => setWebsiteEditRow(null)}
           />
         )}
+        {documentUploadRow && (
+          <TenderDocumentUploadDialog
+            row={documentUploadRow}
+            isSaving={
+              updatingCells[
+                `${documentUploadRow.id}-tenderDocument`
+              ] ?? false
+            }
+            onSave={handleDocumentUpload}
+            onClose={() => setDocumentUploadRow(null)}
+          />
+        )}
       </>
     ),
     [
@@ -1661,10 +1727,12 @@ export default function Dashboard() {
       feedbackRow,
       feedbackSaving,
       websiteEditRow,
+      documentUploadRow,
       updatingCells,
       handleSyncDockets,
       handleSaveFeedback,
       handleWebsiteSave,
+      handleDocumentUpload,
       dispatch,
     ],
   );

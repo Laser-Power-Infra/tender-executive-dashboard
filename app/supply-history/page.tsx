@@ -6,6 +6,7 @@ import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
 // import { Package, RefreshCw, Eraser, ExternalLink, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
 import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText, ExternalLink, Download } from "lucide-react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import {
   Select,
   SelectContent,
@@ -453,51 +454,23 @@ export const SupplyHistoryDashboard: React.FC = () => {
   }, [filtered, triggerDownload]);
 
   const handleExportAndDownload = useCallback(async () => {
-    const blobHtml = (rows: SupplyHistoryRecord[]) => {
-      const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
-      const tableRows = rows.map(rec => {
-        const cells = COLUMNS.map(col => {
-          const val = rec[col.key];
-          if (val === null || val === undefined) return "<td style='border:1px solid #ddd;padding:8px;'></td>";
-          return `<td style='border:1px solid #ddd;padding:8px;'>${String(val)}</td>`;
-        }).join("");
-        return `<tr>${cells}</tr>`;
-      }).join("");
-      return `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-          <meta http-equiv="Content-type" content="text/html;charset=utf-8" />
-          <!--[if gte o4 9]>
-          <xml>
-            <x:ExcelWorkbook>
-              <x:ExcelWorksheets>
-                <x:ExcelWorksheet>
-                  <x:Name>Supply History</x:Name>
-                  <x:WorksheetOptions>
-                    <x:DisplayGridlines/>
-                  </x:WorksheetOptions>
-                </x:ExcelWorksheet>
-              </x:ExcelWorksheets>
-            </x:ExcelWorkbook>
-          </xml>
-          <![endif]-->
-        </head>
-        <body>
-          <table border="1" style="border-collapse:collapse;">
-            <thead><tr>${tableHeader}</tr></thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-        </body>
-        </html>
-      `
-    }
-
     setExportingAll(true)
     const date = new Date().toISOString().split("T")[0]
 
     try {
-      const excelBlob = new Blob([blobHtml(data)], { type: "application/vnd.ms-excel" })
-      triggerDownload(excelBlob, `Supply_History_Data_${date}.xls`)
+      const exportData = data.map((rec) => {
+        const obj: Record<string, string | number | boolean> = {};
+        for (const col of COLUMNS) {
+          obj[col.label] = rec[col.key] ?? "";
+        }
+        return obj;
+      });
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Supply History");
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const excelBlob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      triggerDownload(excelBlob, `Supply_History_Data_${date}.xlsx`)
     } catch (err) {
       console.error("Excel export failed:", err)
       toast.error("Failed to export Excel")
@@ -541,52 +514,18 @@ export const SupplyHistoryDashboard: React.FC = () => {
   }, [data, filtered, triggerDownload])
 
   const handleExportExcel = () => {
-    const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
-    const tableRows = sorted.map(rec => {
-      const cells = COLUMNS.map(col => {
-        const val = rec[col.key];
-        if (val === null || val === undefined) return "<td style='border:1px solid #ddd;padding:8px;'></td>";
-        return `<td style='border:1px solid #ddd;padding:8px;'>${String(val)}</td>`;
-      }).join("");
-      return `<tr>${cells}</tr>`;
-    }).join("");
-
-    const excelHtml = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta http-equiv="Content-type" content="text/html;charset=utf-8" />
-        <!--[if gte o4 9]>
-        <xml>
-          <x:ExcelWorkbook>
-            <x:ExcelWorksheets>
-              <x:ExcelWorksheet>
-                <x:Name>Supply History</x:Name>
-                <x:WorksheetOptions>
-                  <x:DisplayGridlines/>
-                </x:WorksheetOptions>
-              </x:ExcelWorksheet>
-            </x:ExcelWorksheets>
-          </x:ExcelWorkbook>
-        </xml>
-        <![endif]-->
-      </head>
-      <body>
-        <table border="1" style="border-collapse:collapse;">
-          <thead><tr>${tableHeader}</tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Supply_History_Data_${new Date().toISOString().split('T')[0]}.xls`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const exportData = sorted.map((rec) => {
+      const obj: Record<string, string | number | boolean> = {};
+      for (const col of COLUMNS) {
+        obj[col.label] = rec[col.key] ?? "";
+      }
+      return obj;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Supply History");
+    const date = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `Supply_History_Data_${date}.xlsx`);
   };
 
   const pageNumbers = (): (number | "...")[] => {

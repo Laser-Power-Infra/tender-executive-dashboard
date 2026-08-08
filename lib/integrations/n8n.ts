@@ -21,6 +21,7 @@ export interface EmdWebhookBank {
 export interface EmdWebhookPayload {
   tenderEnquiryNo: string
   tenderReferenceNo: string
+  clientName: string | null
   itemDescription: string | null
   itemList: EmdWebhookItem[]
   bidSubmissionEndDate: string | null
@@ -139,6 +140,7 @@ export async function triggerEmdPaymentWebhook(
       const formData = new FormData()
       appendFormField(formData, "tenderEnquiryNo", payload.tenderEnquiryNo)
       appendFormField(formData, "tenderReferenceNo", payload.tenderReferenceNo)
+      appendFormField(formData, "clientName", payload.clientName)
       appendFormField(formData, "itemDescription", payload.itemDescription)
       formData.append("itemList", JSON.stringify(payload.itemList))
       appendFormField(formData, "bidSubmissionEndDate", payload.bidSubmissionEndDate)

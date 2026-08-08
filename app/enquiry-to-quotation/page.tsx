@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useSmartsheetTenders } from "@/hooks/useSmartsheetTenders";
 import { SmartsheetTender } from "@/types/smartsheetTender";
 import { ClipboardList, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, Paperclip } from "lucide-react";
+import * as XLSX from "xlsx";
 import {
   Select,
   SelectContent,
@@ -516,10 +517,9 @@ export const TenderDashboardPage: React.FC = () => {
   const handleRefresh = async () => { setPage(1); await refresh(); };
 
   const handleExportExcel = () => {
-    const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
-    const tableRows = sorted.map(rec => {
-      const cells = COLUMNS.map(col => {
-        let val: any;
+    const exportData = sorted.map(rec => {
+      const obj: Record<string, string | number> = {};
+      for (const col of COLUMNS) {
         if (col.key === "rawMaterials") {
           const activeRates = [
             { label: "Al", price: rec.aluminiumPrice },
@@ -531,52 +531,19 @@ export const TenderDashboardPage: React.FC = () => {
             { label: "Steel", price: rec.galvanisedSteelFlatStripPrice },
             { label: "Filler", price: rec.fillerPrice }
           ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
-          val = activeRates.map(m => `${m.label}: ${m.price}`).join(" | ");
+          obj[col.label] = activeRates.map(m => `${m.label}: ${m.price}`).join(" | ");
         } else {
-          val = rec[col.key];
+          obj[col.label] = rec[col.key] ?? "";
         }
-        if (val === null || val === undefined) return "<td style='border:1px solid #ddd;padding:8px;'></td>";
-        return `<td style='border:1px solid #ddd;padding:8px;'>${String(val)}</td>`;
-      }).join("");
-      return `<tr>${cells}</tr>`;
-    }).join("");
+      }
+      return obj;
+    });
 
-    const excelHtml = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta http-equiv="Content-type" content="text/html;charset=utf-8" />
-        <!--[if gte o4 9]>
-        <xml>
-          <x:ExcelWorkbook>
-            <x:ExcelWorksheets>
-              <x:ExcelWorksheet>
-                <x:Name>Enquiry to Quotation</x:Name>
-                <x:WorksheetOptions>
-                  <x:DisplayGridlines/>
-                </x:WorksheetOptions>
-              </x:ExcelWorksheet>
-            </x:ExcelWorksheets>
-          </x:ExcelWorkbook>
-        </xml>
-        <![endif]-->
-      </head>
-      <body>
-        <table border="1" style="border-collapse:collapse;">
-          <thead><tr>${tableHeader}</tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Enquiry_to_Quotation_Data_${new Date().toISOString().split('T')[0]}.xls`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Enquiry to Quotation");
+    const date = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `Enquiry_to_Quotation_Data_${date}.xlsx`);
   };
 
   const pageNumbers = (): (number | "...")[] => {
