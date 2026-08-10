@@ -12,56 +12,80 @@ import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 import { auth } from "@/auth";
 import { format } from "date-fns";
 
-export async function updateTenderAssignmentsAction(params: {
-  tenderMergedId: number;
-  associationIds: number[];
-}) {
-  await prisma.tenderAssociation.deleteMany({
-    where: { tenderMergedId: params.tenderMergedId },
-  });
-  if (params.associationIds.length > 0) {
-    await prisma.tenderAssociation.createMany({
-      data: params.associationIds.map((associationId) => ({
-        tenderMergedId: params.tenderMergedId,
-        associationId,
-      })),
+export const updateTenderAssignmentsAction = withLog(
+  async (params: {
+    tenderMergedId: number;
+    associationIds: number[];
+  }) => {
+    const existing = await prisma.tenderAssociation.findFirst({
+      where: { tenderMergedId: params.tenderMergedId },
+      select: { id: true },
     });
-  }
-  const tender = await prisma.tenderMerged.findUnique({
-    where: { id: params.tenderMergedId },
-    include: {
-      tenderAssociations: { include: { association: true } },
-      tenderFiles: true,
-    },
-  });
-  if (tender && tender.apm === "YES" && tender.tenderAssociations.length > 0) {
-    const { referenceNo, itemCategory, organization, deadline, tenderFileUrl } =
-      tender;
-
-    console.dir(tender.tenderFiles);
-    sendTenderWebhook(
-      {
+    if (existing) {
+      throw new Error(
+        `Assignment is locked for tender #${params.tenderMergedId} because a person is already assigned`,
+      );
+    }
+    await prisma.tenderAssociation.deleteMany({
+      where: { tenderMergedId: params.tenderMergedId },
+    });
+    if (params.associationIds.length > 0) {
+      await prisma.tenderAssociation.createMany({
+        data: params.associationIds.map((associationId) => ({
+          tenderMergedId: params.tenderMergedId,
+          associationId,
+        })),
+      });
+    }
+    const tender = await prisma.tenderMerged.findUnique({
+      where: { id: params.tenderMergedId },
+      include: {
+        tenderAssociations: { include: { association: true } },
+        tenderFiles: true,
+      },
+    });
+    if (
+      tender &&
+      tender.apm === "YES" &&
+      tender.tenderAssociations.length > 0
+    ) {
+      const {
         referenceNo,
         itemCategory,
         organization,
         deadline,
-        tenderFileUrl:
-          tender.tenderFiles.find((t) =>
-            t.tags.includes(TENDER_FILE_TYPES.TENDER_DOCUMENT),
-          )?.url ?? "",
-      },
-      tender.tenderType === "GEM" ? "Gem" : "Non-Gem",
-      tender.tenderAssociations,
-    );
-  }
-  logActivity({
-    action: "UPDATE",
+        tenderFileUrl,
+      } = tender;
+
+      console.dir(tender.tenderFiles);
+      sendTenderWebhook(
+        {
+          referenceNo,
+          itemCategory,
+          organization,
+          deadline,
+          tenderFileUrl:
+            tender.tenderFiles.find((t) =>
+              t.tags.includes(TENDER_FILE_TYPES.TENDER_DOCUMENT),
+            )?.url ?? "",
+        },
+        tender.tenderType === "GEM" ? "Gem" : "Non-Gem",
+        tender.tenderAssociations,
+      );
+    }
+    return {
+      tenderMergedId: params.tenderMergedId,
+      referenceNo: tender?.referenceNo ?? undefined,
+    };
+  },
+  (result, params) => ({
+    action: "UPDATE" as const,
     tableName: "TenderAssociation",
     recordId: String(params.tenderMergedId),
-    referenceNo: tender?.referenceNo ?? undefined,
+    referenceNo: result.referenceNo,
     details: `Updated assignees for tender #${params.tenderMergedId}: ${params.associationIds.length} association(s)`,
-  });
-}
+  }),
+);
 
 export async function updateTenderUtilityMapping(params: {
   tenderMergedId: number;
@@ -160,7 +184,7 @@ export const bulkAssignUtilityMappingAction = withLog(
 export const updateTenderDecision = withLog(
   async (params: {
     tenderMergedId: number;
-    field: "app" | "aps" | "apm" | "participated";
+    field: "app" | "aps" | "apm" | "participated" | "catalogueDone";
     value: "YES" | "NO" | "NOT_DECIDED" | "true" | "false";
   }) => {
     let data: Record<string, unknown>;

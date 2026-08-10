@@ -3,6 +3,7 @@ export const TENDER_FILE_TYPES = {
   COSTING_ATTACHMENT: "costingAttachment",
   NETWORK_FILES: "networkFiles",
   BOQ_COMPARATIVE_CHART: "boqComparativeChart",
+  CATALOGUE_DOCUMENT: "catalogueDocument",
 } as const;
 
 export type TenderFileType =

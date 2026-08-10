@@ -2,7 +2,7 @@ import "server-only"
 
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
-import { NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 import { cache } from "react"
 
 export const ADMIN_ROLES = ["admin", "developer"] as const
@@ -48,6 +48,20 @@ export async function requireAdminApi() {
 
   if (!ADMIN_ROLES.includes(session.user.role as typeof ADMIN_ROLES[number])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  return null
+}
+
+export async function requireApiKey(req: NextRequest) {
+  const key = process.env.EXTERNAL_API_KEY || "dhinchak"
+
+  const bearer =
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? ""
+  const apiKey = req.headers.get("x-api-key") ?? ""
+
+  if (bearer !== key && apiKey !== key) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   return null

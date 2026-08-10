@@ -107,6 +107,11 @@ export const uploadTenderDocument = createAsyncThunk(
       tenderMergedId: params.tenderMergedId,
       url: data.url as string,
       fileType: data.fileType as string,
+      id: data.id as number,
+      name: data.name as string,
+      extension: data.extension as string,
+      source: data.source as string,
+      tags: data.tags as string[],
     };
   },
 );
@@ -198,7 +203,7 @@ export const updateTenderCell = createAsyncThunk(
   }) => {
     const result = await updateTenderDecision({
       tenderMergedId: params.tenderMergedId,
-      field: params.field as "app" | "aps" | "apm" | "participated",
+      field: params.field as "app" | "aps" | "apm" | "participated" | "catalogueDone",
       value: params.value as "YES" | "NO" | "NOT_DECIDED" | "true" | "false",
     });
     return result;
@@ -979,6 +984,29 @@ export const tendersSlice = createSlice({
     builder.addCase(uploadTenderDocument.fulfilled, (state, action) => {
       const key = `${action.meta.arg.tenderMergedId}-tenderDocument`;
       state.updatingCells[key] = false;
+      if (state.data) {
+        const row = state.data.rows.find(
+          (r) => Number(r.id) === action.meta.arg.tenderMergedId,
+        );
+        if (row) {
+          const files = row.tenderFiles ? JSON.parse(row.tenderFiles) : [];
+          const filtered = Array.isArray(files)
+            ? files.filter(
+                (f: { tags?: string[] }) =>
+                  !f.tags?.includes(action.meta.arg.fileType),
+              )
+            : [];
+          filtered.push({
+            id: action.payload.id,
+            name: action.payload.name,
+            extension: action.payload.extension,
+            url: action.payload.url,
+            source: action.payload.source,
+            tags: [action.meta.arg.fileType],
+          });
+          row.tenderFiles = JSON.stringify(filtered);
+        }
+      }
     });
     builder.addCase(uploadTenderDocument.rejected, (state, action) => {
       const key = `${action.meta.arg.tenderMergedId}-tenderDocument`;

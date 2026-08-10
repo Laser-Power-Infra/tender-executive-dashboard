@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     "pg",
     "smartsheet",
   ],
+  output: "standalone",
   experimental: {
     authInterrupts: true,
   },

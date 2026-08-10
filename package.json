@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3125",
+    "dev": "npx prisma generate && next dev --port 3125",
     "build": "next build",
-    "build-start": "npx prisma generate && next build && next start --port 3126",
-    "start": "next start --port 3126",
+    "build-start": "npx prisma generate && next build && next start --port 3127",
+    "start": "next start --port 3127",
+    "start-prod": "node .next/standalone/server.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postbuild": "cp -R public .next/standalone && cp -R .next/static .next/standalone/.next"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.8",

@@ -99,11 +99,11 @@ async function uploadTenderDocument({ tenderMergedId, fileType, file }: UploadPa
     throw new Error("Google Drive upload failed");
   }
 
-  await prisma.$transaction([
-    prisma.tenderFile.deleteMany({
+  const created = await prisma.$transaction(async (tx) => {
+    await tx.tenderFile.deleteMany({
       where: { tenderMergedId, tags: { has: fileType } },
-    }),
-    prisma.tenderFile.create({
+    });
+    return tx.tenderFile.create({
       data: {
         name,
         extension,
@@ -112,8 +112,8 @@ async function uploadTenderDocument({ tenderMergedId, fileType, file }: UploadPa
         tags: [fileType],
         tenderMergedId,
       },
-    }),
-  ]);
+    });
+  });
 
   const published = await publishParsingJob({
     tenderMergedId,
@@ -127,6 +127,11 @@ async function uploadTenderDocument({ tenderMergedId, fileType, file }: UploadPa
     fileType,
     tenderMergedId,
     published,
+    id: created.id,
+    name: created.name,
+    extension: created.extension,
+    source: created.source,
+    tags: created.tags,
   };
 }
 

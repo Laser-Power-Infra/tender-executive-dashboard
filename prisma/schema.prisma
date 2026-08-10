@@ -666,6 +666,7 @@ model TenderMerged {
   app               Decision  @default(NOT_DECIDED)
   aps               Decision  @default(NOT_DECIDED)
   apm               Decision  @default(NOT_DECIDED)
+  catalogueDone     Decision  @default(NOT_DECIDED)
   state             String?
   statusCategory    StatusCategory?
   website           String?
@@ -753,6 +754,7 @@ model TenderMerged {
   parseError                              String?
   resultAutomationStatus                  String?
   resultAutomationError                   String?
+  notificationStatus                      String?
   beneficiaryBankDetails                             String?
   issuingBank                                        String?
 

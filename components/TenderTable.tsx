@@ -9,7 +9,7 @@ import {
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import type { AppDispatch } from "@/lib/store";
-import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping } from "@/lib/slices/tendersSlice";
+import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping, uploadTenderDocument } from "@/lib/slices/tendersSlice";
 import { toast } from "sonner";
 import {
   Search,
@@ -35,6 +35,7 @@ import * as XLSX from "xlsx";
 import MergedOfficeEditDialog from "./MergedOfficeEditDialog";
 import WebsiteEditDialog from "./tender-viewer/website-edit-dialog";
 import ReportingOfficersEditDialog from "./ReportingOfficersEditDialog";
+import TenderDocumentUploadDialog from "./tender-viewer/tender-document-upload-dialog";
 import { countRawMaterials } from "@/lib/rawMaterials";
 import {
   Select,
@@ -1074,6 +1075,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "decision",
     },
     {
+      header: "Catalogue Done",
+      accessor: "catalogueDone",
+      defaultWidth: 120,
+      align: "center",
+      type: "custom",
+    },
+    {
       header: "Prep By",
       accessor: "tenderPrepareBy",
       defaultWidth: 180,
@@ -1199,6 +1207,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [officeDialogSaving, setOfficeDialogSaving] = useState(false);
   const [websiteDialogRecord, setWebsiteDialogRecord] = useState<EpcTenderRecord | null>(null);
   const [reportingDialogRecord, setReportingDialogRecord] = useState<EpcTenderRecord | null>(null);
+  const [catalogueUploadRow, setCatalogueUploadRow] = useState<EpcTenderRecord | null>(null);
+  const [catalogueUploading, setCatalogueUploading] = useState(false);
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -1342,6 +1352,53 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       }
     },
     [dispatch],
+  );
+
+  const handleCatalogueUpload = useCallback(
+    (params: { tenderMergedId: number; file: File; fileType: string }) => {
+      const toastId = toast.loading("Uploading catalogue file...");
+      setCatalogueUploading(true);
+      dispatch(
+        uploadTenderDocument({
+          tenderMergedId: params.tenderMergedId,
+          file: params.file,
+          fileType: params.fileType,
+        }),
+      )
+        .unwrap()
+        .then(() => {
+          const rowIndex = tenderData?.rows.findIndex(
+            (r) => String(r.id) === String(params.tenderMergedId),
+          ) ?? -1;
+          const oldValue = rowIndex >= 0
+            ? String(tenderData!.rows[rowIndex]?.catalogueDone ?? "")
+            : "";
+          dispatch(
+            updateTenderCell({
+              rowIndex,
+              field: "catalogueDone",
+              value: "YES",
+              tenderMergedId: params.tenderMergedId,
+              oldValue,
+            }),
+          )
+            .unwrap()
+            .then(() => {
+              toast.success("Catalogue uploaded and marked as done!", { id: toastId });
+              setCatalogueUploadRow(null);
+            })
+            .catch((err: any) => {
+              toast.error(err?.message || "Failed to update Catalogue Done.", { id: toastId });
+            });
+        })
+        .catch((err: any) => {
+          toast.error(err?.message || "Catalogue upload failed.", { id: toastId });
+        })
+        .finally(() => {
+          setCatalogueUploading(false);
+        });
+    },
+    [dispatch, tenderData],
   );
 
   const handleReportingSave = useCallback(
@@ -3511,6 +3568,85 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 </div>
                               ) : "-";
                               cellClass = "col-center";
+                            } else if (col.accessor === "catalogueDone") {
+                              const catVal = String(cellVal ?? "");
+                              const isYes = catVal === "YES";
+                              const isNo = catVal === "NO";
+                              const reduxRow = tenderData?.rows.find(r => String(r.id) === String(record.id));
+                              const reduxIndex = reduxRow != null ? tenderData!.rows.indexOf(reduxRow) : -1;
+                              const updKey = `${reduxIndex}-catalogueDone`;
+                              const isUpdating = !!updatingCells[updKey];
+                              const dispatchCatalogue = (value: "YES" | "NO" | "NOT_DECIDED") => {
+                                if (!record.id) return;
+                                if (reduxIndex < 0) {
+                                  toast.error("Record not found in store. Please refresh and try again.");
+                                  return;
+                                }
+                                const oldVal = String(tenderData!.rows[reduxIndex]?.catalogueDone ?? "");
+                                dispatch(updateTenderCell({
+                                  rowIndex: reduxIndex,
+                                  field: "catalogueDone",
+                                  value,
+                                  tenderMergedId: Number(record.id),
+                                  oldValue: oldVal,
+                                }))
+                                  .unwrap()
+                                  .then(() => {
+                                    toast.success("Catalogue Done updated!");
+                                  })
+                                  .catch((err: any) => {
+                                    toast.error(err?.message || "Failed to update Catalogue Done.");
+                                  });
+                              };
+                              cellContent = (
+                                <div style={{ display: "flex", gap: "4px", padding: "4px 0", justifyContent: "center" }}>
+                                  <button
+                                    type="button"
+                                    disabled={isUpdating}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isYes) {
+                                        dispatchCatalogue("NOT_DECIDED");
+                                      } else {
+                                        setCatalogueUploadRow(record);
+                                      }
+                                    }}
+                                    style={{
+                                      width: "28px", height: "28px", borderRadius: "4px",
+                                      fontSize: "11px", fontWeight: 700, border: "2px solid",
+                                      cursor: isUpdating ? "not-allowed" : "pointer",
+                                      opacity: isUpdating ? 0.5 : 1,
+                                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                      backgroundColor: isUpdating ? "#e2e8f0" : isYes ? "#22c55e" : "#ffffff",
+                                      color: isUpdating ? "#94a3b8" : isYes ? "#ffffff" : "#94a3b8",
+                                      borderColor: isUpdating ? "#cbd5e1" : isYes ? "#16a34a" : "#cbd5e1",
+                                    }}
+                                  >
+                                    {isUpdating ? "..." : "Y"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isUpdating}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      dispatchCatalogue(isNo ? "NOT_DECIDED" : "NO");
+                                    }}
+                                    style={{
+                                      width: "28px", height: "28px", borderRadius: "4px",
+                                      fontSize: "11px", fontWeight: 700, border: "2px solid",
+                                      cursor: isUpdating ? "not-allowed" : "pointer",
+                                      opacity: isUpdating ? 0.5 : 1,
+                                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                      backgroundColor: isUpdating ? "#e2e8f0" : isNo ? "#ef4444" : "#ffffff",
+                                      color: isUpdating ? "#94a3b8" : isNo ? "#ffffff" : "#94a3b8",
+                                      borderColor: isUpdating ? "#cbd5e1" : isNo ? "#dc2626" : "#cbd5e1",
+                                    }}
+                                  >
+                                    {isUpdating ? "..." : "N"}
+                                  </button>
+                                </div>
+                              );
+                              cellClass = "col-center";
                             } else {
                               cellContent =
                                 cellVal !== null && cellVal !== undefined
@@ -3668,6 +3804,16 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         onClose={() => setIsAttachmentModalOpen(false)}
         files={selectedFiles}
       />
+
+      {catalogueUploadRow && (
+        <TenderDocumentUploadDialog
+          row={catalogueUploadRow as unknown as Record<string, unknown>}
+          isSaving={catalogueUploading}
+          defaultFileType="catalogueDocument"
+          onSave={handleCatalogueUpload}
+          onClose={() => setCatalogueUploadRow(null)}
+        />
+      )}
 
       {officeDialogRecord && (
         <MergedOfficeEditDialog

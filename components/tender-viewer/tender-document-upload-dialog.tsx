@@ -14,11 +14,13 @@ import {
 export const TENDER_FILE_TYPE_OPTIONS = [
   { value: "tenderDocument", label: "Tender Document" },
   { value: "costingAttachment", label: "Costing Attachment" },
+  { value: "catalogueDocument", label: "Catalogue Document" },
 ] as const;
 
 interface TenderDocumentUploadDialogProps {
   row: Record<string, unknown>;
   isSaving: boolean;
+  defaultFileType?: string;
   onSave: (params: {
     tenderMergedId: number;
     file: File;
@@ -30,13 +32,14 @@ interface TenderDocumentUploadDialogProps {
 export default function TenderDocumentUploadDialog({
   row,
   isSaving,
+  defaultFileType,
   onSave,
   onClose,
 }: TenderDocumentUploadDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState<string>(
-    TENDER_FILE_TYPE_OPTIONS[0].value,
+    defaultFileType ?? TENDER_FILE_TYPE_OPTIONS[0].value,
   );
 
   const organization = String(row.organization ?? row.nameOfTheClient ?? "");

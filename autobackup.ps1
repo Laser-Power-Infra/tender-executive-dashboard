@@ -2,10 +2,10 @@
 # PostgreSQL Docker Backup
 # ===========================
 
-$ContainerName = "postgres17"
-# $Database = "enquiry-quotation"
+$ContainerName = "postgres-prod"
+$Database = "enquiry-quotation"
 # $Database = "laser-tender-dashboard"
-$Database = "testing"
+# $Database = "testing"
 $User = "asmita"
 $Password = "asmita"
 

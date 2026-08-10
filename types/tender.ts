@@ -45,6 +45,7 @@ export interface EpcTenderRecord {
   bidValidityDays: number | null;
   contractPeriodDays: number | null;
   managementDecision: ManagementDecision;
+  catalogueDone?: "YES" | "NO" | "NOT_DECIDED" | null;
   participated: boolean | null;
   tenderPrepareBy: string;
   currentStatus: string;

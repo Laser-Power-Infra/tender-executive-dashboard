@@ -61,6 +61,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     bidValidityDays: parseIntOrNull(row.bidOfferValidity),
     contractPeriodDays: parseIntOrNull(row.contractPeriod),
     managementDecision: (row.apm || "Pending") as ManagementDecision,
+    catalogueDone: (row.catalogueDone as "YES" | "NO" | "NOT_DECIDED") || null,
     participated: row.participated === "true" ? true : row.participated === "false" ? false : null,
     tenderPrepareBy: resolveAssociationNames(row.assignedTo, tenderData.associations),
     currentStatus: row.currentStatus || "",
