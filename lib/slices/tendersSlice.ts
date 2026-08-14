@@ -15,6 +15,7 @@ import {
   updateDiffPercentFromL1,
   updateDiffPercentFromL2,
   updateStatusAndAction,
+  triggerReverseAuctionMail,
   updateTenderMergedStringField,
   updateTenderMergedDateField,
   updateTenderMergedBooleanField,
@@ -22,6 +23,7 @@ import {
 } from "@/actions/tender";
 import { importEpcTendersAction } from "@/actions/importEpcTenders";
 import { analyzeTenderValidity, saveAiRelevance } from "@/actions/ai-analysis";
+import type { ReverseAuctionWebhookData } from "@/lib/integrations/n8n";
 import { filtersSlice } from "./filtersSlice";
 import { uploadFiles } from "./uploadSlice";
 import type { TenderMergedMinAggregateOutputType } from "@/generated/prisma/models/TenderMerged";
@@ -154,14 +156,17 @@ export const updateTenderMergedField = createAsyncThunk(
     oldValue: string;
   }) => {
     if (params.field === "emdPaymentMode") {
-      await updateTenderMergedStringField({
+      const result = await updateTenderMergedStringField({
         tenderMergedId: params.tenderMergedId,
         field: params.field,
         value: params.value,
       });
+      if (!result.ok) throw new Error(result.error);
     } else if (
       params.field === "emdValidity" ||
       params.field === "reverseAuctionDate" ||
+      params.field === "reverseAuctionStartDate" ||
+      params.field === "reverseAuctionEndDate" ||
       params.field === "tenderOpeningDate"
     ) {
       await updateTenderMergedDateField({
@@ -182,11 +187,12 @@ export const updateTenderMergedField = createAsyncThunk(
         value: params.value === "true",
       });
     } else {
-      await updateTenderMergedStringField({
+      const result = await updateTenderMergedStringField({
         tenderMergedId: params.tenderMergedId,
         field: params.field,
         value: params.value,
       });
+      if (!result.ok) throw new Error(result.error);
     }
     return params;
   },
@@ -310,6 +316,14 @@ export const updateTenderStatusAndAction = createAsyncThunk(
       nextAction: params.nextAction,
       reverseAuctionApplicable: params.reverseAuctionApplicable,
     });
+    return params;
+  },
+);
+
+export const triggerReverseAuctionWebhook = createAsyncThunk(
+  "tenders/triggerReverseAuctionWebhook",
+  async (params: ReverseAuctionWebhookData) => {
+    await triggerReverseAuctionMail(params);
     return params;
   },
 );

@@ -236,27 +236,34 @@
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
-  max-height: 160px;
+  height: 96px;
+  max-height: 96px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.cell-scroll-wrap {
+  height: 96px;
+  max-height: 96px;
   overflow-y: auto;
   overflow-x: hidden;
-  vertical-align: middle;
   scrollbar-width: thin;
 }
 
-.tender-data-table td::-webkit-scrollbar {
+.cell-scroll-wrap::-webkit-scrollbar {
   width: 4px;
 }
 
-.tender-data-table td::-webkit-scrollbar-track {
+.cell-scroll-wrap::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.tender-data-table td::-webkit-scrollbar-thumb {
+.cell-scroll-wrap::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.15);
   border-radius: 2px;
 }
 
-.tender-data-table td::-webkit-scrollbar-thumb:hover {
+.cell-scroll-wrap::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.3);
 }
 
@@ -265,6 +272,7 @@
 }
 
 .tender-row {
+  height: 96px;
   transition: background-color 0.15s ease;
   background-color: var(--color-bg-white);
 }
@@ -644,6 +652,79 @@
 
 .date-filter-clear-btn:hover {
   color: var(--status-lost-text);
+}
+
+/* Column Deadline Filter - Preset Dropdown + Calendar Range Popover */
+.column-deadline-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.column-ra-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.deadline-preset-select {
+  width: 100%;
+  padding: 4px 6px;
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  height: 24px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.deadline-preset-select:focus {
+  border-color: var(--color-accent);
+}
+
+.deadline-date-range-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.date-range-trigger-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 6px;
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  height: 24px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-range-trigger-btn:hover {
+  border-color: var(--color-accent);
 }
 
 /* Raw Materials Column Styling */

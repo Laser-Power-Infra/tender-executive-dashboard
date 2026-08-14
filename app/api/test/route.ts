@@ -12,22 +12,43 @@ export async function POST(request: NextRequest) {
   );
 }
 export async function GET(request: NextRequest) {
-  const response = await fetch(
-    "http://evolution-api:8080/message/sendText/Bidyut%20Kr.%20Das",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: process.env.EVOLUTION_API_KEY!,
+  try {
+    const response = await fetch(
+      "http://evolution-api:8080/message/sendText/Tender(Bot)",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: process.env.EVOLUTION_API_KEY!,
+        },
+        body: JSON.stringify({
+          number: "120363425898868905@g.us",
+          text: "🚨 New Tender Available\n\nTender No: ABC123\nDeadline: 15 August 2026",
+        }),
       },
-      body: JSON.stringify({
-        number: "120363425898868905@g.us",
-        text: "🚨 New Tender Available\n\nTender No: ABC123\nDeadline: 15 August 2026",
-      }),
-    },
-  );
+    );
 
-  const data = await response.json();
+    const data = await response.json();
 
-  console.log(data);
+    console.log(data);
+
+    return NextResponse.json(
+      {
+        message: "message sent",
+      },
+      {
+        status: 200,
+      },
+    );
+  } catch (error: any) {
+    console.error(error);
+    return NextResponse.json(
+      {
+        message: "Internal server error",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
 }

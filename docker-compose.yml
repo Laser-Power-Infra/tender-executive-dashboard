@@ -57,6 +57,8 @@ services:
     image: evoapicloud/evolution-api:latest
     container_name: evolution-api
     restart: unless-stopped
+    depends_on:
+      - redis
     ports:
       - "8080:8080"
     env_file:
@@ -71,11 +73,46 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: evolution-redis
+    container_name: redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - ./evolution/redis:/data
+    networks:
+      - infra
+
+  kestra:
+    build:
+      context: ./kestra
+      dockerfile: Dockerfile
+    container_name: kestra
+    restart: unless-stopped
+
+    ports:
+      - "8081:8080"
+
+    user: root
+
+    environment:
+      SECRET_KESTRA_EXTERNAL_API_KEY: ${KESTRA_EXTERNAL_API_KEY}
+
+      KESTRA_CONFIGURATION: |
+        micronaut:
+          io:
+            watch:
+              enabled: true
+              paths:
+                - /flows
+
+    volumes:
+      - ./kestra/flows:/flows
+      - ./kestra/storage:/app/storage
+      - ./kestra/data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+
+    command: server local
+
     networks:
       - infra
 

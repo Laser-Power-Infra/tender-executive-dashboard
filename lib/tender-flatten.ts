@@ -73,7 +73,10 @@ export function flattenTender(
     if (SKIP_RELATION_FIELDS.has(field)) continue;
     const val = tender[field];
     if (val instanceof Date) {
-      row[field] = format(val, "yyyy-MM-dd");
+      row[field] =
+        field === "reverseAuctionStartDate" || field === "reverseAuctionEndDate"
+          ? format(val, "yyyy-MM-dd'T'HH:mm:ss")
+          : format(val, "yyyy-MM-dd");
     } else {
       row[field] = val == null ? "" : String(val);
     }

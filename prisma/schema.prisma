@@ -685,6 +685,8 @@ model TenderMerged {
   currentStatus            String?
   reverseAuctionApplicable Boolean?
   reverseAuctionDate       DateTime?
+  reverseAuctionStartDate       DateTime?
+  reverseAuctionEndDate       DateTime?
   emdPaymentMode           String?
   bgNoUtrNo                String?
   bgDate                   String?
@@ -732,6 +734,7 @@ model TenderMerged {
   typeOfBid                               String?
   technicalClarificationTimeAllowed       String?
   inspectionRequired                      String?
+  inspectionAgency String?
   estimatedBidValue                       String?
   evaluationMethod                        String?
   advisoryBank                            String?
@@ -773,6 +776,11 @@ model TenderMerged {
   publishedDate DateTime?
 
   baseDate DateTime?
+  buyerDetails String?
+
+
+
+
 
 
 

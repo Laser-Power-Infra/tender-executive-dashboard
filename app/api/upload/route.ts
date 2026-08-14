@@ -481,7 +481,9 @@ async function processFile(file: File): Promise<FileResult> {
   const cableKeywords = parseKeywordRow(cableRow);
   const conductorsKeywords = parseKeywordRow(conductorsRow);
 
-  const dbMappingRows = await prisma.columnMapping.findMany();
+  const dbMappingRows = await prisma.columnMapping.findMany({
+    where: { status: "active" },
+  });
   const mergedColumnMap = buildMergedColumnMap(dbMappingRows);
 
   const associations = await prisma.association.findMany();

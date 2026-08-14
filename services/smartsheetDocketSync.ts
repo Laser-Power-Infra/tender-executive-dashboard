@@ -22,6 +22,11 @@ export interface DocketSyncStats {
   foundInEnquiryTender: number;
   notFound: number;
   errors: number;
+  updates: Array<{
+    referenceNo: string;
+    docketNo: string;
+    source: "emailSubject" | "enquiryTender";
+  }>;
 }
 
 export async function syncDocketFromSmartsheet(): Promise<DocketSyncStats> {
@@ -31,6 +36,7 @@ export async function syncDocketFromSmartsheet(): Promise<DocketSyncStats> {
     foundInEnquiryTender: 0,
     notFound: 0,
     errors: 0,
+    updates: [],
   };
 
   // 1. Fetch raw Smartsheet data
@@ -168,6 +174,12 @@ const blankDocketRecords = await prisma.tenderMerged.findMany({
       await prisma.tenderMerged.update({
         where: { id: record.id },
         data: { docketNo: foundDocket },
+      });
+
+      stats.updates.push({
+        referenceNo: record.referenceNo,
+        docketNo: foundDocket,
+        source: source ?? "emailSubject",
       });
 
       if (source === "emailSubject") {

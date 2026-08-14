@@ -324,6 +324,12 @@ export class GoogleSheetService {
       tenderSubmittedDate: null,
       reverseAuctionApplicable: tm.reverseAuctionApplicable,
       reverseAuctionDate: tm.reverseAuctionDate,
+      reverseAuctionStartDate: tm.reverseAuctionStartDate
+        ? new Date(tm.reverseAuctionStartDate)
+        : null,
+      reverseAuctionEndDate: tm.reverseAuctionEndDate
+        ? new Date(tm.reverseAuctionEndDate)
+        : null,
       emdPaymentMode: tm.emdPaymentMode as EMDExchangeMode | null,
       bgNoUtrNo: tm.bgNoUtrNo,
       emdValidity: tm.emdValidity,
@@ -598,6 +604,8 @@ export class GoogleSheetService {
         return parseBool(val);
       })(),
       reverseAuctionDate: parseDate(getValue("Reverse Auction Date")),
+      reverseAuctionStartDate: null,
+      reverseAuctionEndDate: parseDate(getValue("Reverse Auction Date")),
       emdPaymentMode: parseEnum(getValue("EMD Payment Through BG / NEFT"), EMDExchangeMode, EMDExchangeMode.NOT_APPLICABLE),
       bgNoUtrNo: getValue("BG No / UTR No") || null,
       emdValidity: parseDate(getValue("EMD Validity")),

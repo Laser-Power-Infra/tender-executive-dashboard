@@ -1,0 +1,16 @@
+﻿# id: notifications_not_participated
+# namespace: scheduler
+
+# triggers:
+#   - id: daily
+#     type: io.kestra.plugin.core.trigger.Schedule
+#     cron: "* * * * *"
+
+# tasks:
+#   - id: call_not_participated_api
+#     type: io.kestra.plugin.core.http.Request
+#     uri: "http://laser-tender:3126/api/notifications/not-participated"
+#     method: POST
+#     headers:
+#       Authorization: "Bearer {{ secret('KESTRA_EXTERNAL_API_KEY') }}"
+#       x-api-key: "{{ secret('KESTRA_EXTERNAL_API_KEY') }}"

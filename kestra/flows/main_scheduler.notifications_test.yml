@@ -1,0 +1,17 @@
+﻿# id: notifications_result
+# namespace: scheduler
+# # tenantId: main
+
+# triggers:
+#   - id: daily
+#     type: io.kestra.plugin.core.trigger.Schedule
+#     cron: "0 0 0 0 0"
+
+# tasks:
+#   - id: call_result_api
+#     type: io.kestra.plugin.core.http.Request
+#     uri: "http://laser-tender:3126/api/test"
+#     method: GET
+#     headers:
+#       Authorization: "Bearer {{ secret('KESTRA_EXTERNAL_API_KEY') }}"
+#       x-api-key: "{{ secret('KESTRA_EXTERNAL_API_KEY') }}"

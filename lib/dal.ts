@@ -60,6 +60,8 @@ export async function requireApiKey(req: NextRequest) {
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? ""
   const apiKey = req.headers.get("x-api-key") ?? ""
 
+  console.log("[requireApiKey]", JSON.stringify({ bearer, apiKey, key }))
+
   if (bearer !== key && apiKey !== key) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }

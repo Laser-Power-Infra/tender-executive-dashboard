@@ -136,6 +136,28 @@ function DebouncedColumnSearch({
 
 const EMPTY_SELECT_VALUES: string[] = [];
 
+const UNIQUE_OPTION_SKIP = new Set([
+  "reportings",
+  "tenderFiles",
+  "itemSchedules",
+  "proposedErpItemName",
+  "proposedErpQuantity",
+  "cva",
+  "competitors",
+  "evaluationTableData",
+  "checklist",
+  "downloadLink",
+  "costingFileUrl",
+  "beneficiaryBankDetails",
+  "applicableIndex",
+  "parseError",
+  "remarks",
+  "tenderFileUrl",
+  "website",
+  "rawMaterials",
+  "deadline",
+]);
+
 export interface ColumnDef<T> {
   header: string;
   accessor: keyof T | string;
@@ -172,6 +194,7 @@ export interface OptimizedTenderTableProps<T extends Record<string, unknown>> {
   extraToolbarActions?: React.ReactNode;
   onFilteredRowsChange?: (rows: T[]) => void;
   onParseComplete?: () => void;
+  disableDefaultDeadlineFilter?: boolean;
 }
 
 function OptimizedTenderTableInner<T extends Record<string, unknown>>({
@@ -184,6 +207,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
   extraToolbarActions,
   onFilteredRowsChange,
   onParseComplete,
+  disableDefaultDeadlineFilter = false,
 }: OptimizedTenderTableProps<T>) {
   const [globalSearch, setGlobalSearch] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -559,7 +583,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     const hasDeadlineFilter =
       columnFilters["deadline"]?.select?.length ||
       columnFilters["deadline"]?.dateRange;
-    if (!hasDeadlineFilter) {
+    if (!hasDeadlineFilter && !disableDefaultDeadlineFilter) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       result = result.filter((row) => {
@@ -578,7 +602,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     }
 
     return result;
-  }, [rows, debouncedGlobalSearch, sortColumn, sortDirection, columns, columnFilters]);
+  }, [rows, debouncedGlobalSearch, sortColumn, sortDirection, columns, columnFilters, disableDefaultDeadlineFilter]);
 
   const gemTendersToDownload = useMemo(() => {
     return processedRows
@@ -666,6 +690,45 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     }
     return offsets;
   }, [visibleColumns, columnWidths]);
+
+  const uniqueSelectOptions = useMemo(() => {
+    const map: Record<string, FilterOption[]> = {};
+    for (const col of columns) {
+      if (col.filter?.type !== "select") continue;
+      const accessorStr = String(col.accessor);
+      if (UNIQUE_OPTION_SKIP.has(accessorStr)) continue;
+
+      const seen = new Set<string>();
+      const opts: FilterOption[] = [];
+      const addOption = (value: string, label?: string) => {
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        opts.push({ value, label: label ?? value });
+      };
+
+      for (const row of rows) {
+        const raw = row[col.accessor as keyof T];
+        if (raw === null || raw === undefined || raw === "") continue;
+        if (accessorStr === "assignedTo") {
+          for (const id of String(raw)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)) {
+            const assoc = associations.find((a) => a.id === parseInt(id, 10));
+            addOption(id, assoc?.name);
+          }
+        } else {
+          addOption(String(raw));
+        }
+      }
+
+      if (opts.length > 0) {
+        opts.sort((a, b) => a.label.localeCompare(b.label));
+        map[accessorStr] = opts;
+      }
+    }
+    return map;
+  }, [columns, rows, associations]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -966,7 +1029,16 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
               onClear={() => handleClearColumnFilter(accessorStr, "dateRange")}
             />
           );
-        case "select":
+        case "select": {
+          const configuredOptions = col.filter.options ?? [];
+          const computedOptions = uniqueSelectOptions[accessorStr] ?? [];
+          const mergedOptions: FilterOption[] = [];
+          const seenOptions = new Set<string>();
+          for (const opt of [...configuredOptions, ...computedOptions]) {
+            if (seenOptions.has(opt.value)) continue;
+            seenOptions.add(opt.value);
+            mergedOptions.push(opt);
+          }
           return (
             <SelectColumnFilter
               value={filterState?.select ?? EMPTY_SELECT_VALUES}
@@ -983,7 +1055,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
                 }
                 updateColumnFilter(accessorStr, "select", values);
               }}
-              options={col.filter.options ?? []}
+              options={mergedOptions}
               placeholder={col.filter.placeholder}
               searchable={col.filter.searchable}
               onSearchChange={
@@ -1019,6 +1091,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
               }
             />
           );
+        }
         case "text":
           return (
             <TextColumnFilter
@@ -1045,7 +1118,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           return null;
       }
     },
-    [columnFilters, updateColumnFilter, handleClearColumnFilter],
+    [columnFilters, updateColumnFilter, handleClearColumnFilter, uniqueSelectOptions],
   );
 
   const renderCell = useCallback(
@@ -1249,7 +1322,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           <button className="export-btn" onClick={handleExportExcel}>
             <FileSpreadsheet size={14} /> Export Excel
           </button>
-          <button
+          {/* <button
             className="export-btn"
             onClick={handleParseCva}
             disabled={isParsingCva || tendersForCvaParsing.length === 0}
@@ -1257,7 +1330,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
             {isParsingCva
               ? <><Loader2 size={14} className="animate-spin" /> Parsing CVA...</>
               : <><FileText size={14} /> Parse CVA ({tendersForCvaParsing.length})</>}
-          </button>
+          </button> */}
           {/* <button
             className="export-btn"
             onClick={handleDownloadPdfs}

@@ -1,0 +1,16 @@
+﻿id: sync_to_merged
+namespace: scheduler
+
+triggers:
+  - id: hourly
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 * * * *"
+
+tasks:
+  - id: call_sync_to_merged_api
+    type: io.kestra.plugin.core.http.Request
+    uri: "http://laser-tender:3126/api/sync-to-merged"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ secret('KESTRA_EXTERNAL_API_KEY') }}"
+      x-api-key: "{{ secret('KESTRA_EXTERNAL_API_KEY') }}"

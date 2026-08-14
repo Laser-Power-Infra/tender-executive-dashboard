@@ -121,6 +121,7 @@ export async function analyzeTenderValidity(
       .trim();
     return { success: true, data: { valid: output.valid, reason } };
   } catch (error) {
+    console.error(error);
     if (APICallError.isInstance(error) && error.statusCode === 429) {
       return { success: false, error: "rate_limit" };
     }
@@ -137,8 +138,16 @@ export async function saveAiRelevance(params: {
     aiRelevanceValid: params.valid,
     aiRelevanceReason: params.reason,
   };
-  await prisma.tenderMerged.update({ where: { id: params.tenderMergedId }, data });
-  const referenceNo = (await prisma.tenderMerged.findUnique({ where: { id: params.tenderMergedId }, select: { referenceNo: true } }))?.referenceNo;
+  await prisma.tenderMerged.update({
+    where: { id: params.tenderMergedId },
+    data,
+  });
+  const referenceNo = (
+    await prisma.tenderMerged.findUnique({
+      where: { id: params.tenderMergedId },
+      select: { referenceNo: true },
+    })
+  )?.referenceNo;
 
   logActivity({
     action: "UPDATE",
