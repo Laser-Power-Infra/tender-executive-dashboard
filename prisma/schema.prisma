@@ -165,6 +165,9 @@ model SupplyHistory {
   partyRefNo     String?
   partyRefDate   String?
   contractVrNo   String?
+  quotationNo    String?
+  utility        String?
+  docketNo       String?
   rate           Float?
   invoiceQty     Float?
   invoiceAmt     Float?
