@@ -4,7 +4,7 @@ import { withLog } from "@/lib/activity-logger";
 
 export const runtime = "nodejs";
 
-const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || "dhinchakpuja";
+const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || "dhinchak";
 
 function isAuthorized(req: NextRequest): boolean {
   const bearer =

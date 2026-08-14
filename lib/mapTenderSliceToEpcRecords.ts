@@ -73,7 +73,15 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
         : row.reverseAuctionApplicable === "false"
           ? false
           : null,
-    reverseAuctionDate: null,
+    reverseAuctionDate: row.reverseAuctionDate
+      ? new Date(row.reverseAuctionDate)
+      : null,
+    reverseAuctionStartDate: row.reverseAuctionStartDate
+      ? new Date(row.reverseAuctionStartDate)
+      : null,
+    reverseAuctionEndDate: row.reverseAuctionEndDate
+      ? new Date(row.reverseAuctionEndDate)
+      : null,
     emdPaymentMode: (row.emdPaymentMode as EMDExchangeMode) || null,
     bgNoUtrNo: row.bgNoUtrNo || null,
     emdValidity: null,

@@ -45,3 +45,6 @@ credentials.json
 token.json
 *.csv
 *.xlsx
+kestra/data/database.mv.db
+*.db
+# kestra/data/database.mv.db

@@ -11,6 +11,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import FileUpload from "@/components/upload/file-upload";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
@@ -22,11 +29,15 @@ import type { TenderMergedRow } from "@/lib/slices/tendersSlice";
 interface TenderSidebarProps {
   rows?: TenderMergedRow[];
   associations?: { id: number; name: string; email: string }[];
+  associationFilter?: string | null;
+  onAssociationFilterChange?: (val: string | null) => void;
 }
 
 export default function TenderSidebar({
   rows = [],
   associations = [],
+  associationFilter = null,
+  onAssociationFilterChange,
 }: TenderSidebarProps) {
   const dispatch = useAppDispatch();
   const selectedDateFrom = useAppSelector((s) => s.files.selectedDateFrom);
@@ -56,10 +67,10 @@ export default function TenderSidebar({
     };
   }, [rows, associations]);
 
-  const selectedRange: DateRange | undefined = {
-    from: new Date(selectedDateFrom),
-    to: new Date(selectedDateTo),
-  };
+  const selectedRange: DateRange | undefined =
+    selectedDateFrom && selectedDateTo
+      ? { from: new Date(selectedDateFrom), to: new Date(selectedDateTo) }
+      : undefined;
 
   const handleImportEpc = useCallback(async () => {
     const toastId = toast.loading(
@@ -142,7 +153,7 @@ export default function TenderSidebar({
                     className="w-full justify-start gap-2 px-3 py-2 h-auto text-xs font-normal rounded-md bg-white/10 text-white/80 border-white/20 hover:bg-white/20 hover:text-white"
                   >
                     <CalendarIcon size={14} />
-                    {selectedRange.from ? (
+                    {selectedRange?.from ? (
                       selectedRange.to ? (
                         <>
                           {format(selectedRange.from, "LLL dd, y")}
@@ -153,7 +164,7 @@ export default function TenderSidebar({
                         format(selectedRange.from, "LLL dd, y")
                       )
                     ) : (
-                      <span>Pick a date range</span>
+                      <span>All Files</span>
                     )}
                   </Button>
                 }
@@ -161,7 +172,7 @@ export default function TenderSidebar({
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="range"
-                  defaultMonth={selectedRange.from ?? undefined}
+                  defaultMonth={selectedRange?.from ?? undefined}
                   selected={selectedRange}
                   onSelect={(range) => {
                     if (range?.from && range?.to) {
@@ -181,6 +192,31 @@ export default function TenderSidebar({
                 />
               </PopoverContent>
             </Popover>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-white mb-2.5">
+              Assigned To
+            </div>
+            <Select
+              value={associationFilter ?? ""}
+              onValueChange={(v) => onAssociationFilterChange?.(v ? v : null)}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-full justify-start gap-2 px-3 py-2 h-auto text-xs font-normal rounded-md bg-white/10 text-white/80 border-white/20 hover:bg-white/20 hover:text-white [&_svg]:text-white/70"
+              >
+                <SelectValue placeholder="All People" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All People</SelectItem>
+                {associations.map((a) => (
+                  <SelectItem key={a.id} value={String(a.id)}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {analytics && (

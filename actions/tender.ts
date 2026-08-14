@@ -6,11 +6,16 @@ import { withLog, logActivity } from "@/lib/activity-logger";
 import {
   triggerEmdPaymentWebhook,
   resolveEmdAttachment,
+  triggerReverseAuctionWebhook,
 } from "@/lib/integrations/n8n";
-import type { EmdWebhookAttachment } from "@/lib/integrations/n8n";
+import type {
+  EmdWebhookAttachment,
+  ReverseAuctionWebhookData,
+} from "@/lib/integrations/n8n";
 import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 import { auth } from "@/auth";
 import { format } from "date-fns";
+import { parseDate } from "@/lib/parse-date";
 
 export const updateTenderAssignmentsAction = withLog(
   async (params: {
@@ -576,10 +581,15 @@ export async function updateTenderMergedStringField(params: {
   tenderMergedId: number;
   field: string;
   value: string;
-}) {
+}): Promise<{ ok: boolean; error?: string }> {
   const { tenderMergedId, field, value } = params;
 
-  if (field === "emdPaymentMode" && value && value.trim() !== "") {
+  if (
+    field === "emdPaymentMode" &&
+    value &&
+    value.trim() !== "" &&
+    value !== "NO"
+  ) {
     const current = await prisma.tenderMerged.findUnique({
       where: { id: tenderMergedId },
       select: {
@@ -613,15 +623,16 @@ export async function updateTenderMergedStringField(params: {
       },
     });
 
-    if (!current) return;
+    if (!current) return { ok: true };
 
-    if (current.emdPaymentMode === value) return;
+    if (current.emdPaymentMode === value) return { ok: true };
 
     const missing = validateEmdPayloadData(current);
     if (missing.length > 0) {
-      throw new Error(
-        `Cannot update EMD Payment Mode. Please fill in the following fields first: ${missing.join(", ")}`,
-      );
+      return {
+        ok: false,
+        error: `Cannot update EMD Payment Mode. Please fill in the following fields first: ${missing.join(", ")}`,
+      };
     }
 
     await prisma.tenderMerged.update({
@@ -688,7 +699,7 @@ export async function updateTenderMergedStringField(params: {
       console.error("[EMD Webhook] Failed to trigger webhook:", error);
     }
 
-    return;
+    return { ok: true };
   }
 
   if (field === "raQualificationRule") {
@@ -707,7 +718,7 @@ export async function updateTenderMergedStringField(params: {
       details: `Updated raQualificationRule to "${value}" and reverseAuctionApplicable to "${!!value}" on tender #${tenderMergedId}`,
     });
 
-    return;
+    return { ok: true };
   }
 
   if (field === "bgStatus" || field === "currentStatus") {
@@ -736,7 +747,7 @@ export async function updateTenderMergedStringField(params: {
       details: `Updated ${field} to "${value}" and tenderUpdateStatus to "${tenderUpdateStatus}" on tender #${tenderMergedId}`,
     });
 
-    return;
+    return { ok: true };
   }
 
   await prisma.tenderMerged.update({
@@ -750,6 +761,8 @@ export async function updateTenderMergedStringField(params: {
     recordId: String(tenderMergedId),
     details: `Updated ${field} to "${value}" on tender #${tenderMergedId}`,
   });
+
+  return { ok: true };
 }
 
 export async function updateTenderMergedDateField(params: {
@@ -759,7 +772,7 @@ export async function updateTenderMergedDateField(params: {
 }) {
   await prisma.tenderMerged.update({
     where: { id: params.tenderMergedId },
-    data: { [params.field]: params.value ? new Date(params.value) : null },
+    data: { [params.field]: params.value ? parseDate(params.value) : null },
   });
   logActivity({
     action: "UPDATE",
@@ -824,5 +837,22 @@ export const updateStatusAndAction = withLog(
     recordId: String(updated.id),
     referenceNo: updated.referenceNo ?? undefined,
     details: `Updated tenderUpdateStatus="${params.tenderUpdateStatus}" nextAction="${params.nextAction}" reverseAuctionApplicable="${params.reverseAuctionApplicable}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
+export const triggerReverseAuctionMail = withLog(
+  async (params: ReverseAuctionWebhookData) => {
+    console.log(
+      `[action:triggerReverseAuctionMail] called for tender #${params.tenderMergedId}`,
+    );
+    await triggerReverseAuctionWebhook(params);
+    return { ok: true };
+  },
+  (result, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(params.tenderMergedId),
+    referenceNo: params.referenceNo ?? undefined,
+    details: `Reverse auction email webhook evaluated for tender #${params.tenderMergedId}`,
   }),
 );

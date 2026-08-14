@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiKey } from "@/lib/dal";
 import { withLog } from "@/lib/activity-logger";
-import { NOTIFICATION_TYPES } from "@/lib/notification-types";
+import { NOTIFICATION_TYPES, NOTIFICATION_DEADLINE_START } from "@/lib/notification-types";
 import { sendNotificationMessage } from "@/lib/notifications/sender";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ async function triggerResultNotifications() {
   const matches = await prisma.tenderMerged.findMany({
     where: {
       AND: [
-        { deadline: { lte: new Date() } },
+        { deadline: { gt: NOTIFICATION_DEADLINE_START, lte: new Date() } },
         { apm: "YES" },
         { competitors: { not: "" } },
         { ourRank: { not: "" } },

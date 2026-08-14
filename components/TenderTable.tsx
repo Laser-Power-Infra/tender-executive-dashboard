@@ -9,7 +9,7 @@ import {
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import type { AppDispatch } from "@/lib/store";
-import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping, uploadTenderDocument } from "@/lib/slices/tendersSlice";
+import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping, uploadTenderDocument, triggerReverseAuctionWebhook } from "@/lib/slices/tendersSlice";
 import { toast } from "sonner";
 import {
   Search,
@@ -28,15 +28,34 @@ import {
   AlertTriangle,
   Loader2,
   RotateCcw,
+  CalendarIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  format,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+} from "date-fns";
 import * as XLSX from "xlsx";
+import type { DateRange } from "react-day-picker";
+import type { ReverseAuctionWebhookData } from "@/lib/integrations/n8n";
 import MergedOfficeEditDialog from "./MergedOfficeEditDialog";
 import WebsiteEditDialog from "./tender-viewer/website-edit-dialog";
 import ReportingOfficersEditDialog from "./ReportingOfficersEditDialog";
 import TenderDocumentUploadDialog from "./tender-viewer/tender-document-upload-dialog";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { countRawMaterials } from "@/lib/rawMaterials";
+import { parseDate } from "@/lib/parse-date";
 import {
   Select,
   SelectContent,
@@ -676,6 +695,65 @@ const InlineEditor: React.FC<{
   );
 };
 
+const RaDateInput: React.FC<{
+  initialValue: string;
+  disabled: boolean;
+  onCommit: (value: string) => void;
+}> = ({ initialValue, disabled, onCommit }) => {
+  const [draft, setDraft] = useState(initialValue);
+  const committedRef = useRef(false);
+
+  const commit = (value: string) => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    onCommit(value.trim());
+  };
+
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <input
+        type="text"
+        value={draft}
+        disabled={disabled}
+        placeholder="dd-mm-yyyy hh:mm"
+        onChange={(e) => {
+          committedRef.current = false;
+          setDraft(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(draft);
+          } else if (e.key === "Escape") {
+            setDraft(initialValue);
+            committedRef.current = false;
+          }
+        }}
+        style={{
+          fontSize: "11px",
+          padding: "2px 4px",
+          border: "1px solid #dadce0",
+          borderRadius: "4px",
+          width: "100%",
+          maxWidth: 112,
+          background: "#fff",
+          color: "#202124",
+        }}
+      />
+      <button
+        type="button"
+        className="docket-save-btn"
+        title="Save"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => commit(draft)}
+      >
+        <Check size={14} />
+      </button>
+    </div>
+  );
+};
+
 interface TenderTableProps {
   records: EpcTenderRecord[];
   priceBasisFilter?: string;
@@ -942,11 +1020,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
-      header: "RA?",
+      header: "RA",
       accessor: "reverseAuctionApplicable",
       defaultWidth: 180,
       align: "center",
       type: "boolean",
+    },
+    {
+      header: "RA Dates",
+      accessor: "reverseAuctionStartDate",
+      defaultWidth: 200,
+      align: "center",
+      type: "custom",
     },
     {
       header: "LOI / PO No.",
@@ -1259,7 +1344,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   );
 
   const handleMergedFieldSave = useCallback(
-    (record: EpcTenderRecord, field: string, currentValue: string, setEditingId: (id: string | null) => void, setEditValue: (v: string) => void) => {
+    (record: EpcTenderRecord, field: string, currentValue: string, setEditingId: (id: string | null) => void, setEditValue: (v: string) => void, onSuccess?: () => void) => {
       if (!record.id) {
         toast.error("Database record ID not found. Please refresh.");
         return;
@@ -1287,6 +1372,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         .unwrap()
         .then(() => {
           toast.success(`${field} updated successfully!`);
+          onSuccess?.();
         })
         .catch((err: any) => {
           toast.error(err?.message || `Failed to update ${field}.`);
@@ -1464,6 +1550,40 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     [dispatch],
   );
 
+  const buildRaWebhookData = useCallback(
+    (
+      record: EpcTenderRecord,
+      overrideRa?: boolean | null,
+    ): ReverseAuctionWebhookData => {
+      const reduxRow = tenderData?.rows.find(
+        (r) => String(r.id) === String(record.id),
+      );
+      const assignedIds = (reduxRow?.assignedTo ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map(Number);
+      const firstAssoc = tenderData?.associations.find((a) =>
+        assignedIds.includes(a.id),
+      );
+      return {
+        tenderMergedId: Number(record.id ?? 0),
+        organization: record.nameOfTheClient ?? null,
+        docketNo: record.docketNo ?? null,
+        referenceNo: record.tenderNoNitNo ?? null,
+        reverseAuctionApplicable:
+          overrideRa !== undefined
+            ? overrideRa
+            : record.reverseAuctionApplicable,
+        reverseAuctionStartDate: record.reverseAuctionStartDate ?? null,
+        reverseAuctionEndDate: record.reverseAuctionEndDate ?? null,
+        associateName: firstAssoc?.name ?? null,
+        associateEmail: firstAssoc?.email ?? null,
+      };
+    },
+    [tenderData],
+  );
+
   const handleUpdate = async (
     record: EpcTenderRecord,
     field: "tenderUpdateStatus" | "nextAction" | "reverseAuctionApplicable",
@@ -1525,6 +1645,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         }),
       ).unwrap();
 
+      if (field === "reverseAuctionApplicable") {
+        dispatch(
+          triggerReverseAuctionWebhook(buildRaWebhookData(record, currentRa)),
+        );
+      }
+
       toast.success(`Tender ${record.docketNo} updated successfully!`);
     } catch (err: any) {
       console.error(err);
@@ -1552,6 +1678,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>(defaultEndDate ?? "");
+  const [datePreset, setDatePreset] = useState<
+    "" | "thisWeek" | "thisMonth" | "thisYear"
+  >("");
+  const [raStartFrom, setRaStartFrom] = useState<string>("");
+  const [raStartTo, setRaStartTo] = useState<string>("");
+  const [raEndFrom, setRaEndFrom] = useState<string>("");
+  const [raEndTo, setRaEndTo] = useState<string>("");
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(50);
@@ -1565,6 +1698,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "rawMaterials", "diffPercentFromL1", "diffPercentFromL2",
     "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
     "itemCategory", "publishedDate", "assignedDate", "itemSchedules",
+    "reverseAuctionStartDate",
   ]);
 
   const [multiSelectFilters, setMultiSelectFilters] = useState<
@@ -1638,8 +1772,163 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       setProposedErpItemTextFilter("");
       setProposedErpItemCategoryFilter("All");
       setCurrentPage(1);
+      setDatePreset("");
+      setRaStartFrom("");
+      setRaStartTo("");
+      setRaEndFrom("");
+      setRaEndTo("");
     }
   }, [clearTrigger]);
+
+  const getDateRange = useCallback(() => {
+    if (datePreset) {
+      const now = new Date();
+      let from: Date;
+      let to: Date;
+      if (datePreset === "thisWeek") {
+        from = startOfWeek(now, { weekStartsOn: 1 });
+        to = endOfWeek(now, { weekStartsOn: 1 });
+      } else if (datePreset === "thisMonth") {
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+      } else {
+        from = startOfYear(now);
+        to = endOfYear(now);
+      }
+      from.setHours(0, 0, 0, 0);
+      to.setHours(23, 59, 59, 999);
+      return { from, to };
+    }
+    return {
+      from: startDate ? new Date(startDate) : undefined,
+      to: endDate ? new Date(endDate) : undefined,
+    };
+  }, [datePreset, startDate, endDate]);
+
+  const activeDateRange: DateRange | undefined = useMemo(() => {
+    const { from, to } = getDateRange();
+    if (!from) return undefined;
+    return { from, to };
+  }, [getDateRange]);
+
+  const dateRangeLabel = useMemo(() => {
+    if (datePreset === "thisWeek") return "This Week";
+    if (datePreset === "thisMonth") return "This Month";
+    if (datePreset === "thisYear") return "This Year";
+    const { from, to } = getDateRange();
+    if (from && to) {
+      return `${format(from, "dd MMM")} - ${format(to, "dd MMM")}`;
+    }
+    if (from) return `${format(from, "dd MMM")} onwards`;
+    if (to) return `Upto ${format(to, "dd MMM")}`;
+    return "All dates";
+  }, [datePreset, getDateRange]);
+
+  const handleDateRangeSelect = useCallback(
+    (range?: DateRange) => {
+      setDatePreset("");
+      if (range?.from) {
+        const from = new Date(range.from);
+        from.setHours(0, 0, 0, 0);
+        setStartDate(from.toISOString());
+        if (range.to) {
+          const to = new Date(range.to);
+          to.setHours(23, 59, 59, 999);
+          setEndDate(to.toISOString());
+        } else {
+          setEndDate("");
+        }
+      } else {
+        setStartDate("");
+        setEndDate("");
+      }
+      setCurrentPage(1);
+    },
+    [],
+  );
+
+  const buildDateRange = useCallback((fromStr: string, toStr: string) => {
+    return {
+      from: fromStr ? new Date(fromStr) : undefined,
+      to: toStr ? new Date(toStr) : undefined,
+    };
+  }, []);
+
+  const raStartActiveRange: DateRange | undefined = useMemo(() => {
+    const { from, to } = buildDateRange(raStartFrom, raStartTo);
+    if (!from) return undefined;
+    return { from, to };
+  }, [buildDateRange, raStartFrom, raStartTo]);
+
+  const raEndActiveRange: DateRange | undefined = useMemo(() => {
+    const { from, to } = buildDateRange(raEndFrom, raEndTo);
+    if (!from) return undefined;
+    return { from, to };
+  }, [buildDateRange, raEndFrom, raEndTo]);
+
+  const formatRangeLabel = useCallback((fromStr: string, toStr: string) => {
+    const { from, to } = buildDateRange(fromStr, toStr);
+    if (from && to) return `${format(from, "dd MMM")} - ${format(to, "dd MMM")}`;
+    if (from) return `from ${format(from, "dd MMM")}`;
+    if (to) return `upto ${format(to, "dd MMM")}`;
+    return "All";
+  }, [buildDateRange]);
+
+  const handleRaStartSelect = useCallback(
+    (range?: DateRange) => {
+      if (range?.from) {
+        const from = new Date(range.from);
+        from.setHours(0, 0, 0, 0);
+        setRaStartFrom(from.toISOString());
+        if (range.to) {
+          const to = new Date(range.to);
+          to.setHours(23, 59, 59, 999);
+          setRaStartTo(to.toISOString());
+        } else {
+          setRaStartTo("");
+        }
+      } else {
+        setRaStartFrom("");
+        setRaStartTo("");
+      }
+      setCurrentPage(1);
+    },
+    [],
+  );
+
+  const handleRaEndSelect = useCallback(
+    (range?: DateRange) => {
+      if (range?.from) {
+        const from = new Date(range.from);
+        from.setHours(0, 0, 0, 0);
+        setRaEndFrom(from.toISOString());
+        if (range.to) {
+          const to = new Date(range.to);
+          to.setHours(23, 59, 59, 999);
+          setRaEndTo(to.toISOString());
+        } else {
+          setRaEndTo("");
+        }
+      } else {
+        setRaEndFrom("");
+        setRaEndTo("");
+      }
+      setCurrentPage(1);
+    },
+    [],
+  );
+
+  const matchesRaDateRange = useCallback(
+    (date: Date | null | undefined, fromStr: string, toStr: string) => {
+      if (!fromStr && !toStr) return true;
+      if (!date || isNaN(date.getTime())) return false;
+      const { from, to } = buildDateRange(fromStr, toStr);
+      if (from && date < from) return false;
+      if (to && date > to) return false;
+      return true;
+    },
+    [buildDateRange],
+  );
 
   // Helper for cascading dependent filters
   const getFilteredRecordsExcept = (excludeAccessor: string | null) => {
@@ -1665,18 +1954,36 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       });
     }
 
-    if (startDate) {
-      result = result.filter(
-        (record) =>
-          record.lastDateOfSubmission &&
-          new Date(record.lastDateOfSubmission) >= new Date(startDate),
+    const { from: dateFrom, to: dateTo } = getDateRange();
+    if (dateFrom || dateTo) {
+      result = result.filter((record) => {
+        if (!record.lastDateOfSubmission) return false;
+        const dateVal = record.lastDateOfSubmission;
+        if (!(dateVal instanceof Date) || isNaN(dateVal.getTime())) {
+          return false;
+        }
+        if (dateFrom && dateVal < dateFrom) return false;
+        if (dateTo && dateVal > dateTo) return false;
+        return true;
+      });
+    }
+
+    if (raStartFrom || raStartTo) {
+      result = result.filter((record) =>
+        matchesRaDateRange(
+          record.reverseAuctionStartDate,
+          raStartFrom,
+          raStartTo,
+        ),
       );
     }
-    if (endDate) {
-      result = result.filter(
-        (record) =>
-          record.lastDateOfSubmission &&
-          new Date(record.lastDateOfSubmission) <= new Date(endDate),
+    if (raEndFrom || raEndTo) {
+      result = result.filter((record) =>
+        matchesRaDateRange(
+          record.reverseAuctionEndDate,
+          raEndFrom,
+          raEndTo,
+        ),
       );
     }
 
@@ -1750,6 +2057,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     globalSearch,
     startDate,
     endDate,
+    datePreset,
+    raStartFrom,
+    raStartTo,
+    raEndFrom,
+    raEndTo,
     multiSelectFilters,
     columnSearchText,
     remarksDropdownFilter,
@@ -1774,6 +2086,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     globalSearch,
     startDate,
     endDate,
+    datePreset,
+    raStartFrom,
+    raStartTo,
+    raEndFrom,
+    raEndTo,
     multiSelectFilters,
     columnSearchText,
     remarksDropdownFilter,
@@ -1898,7 +2215,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     }
 
     // Date Range Filter on lastDateOfSubmission
-    if (startDate || endDate) {
+    const { from: dateFrom, to: dateTo } = getDateRange();
+    if (dateFrom || dateTo) {
       result = result.filter((record) => {
         if (!record.lastDateOfSubmission) return false;
         const dateVal = record.lastDateOfSubmission;
@@ -1907,20 +2225,30 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           return false;
         }
 
-        if (startDate) {
-          const start = new Date(startDate);
-          start.setHours(0, 0, 0, 0);
-          if (dateVal < start) return false;
-        }
-
-        if (endDate) {
-          const end = new Date(endDate);
-          end.setHours(23, 59, 59, 999);
-          if (dateVal > end) return false;
-        }
+        if (dateFrom && dateVal < dateFrom) return false;
+        if (dateTo && dateVal > dateTo) return false;
 
         return true;
       });
+    }
+
+    if (raStartFrom || raStartTo) {
+      result = result.filter((record) =>
+        matchesRaDateRange(
+          record.reverseAuctionStartDate,
+          raStartFrom,
+          raStartTo,
+        ),
+      );
+    }
+    if (raEndFrom || raEndTo) {
+      result = result.filter((record) =>
+        matchesRaDateRange(
+          record.reverseAuctionEndDate,
+          raEndFrom,
+          raEndTo,
+        ),
+      );
     }
 
     // Column Header Filters (multi-select)
@@ -2078,6 +2406,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     sortDirection,
     startDate,
     endDate,
+    datePreset,
+    raStartFrom,
+    raStartTo,
+    raEndFrom,
+    raEndTo,
     multiSelectFilters,
     columnSearchText,
     remarksTextFilter,
@@ -2101,7 +2434,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   // Reset page when search, sort, date filters, or row limit changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [globalSearch, sortColumn, sortDirection, rowsPerPage, startDate, endDate]);
+  }, [globalSearch, sortColumn, sortDirection, rowsPerPage, startDate, endDate, datePreset, raStartFrom, raStartTo, raEndFrom, raEndTo]);
 
   // 7. Scrolling is managed natively by the browser's layout engine
 
@@ -2403,37 +2736,158 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                     </div>
                     {col.accessor === "lastDateOfSubmission" && (
                       <div
-                        className="column-date-filter"
+                        className="column-deadline-filter"
                         onClick={(e) => e.stopPropagation()}
                         onMouseDown={(e) => e.stopPropagation()}
                       >
-                        <input
-                          type="date"
-                          className="date-filter-input"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          title="Start Date"
-                        />
-                        <span className="date-filter-to">to</span>
-                        <input
-                          type="date"
-                          className="date-filter-input"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          title="End Date"
-                        />
-                        {(startDate || endDate) && (
-                          <button
-                            className="date-filter-clear-btn"
-                            onClick={() => {
-                              setStartDate("");
-                              setEndDate("");
-                            }}
-                            title="Clear date filter"
-                          >
-                            <X size={14} />
-                          </button>
-                        )}
+                        <Select
+                          value={datePreset}
+                          onValueChange={(v) => {
+                            setDatePreset((v ?? "") as "" | "thisWeek" | "thisMonth" | "thisYear");
+                            setStartDate("");
+                            setEndDate("");
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <SelectTrigger size="sm" className="deadline-preset-select w-full">
+                            <SelectValue placeholder="All" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">All</SelectItem>
+                            <SelectItem value="thisWeek">This Week</SelectItem>
+                            <SelectItem value="thisMonth">This Month</SelectItem>
+                            <SelectItem value="thisYear">This Year</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <div className="deadline-date-range-row">
+                          <Popover>
+                            <PopoverTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="date-range-trigger-btn"
+                                  title="Filter by Last Date of Submission range"
+                                >
+                                  <CalendarIcon size={12} />
+                                  {dateRangeLabel}
+                                </button>
+                              }
+                            />
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="range"
+                                defaultMonth={
+                                  activeDateRange?.from ?? new Date()
+                                }
+                                selected={activeDateRange}
+                                onSelect={handleDateRangeSelect}
+                                numberOfMonths={2}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          {(startDate || endDate || datePreset) && (
+                            <button
+                              className="date-filter-clear-btn"
+                              onClick={() => {
+                                setStartDate("");
+                                setEndDate("");
+                                setDatePreset("");
+                                setCurrentPage(1);
+                              }}
+                              title="Clear date filter"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {col.accessor === "reverseAuctionStartDate" && (
+                      <div
+                        className="column-ra-filter"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <div className="deadline-date-range-row">
+                          <Popover>
+                            <PopoverTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="date-range-trigger-btn"
+                                  title="Filter by RA start date range"
+                                >
+                                  <CalendarIcon size={12} />
+                                  Start: {formatRangeLabel(raStartFrom, raStartTo)}
+                                </button>
+                              }
+                            />
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="range"
+                                defaultMonth={
+                                  raStartActiveRange?.from ?? new Date()
+                                }
+                                selected={raStartActiveRange}
+                                onSelect={handleRaStartSelect}
+                                numberOfMonths={2}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          {(raStartFrom || raStartTo) && (
+                            <button
+                              className="date-filter-clear-btn"
+                              onClick={() => {
+                                setRaStartFrom("");
+                                setRaStartTo("");
+                                setCurrentPage(1);
+                              }}
+                              title="Clear RA start date filter"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                        <div className="deadline-date-range-row">
+                          <Popover>
+                            <PopoverTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="date-range-trigger-btn"
+                                  title="Filter by RA end date range"
+                                >
+                                  <CalendarIcon size={12} />
+                                  End: {formatRangeLabel(raEndFrom, raEndTo)}
+                                </button>
+                              }
+                            />
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="range"
+                                defaultMonth={
+                                  raEndActiveRange?.from ?? new Date()
+                                }
+                                selected={raEndActiveRange}
+                                onSelect={handleRaEndSelect}
+                                numberOfMonths={2}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          {(raEndFrom || raEndTo) && (
+                            <button
+                              className="date-filter-clear-btn"
+                              onClick={() => {
+                                setRaEndFrom("");
+                                setRaEndTo("");
+                                setCurrentPage(1);
+                              }}
+                              title="Clear RA end date filter"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                     {!SKIP_FILTER_COLUMNS.has(col.accessor) && (
@@ -3074,6 +3528,182 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             );
                             cellClass = "col-left col-editable";
                           }
+                        } else if (col.accessor === "reverseAuctionStartDate") {
+                          const raStartDate = record.reverseAuctionStartDate;
+                          const raStartValid =
+                            raStartDate && !isNaN(raStartDate.getTime())
+                              ? raStartDate
+                              : null;
+                          const raStartDisplay = raStartValid
+                            ? format(raStartValid, "dd-MM-yyyy HH:mm")
+                            : "";
+                          const raEndDate = record.reverseAuctionEndDate;
+                          const raEndValid =
+                            raEndDate && !isNaN(raEndDate.getTime())
+                              ? raEndDate
+                              : null;
+                          const raEndDisplay = raEndValid
+                            ? format(raEndValid, "dd-MM-yyyy HH:mm")
+                            : "";
+
+                          const saveRaDate = (
+                            field:
+                              | "reverseAuctionStartDate"
+                              | "reverseAuctionEndDate",
+                            value: string,
+                            currentDisplay: string,
+                          ) => {
+                            const trimmed = value.trim();
+                            if (trimmed === currentDisplay) return;
+                            if (!record.id) return;
+                            let isoValue = "";
+                            if (trimmed !== "") {
+                              const parsed = parseDate(trimmed);
+                              if (!parsed) {
+                                toast.error(`Invalid date: "${trimmed}"`);
+                                return;
+                              }
+                              isoValue = format(
+                                parsed,
+                                "yyyy-MM-dd'T'HH:mm:ss",
+                              );
+                            }
+                            const raWebhookData = buildRaWebhookData(record);
+                            if (field === "reverseAuctionStartDate") {
+                              raWebhookData.reverseAuctionStartDate =
+                                isoValue || null;
+                            } else {
+                              raWebhookData.reverseAuctionEndDate =
+                                isoValue || null;
+                            }
+                            handleMergedFieldSave(
+                              record,
+                              field,
+                              isoValue,
+                              () => {},
+                              () => {},
+                              () => {
+                                dispatch(
+                                  triggerReverseAuctionWebhook(raWebhookData),
+                                );
+                              },
+                            );
+                          };
+
+                          if (
+                            readOnly &&
+                            !editableColumns.includes(
+                              "reverseAuctionStartDate",
+                            )
+                          ) {
+                            cellContent = (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  gap: 2,
+                                }}
+                              >
+                                <span style={{ fontSize: 11 }}>
+                                  {raStartValid
+                                    ? `Start: ${formatDate(raStartValid)}`
+                                    : "Start: -"}
+                                </span>
+                                <span style={{ fontSize: 11 }}>
+                                  {raEndValid
+                                    ? `End: ${formatDate(raEndValid)}`
+                                    : "End: -"}
+                                </span>
+                              </div>
+                            );
+                            cellClass = "col-center";
+                          } else {
+                            const startSaving =
+                              !!savingKeys[
+                                `${record.id}-reverseAuctionStartDate`
+                              ];
+                            const endSaving =
+                              !!savingKeys[
+                                `${record.id}-reverseAuctionEndDate`
+                              ];
+                            cellContent = (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "4px",
+                                  padding: "4px 0",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      color: "#5f6368",
+                                      width: 30,
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    Start
+                                  </span>
+                                  <RaDateInput
+                                    initialValue={raStartDisplay}
+                                    disabled={startSaving}
+                                    onCommit={(v) =>
+                                      saveRaDate(
+                                        "reverseAuctionStartDate",
+                                        v,
+                                        raStartDisplay,
+                                      )
+                                    }
+                                  />
+                                  {startSaving && (
+                                    <Loader2 size={12} className="spin" />
+                                  )}
+                                </div>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      color: "#5f6368",
+                                      width: 30,
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    End
+                                  </span>
+                                  <RaDateInput
+                                    initialValue={raEndDisplay}
+                                    disabled={endSaving}
+                                    onCommit={(v) =>
+                                      saveRaDate(
+                                        "reverseAuctionEndDate",
+                                        v,
+                                        raEndDisplay,
+                                      )
+                                    }
+                                  />
+                                  {endSaving && (
+                                    <Loader2 size={12} className="spin" />
+                                  )}
+                                </div>
+                              </div>
+                            );
+                            cellClass = "col-center";
+                          }
                         } else {
                           cellVal =
                             record[col.accessor as keyof EpcTenderRecord];
@@ -3192,6 +3822,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                   <SelectItem value="Draft">Draft</SelectItem>
                                   <SelectItem value="Bank Guarantee">Bank Guarantee</SelectItem>
                                   <SelectItem value="Online">Online</SelectItem>
+                                  <SelectItem value="NO">NO</SelectItem>
                                 </SelectContent>
                               </Select>
                             );
@@ -3275,14 +3906,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             }
                           } else if (col.type === "boolean") {
                             if (col.accessor === "reverseAuctionApplicable") {
-                              const hasRaRule =
-                                record.raQualificationRule != null &&
-                                record.raQualificationRule !== "";
+                              // const hasRaRule =
+                              //   record.raQualificationRule != null &&
+                              //   record.raQualificationRule !== "";
 
-                              if (hasRaRule) {
-                                cellContent = <span>Yes</span>;
-                                cellClass = "col-center";
-                              } else {
+                              // if (hasRaRule) {
+                              //   cellContent = <span>Yes</span>;
+                              //   cellClass = "col-center";
+                              // } else {
+                              {
                                 const raVal =
                                   overrides[record.id!]
                                     ?.reverseAuctionApplicable !== undefined
@@ -3294,48 +3926,64 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                     `${record.id}::reverseAuctionApplicable`
                                   ];
 
-                                if (readOnly) {
+                                if (readOnly && !editableColumns.includes("reverseAuctionApplicable")) {
                                   const raDisplay = raVal === true ? "Yes" : raVal === false ? "No" : "-";
                                   cellContent = <span>{raDisplay}</span>;
                                   cellClass = "col-center";
                                 } else {
-                                  let selectVal = "BLANK";
-                                  if (raVal === true) selectVal = "YES";
-                                  else if (raVal === false) selectVal = "NO";
-
+                                  const raIsYes = raVal === true;
+                                  const raIsNo = raVal === false;
                                   cellContent = (
-                                    <Select
-                                      value={selectVal}
-                                      disabled={isSaving}
-                                      onValueChange={(v) => {
-                                        const val =
-                                          v === "YES"
-                                            ? true
-                                            : v === "NO"
-                                              ? false
-                                              : null;
-                                        handleUpdate(
-                                          record,
-                                          "reverseAuctionApplicable",
-                                          val,
-                                        );
-                                      }}
-                                    >
-                                      <SelectTrigger
-                                        size="sm"
-                                        className="table-editable-select status-select w-full text-[11px]"
-                                        style={{ minWidth: "60px" }}
+                                    <div style={{ display: "flex", gap: "4px", padding: "4px 0", justifyContent: "center" }}>
+                                      <button
+                                        type="button"
+                                        disabled={isSaving}
+                                        onClick={() =>
+                                          handleUpdate(
+                                            record,
+                                            "reverseAuctionApplicable",
+                                            raIsYes ? null : true,
+                                          )
+                                        }
+                                        style={{
+                                          width: "28px", height: "28px", borderRadius: "4px",
+                                          fontSize: "11px", fontWeight: 700, border: "2px solid",
+                                          cursor: isSaving ? "not-allowed" : "pointer",
+                                          opacity: isSaving ? 0.5 : 1,
+                                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                          backgroundColor: isSaving ? "#e2e8f0" : raIsYes ? "#22c55e" : "#ffffff",
+                                          color: isSaving ? "#94a3b8" : raIsYes ? "#ffffff" : "#94a3b8",
+                                          borderColor: isSaving ? "#cbd5e1" : raIsYes ? "#16a34a" : "#cbd5e1",
+                                        }}
                                       >
-                                        <SelectValue placeholder="(Blank)" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="BLANK">(Blank)</SelectItem>
-                                        <SelectItem value="YES">Yes</SelectItem>
-                                        <SelectItem value="NO">No</SelectItem>
-                                      </SelectContent>
-                                    </Select>
+                                        {isSaving ? "..." : "Y"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isSaving}
+                                        onClick={() =>
+                                          handleUpdate(
+                                            record,
+                                            "reverseAuctionApplicable",
+                                            raIsNo ? null : false,
+                                          )
+                                        }
+                                        style={{
+                                          width: "28px", height: "28px", borderRadius: "4px",
+                                          fontSize: "11px", fontWeight: 700, border: "2px solid",
+                                          cursor: isSaving ? "not-allowed" : "pointer",
+                                          opacity: isSaving ? 0.5 : 1,
+                                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                          backgroundColor: isSaving ? "#e2e8f0" : raIsNo ? "#ef4444" : "#ffffff",
+                                          color: isSaving ? "#94a3b8" : raIsNo ? "#ffffff" : "#94a3b8",
+                                          borderColor: isSaving ? "#cbd5e1" : raIsNo ? "#dc2626" : "#cbd5e1",
+                                        }}
+                                      >
+                                        {isSaving ? "..." : "N"}
+                                      </button>
+                                    </div>
                                   );
-                                  cellClass = "col-center col-editable";
+                                  cellClass = "col-center";
                                 }
                               }
                             } else if (col.accessor === "participated") {
@@ -3605,11 +4253,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                     disabled={isUpdating}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (isYes) {
-                                        dispatchCatalogue("NOT_DECIDED");
-                                      } else {
-                                        setCatalogueUploadRow(record);
-                                      }
+                                      dispatchCatalogue(isYes ? "NOT_DECIDED" : "YES");
                                     }}
                                     style={{
                                       width: "28px", height: "28px", borderRadius: "4px",
@@ -3689,7 +4333,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                 : undefined
                             }
                           >
-                            {cellContent}
+                            <div className="cell-scroll-wrap">
+                              {cellContent}
+                            </div>
                           </td>
                         );
                       })}

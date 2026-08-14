@@ -18,10 +18,10 @@ export default function ActionArea() {
   const selectedDateFrom = useAppSelector((s) => s.files.selectedDateFrom);
   const selectedDateTo = useAppSelector((s) => s.files.selectedDateTo);
 
-  const selectedRange: DateRange | undefined = {
-    from: new Date(selectedDateFrom),
-    to: new Date(selectedDateTo),
-  };
+  const selectedRange: DateRange | undefined =
+    selectedDateFrom && selectedDateTo
+      ? { from: new Date(selectedDateFrom), to: new Date(selectedDateTo) }
+      : undefined;
 
   return (
     <div className="h-full flex flex-col rounded-sm bg-white border border-slate-200 shadow-sm overflow-hidden">
@@ -52,7 +52,7 @@ export default function ActionArea() {
                   className="w-full justify-start px-2.5 font-normal rounded-sm"
                 >
                   <CalendarIcon data-icon="inline-start" />
-                  {selectedRange.from ? (
+                  {selectedRange?.from ? (
                     selectedRange.to ? (
                       <>
                         {format(selectedRange.from, "LLL dd, y")}
@@ -63,7 +63,7 @@ export default function ActionArea() {
                       format(selectedRange.from, "LLL dd, y")
                     )
                   ) : (
-                    <span>Pick a date range</span>
+                    <span>All Files</span>
                   )}
                 </Button>
               }
@@ -71,7 +71,7 @@ export default function ActionArea() {
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="range"
-                defaultMonth={selectedRange.from}
+                defaultMonth={selectedRange?.from}
                 selected={selectedRange}
                 onSelect={(range) => {
                   if (range?.from && range?.to) {

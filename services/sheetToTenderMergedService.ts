@@ -38,6 +38,17 @@ export interface SyncResult {
     linked: number;
     errors: number;
   };
+  costingFetched: Array<{
+    referenceNo: string;
+    fileName: string;
+    url: string;
+  }>;
+  networkFetched: Array<{
+    referenceNo: string;
+    docketNo: string;
+    folderPath: string;
+    files: Array<{ name: string; extension: string; url: string }>;
+  }>;
   tenders: {
     fileName: string;
     columns: string[];
@@ -349,6 +360,9 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
     errors: 0,
   };
 
+  const costingFetched: SyncResult["costingFetched"] = [];
+  const networkFetched: SyncResult["networkFetched"] = [];
+
   const associations = await prisma.association.findMany();
 
   const sheetService = new GoogleSheetService();
@@ -447,6 +461,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
         },
       });
       costingCount++;
+      costingFetched.push({ referenceNo: refNo, fileName: name, url: urlStr });
       console.log("[SheetSync] Created TenderFile for", refNo, {
         name,
         extension,
@@ -503,6 +518,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
           const docketSegment = docketParts.length > 1 ? docketParts[1] : null;
 
           let costingDeleted = false;
+          const fetchedNetworkFiles: SyncResult["networkFetched"][number]["files"] = [];
 
           for (const f of files) {
             const relativePath = path.relative(networkRoot, f.absolutePath);
@@ -538,7 +554,18 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
               },
             });
 
+            fetchedNetworkFiles.push({
+              name: f.name,
+              extension: f.extension,
+              url: relativePath,
+            });
+
             if (isCostingFile) {
+              costingFetched.push({
+                referenceNo: tm.referenceNo ?? "",
+                fileName: f.name,
+                url: relativePath,
+              });
               await publishCostingParsingJob({
                 tenderMergedId: tm.id,
                 referenceNo: tm.referenceNo ?? undefined,
@@ -548,6 +575,15 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
                 },
               });
             }
+          }
+
+          if (fetchedNetworkFiles.length > 0) {
+            networkFetched.push({
+              referenceNo: tm.referenceNo ?? "",
+              docketNo: tm.docketNo ?? "",
+              folderPath,
+              files: fetchedNetworkFiles,
+            });
           }
         }),
       );
@@ -713,6 +749,8 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
 
   return {
     summary,
+    costingFetched,
+    networkFetched,
     tenders: {
       fileName: `Sheet Sync (${summary.created} costing attachments)`,
       columns,

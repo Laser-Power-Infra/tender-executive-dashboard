@@ -52,6 +52,8 @@ export interface EpcTenderRecord {
   tenderSubmittedDate: Date | null;
   reverseAuctionApplicable: boolean | null;
   reverseAuctionDate: Date | null;
+  reverseAuctionStartDate: Date | null;
+  reverseAuctionEndDate: Date | null;
   emdPaymentMode: EMDExchangeMode | null;
   bgNoUtrNo: string | null;
   emdValidity: Date | null;

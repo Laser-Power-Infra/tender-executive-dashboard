@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireApiKey } from "@/lib/dal";
 import { withLog } from "@/lib/activity-logger";
-import { NOTIFICATION_TYPES } from "@/lib/notification-types";
+import { NOTIFICATION_TYPES, NOTIFICATION_DEADLINE_START } from "@/lib/notification-types";
 import { sendNotificationMessage } from "@/lib/notifications/sender";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ async function triggerCatalogueMissingNotifications() {
         { apm: "YES" },
         { participated: null },
         { catalogueDone: "NOT_DECIDED" },
-        { deadline: { gte: now, lte: new Date(now.getTime() + SEVEN_DAYS_MS) } },
+        { deadline: { gt: NOTIFICATION_DEADLINE_START, gte: now, lte: new Date(now.getTime() + SEVEN_DAYS_MS) } },
         {
           OR: [
             { notificationStatus: null },

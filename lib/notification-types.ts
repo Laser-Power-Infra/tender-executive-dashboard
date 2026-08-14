@@ -7,3 +7,5 @@ export const NOTIFICATION_TYPES = {
 
 export type NotificationType =
   (typeof NOTIFICATION_TYPES)[keyof typeof NOTIFICATION_TYPES];
+
+export const NOTIFICATION_DEADLINE_START = new Date("2026-07-20T00:00:00.000Z");

@@ -2,6 +2,8 @@ import "server-only"
 import { z } from "zod"
 import fs from "fs"
 import path from "path"
+import { format } from "date-fns"
+import { parseDate } from "@/lib/parse-date"
 import { describeTenderFile } from "@/lib/tenderFileDescriptor"
 
 export interface EmdWebhookItem {
@@ -276,5 +278,101 @@ export async function triggerRequisitionEmailWebhook(
     const msg = error instanceof Error ? error.message : "Unknown error"
     console.error("[n8n] Requisition email webhook failed:", error)
     return { success: false, message: `Webhook failed: ${msg}` }
+  }
+}
+
+export interface ReverseAuctionWebhookData {
+  tenderMergedId: number
+  organization: string | null
+  docketNo: string | null
+  referenceNo: string | null
+  reverseAuctionApplicable: boolean | null
+  reverseAuctionStartDate: Date | string | null
+  reverseAuctionEndDate: Date | string | null
+  associateName: string | null
+  associateEmail: string | null
+}
+
+export interface ReverseAuctionWebhookPayload {
+  organization: string | null
+  docketNo: string | null
+  referenceNo: string | null
+  startDate: string | null
+  endDate: string | null
+  associateName: string | null
+  associateEmail: string | null
+}
+
+export async function triggerReverseAuctionWebhook(
+  data: ReverseAuctionWebhookData,
+): Promise<boolean> {
+  const url = process.env.N8N_RA_WEBHOOK_URL
+  if (!url) {
+    console.warn(
+      "[n8n] N8N_RA_WEBHOOK_URL not configured, skipping reverse auction webhook",
+    )
+    return false
+  }
+
+  const start = data.reverseAuctionStartDate
+    ? parseDate(data.reverseAuctionStartDate)
+    : null
+  const end = data.reverseAuctionEndDate
+    ? parseDate(data.reverseAuctionEndDate)
+    : null
+
+  if (
+    data.reverseAuctionApplicable !== true ||
+    !start ||
+    isNaN(start.getTime()) ||
+    !end ||
+    isNaN(end.getTime())
+  ) {
+    return false
+  }
+
+  const payload: ReverseAuctionWebhookPayload = {
+    organization: data.organization,
+    docketNo: data.docketNo,
+    referenceNo: data.referenceNo,
+    startDate: format(start, "dd-MM-yyyy HH:mm"),
+    endDate: format(end, "dd-MM-yyyy HH:mm"),
+    associateName: data.associateName,
+    associateEmail: data.associateEmail,
+  }
+
+  console.log(
+    `[n8n] Reverse auction webhook triggered for referenceNo ${data.referenceNo}`,
+  )
+
+  if (process.env.ENVIRONMENT !== "PROD") {
+    console.log(
+      "[n8n] Reverse auction webhook payload:",
+      JSON.stringify(payload, null, 2),
+    )
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    console.log(
+      `[n8n] Reverse auction webhook response status: ${response.status}`,
+    )
+
+    if (!response.ok) {
+      console.error(
+        `[n8n] Reverse auction webhook returned ${response.status}: ${await response.text()}`,
+      )
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error("[n8n] Reverse auction webhook failed:", error)
+    return false
   }
 }

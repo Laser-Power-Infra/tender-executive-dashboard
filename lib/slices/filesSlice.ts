@@ -11,8 +11,8 @@ interface FileItem {
 }
 
 interface FilesState {
-  selectedDateFrom: string;
-  selectedDateTo: string;
+  selectedDateFrom: string | null;
+  selectedDateTo: string | null;
   items: FileItem[];
   loading: boolean;
 }
@@ -56,6 +56,10 @@ export const filesSlice = createSlice({
       state.selectedDateFrom = action.payload.from;
       state.selectedDateTo = action.payload.to;
     },
+    resetSelectedDateRange(state) {
+      state.selectedDateFrom = null;
+      state.selectedDateTo = null;
+    },
     clearState() {
       return initialState;
     },
@@ -75,5 +79,6 @@ export const filesSlice = createSlice({
   },
 });
 
-export const { setSelectedDateRange, clearState } = filesSlice.actions;
+export const { setSelectedDateRange, resetSelectedDateRange, clearState } =
+  filesSlice.actions;
 export default filesSlice.reducer;
