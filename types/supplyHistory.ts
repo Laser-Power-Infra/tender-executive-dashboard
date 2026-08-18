@@ -10,6 +10,9 @@ export interface SupplyHistoryRecord {
   partyRefNo: string | null;
   partyRefDate: string | null;
   contractVrNo: string | null;
+  quotationNo?: string | null;
+  docketNo?: string | null;
+  utility?: string | null;
   rate: number | null;
   invoiceQty: number | null;
   invoiceAmt: number | null;

@@ -37,6 +37,9 @@ const COLUMNS: ColDef[] = [
   { key: "partyRefNo",      label: "Party Ref No",      width: 140, align: "left"   },
   { key: "partyRefDate",    label: "Party Ref Date",    width: 150, align: "center" },
   { key: "contractVrNo",    label: "Contract VR No",    width: 140, align: "left"   },
+  { key: "quotationNo",     label: "Quotation No",      width: 120, align: "left"   },
+  { key: "docketNo",        label: "Docket No",         width: 140, align: "left"   },
+  { key: "utility",         label: "Utility",           width: 220, align: "left"   },
   { key: "rate",            label: "Rate",              width: 110, align: "right"  },
   { key: "invoiceQty",      label: "Invoice Qty",       width: 110, align: "right"  },
   { key: "invoiceAmt",      label: "Invoice Amt",       width: 130, align: "right"  },
@@ -68,6 +71,62 @@ function formatNumber(val: number | null): string {
   if (val === null || val === undefined) return "";
   return val.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 }
+
+interface ColumnMultiselectDropdownProps {
+  triggerLabel: string;
+  selected: string[];
+  options: string[];
+  show: boolean;
+  onToggleShow: () => void;
+  onToggleOption: (value: string) => void;
+  onClearAll: () => void;
+  onSelectAll: () => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+const ColumnMultiselectDropdown: React.FC<ColumnMultiselectDropdownProps> = ({
+  triggerLabel,
+  selected,
+  options,
+  show,
+  onToggleShow,
+  onToggleOption,
+  onClearAll,
+  onSelectAll,
+  containerRef,
+}) => {
+  return (
+    <div className="custom-multiselect-container" ref={containerRef}>
+      <button
+        className="multiselect-trigger-btn"
+        onClick={onToggleShow}
+        style={{ marginBottom: "4px" }}
+      >
+        {selected.length === 0 ? triggerLabel : `${selected.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
+      </button>
+      {show && (
+        <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
+          <div className="multiselect-actions">
+            <button className="multiselect-action-btn" onClick={onClearAll}>Clear All</button>
+            <button className="multiselect-action-btn" onClick={onSelectAll}>Select All</button>
+          </div>
+          <div className="multiselect-options-list">
+            {options.map(option => (
+              <label key={option} className="multiselect-option-label">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option)}
+                  onChange={() => onToggleOption(option)}
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const SupplyHistoryDashboard: React.FC = () => {
   const { data, loading, error, refresh } = useSupplyHistory();
@@ -104,6 +163,38 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [selectedContracts, setSelectedContracts] = useState<string[]>([]);
   const contractDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [showQuotationDropdown, setShowQuotationDropdown] = useState(false);
+  const [selectedQuotations, setSelectedQuotations] = useState<string[]>([]);
+  const quotationDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showDocketDropdown, setShowDocketDropdown] = useState(false);
+  const [selectedDockets, setSelectedDockets] = useState<string[]>([]);
+  const docketDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showUtilityDropdown, setShowUtilityDropdown] = useState(false);
+  const [selectedUtilities, setSelectedUtilities] = useState<string[]>([]);
+  const utilityDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showFyDropdown, setShowFyDropdown] = useState(false);
+  const [selectedFy, setSelectedFy] = useState<string[]>([]);
+  const fyDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showBillNoDropdown, setShowBillNoDropdown] = useState(false);
+  const [selectedBillNos, setSelectedBillNos] = useState<string[]>([]);
+  const billNoDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showItemCodeDropdown, setShowItemCodeDropdown] = useState(false);
+  const [selectedItemCodes, setSelectedItemCodes] = useState<string[]>([]);
+  const itemCodeDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showLrNoDropdown, setShowLrNoDropdown] = useState(false);
+  const [selectedLrNos, setSelectedLrNos] = useState<string[]>([]);
+  const lrNoDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showDocsDropdown, setShowDocsDropdown] = useState(false);
+  const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
+  const docsDropdownRef = useRef<HTMLDivElement>(null);
+
   const [rateMin, setRateMin] = useState("");
   const [rateMax, setRateMax] = useState("");
   const [qtyMin, setQtyMin] = useState("");
@@ -113,6 +204,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [selectedBillNo, setSelectedBillNo] = useState<string | null>(null);
   const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState<string | null>(null);
   const [indexing, setIndexing] = useState(false);
+  const [syncingQuotation, setSyncingQuotation] = useState(false);
   const [downloadingDocs, setDownloadingDocs] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
 
@@ -219,6 +311,30 @@ export const SupplyHistoryDashboard: React.FC = () => {
       if (contractDropdownRef.current && !contractDropdownRef.current.contains(event.target as Node)) {
         setShowContractDropdown(false);
       }
+      if (quotationDropdownRef.current && !quotationDropdownRef.current.contains(event.target as Node)) {
+        setShowQuotationDropdown(false);
+      }
+      if (docketDropdownRef.current && !docketDropdownRef.current.contains(event.target as Node)) {
+        setShowDocketDropdown(false);
+      }
+      if (utilityDropdownRef.current && !utilityDropdownRef.current.contains(event.target as Node)) {
+        setShowUtilityDropdown(false);
+      }
+      if (fyDropdownRef.current && !fyDropdownRef.current.contains(event.target as Node)) {
+        setShowFyDropdown(false);
+      }
+      if (billNoDropdownRef.current && !billNoDropdownRef.current.contains(event.target as Node)) {
+        setShowBillNoDropdown(false);
+      }
+      if (itemCodeDropdownRef.current && !itemCodeDropdownRef.current.contains(event.target as Node)) {
+        setShowItemCodeDropdown(false);
+      }
+      if (lrNoDropdownRef.current && !lrNoDropdownRef.current.contains(event.target as Node)) {
+        setShowLrNoDropdown(false);
+      }
+      if (docsDropdownRef.current && !docsDropdownRef.current.contains(event.target as Node)) {
+        setShowDocsDropdown(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
@@ -253,6 +369,22 @@ export const SupplyHistoryDashboard: React.FC = () => {
     setShowPartyRefDropdown(false);
     setSelectedContracts([]);
     setShowContractDropdown(false);
+    setSelectedQuotations([]);
+    setShowQuotationDropdown(false);
+    setSelectedDockets([]);
+    setShowDocketDropdown(false);
+    setSelectedUtilities([]);
+    setShowUtilityDropdown(false);
+    setSelectedFy([]);
+    setShowFyDropdown(false);
+    setSelectedBillNos([]);
+    setShowBillNoDropdown(false);
+    setSelectedItemCodes([]);
+    setShowItemCodeDropdown(false);
+    setSelectedLrNos([]);
+    setShowLrNoDropdown(false);
+    setSelectedDocs([]);
+    setShowDocsDropdown(false);
     const cleared: Record<string, string> = {};
     COLUMNS.forEach(c => { cleared[c.key] = ""; });
     setColSearches(cleared);
@@ -296,6 +428,38 @@ export const SupplyHistoryDashboard: React.FC = () => {
 
     if (selectedContracts.length > 0) {
       rows = rows.filter(row => row.contractVrNo && selectedContracts.includes(row.contractVrNo.trim()));
+    }
+
+    if (selectedQuotations.length > 0) {
+      rows = rows.filter(row => row.quotationNo && selectedQuotations.includes(row.quotationNo.trim()));
+    }
+
+    if (selectedDockets.length > 0) {
+      rows = rows.filter(row => row.docketNo && selectedDockets.includes(row.docketNo.trim()));
+    }
+
+    if (selectedUtilities.length > 0) {
+      rows = rows.filter(row => row.utility && selectedUtilities.includes(row.utility.trim()));
+    }
+
+    if (selectedFy.length > 0) {
+      rows = rows.filter(row => row.fy && selectedFy.includes(row.fy.trim()));
+    }
+
+    if (selectedBillNos.length > 0) {
+      rows = rows.filter(row => row.saleBillNumber && selectedBillNos.includes(row.saleBillNumber.trim()));
+    }
+
+    if (selectedItemCodes.length > 0) {
+      rows = rows.filter(row => row.itemCode && selectedItemCodes.includes(row.itemCode.trim()));
+    }
+
+    if (selectedLrNos.length > 0) {
+      rows = rows.filter(row => row.lrNo && selectedLrNos.includes(row.lrNo.trim()));
+    }
+
+    if (selectedDocs.length > 0) {
+      rows = rows.filter(row => selectedDocs.includes(row.hasDocuments ? "Yes" : "No"));
     }
 
     if (saleBillDateStart) {
@@ -358,31 +522,83 @@ export const SupplyHistoryDashboard: React.FC = () => {
     selectedItems,
     selectedPartyRefs,
     selectedContracts,
+    selectedQuotations,
+    selectedDockets,
+    selectedUtilities,
+    selectedFy,
+    selectedBillNos,
+    selectedItemCodes,
+    selectedLrNos,
+    selectedDocs,
   ]);
 
   const partyNamesList = useMemo(() => {
     const set = new Set<string>();
-    filtered.forEach(r => { if (r.partyName) set.add(r.partyName.trim()); });
+    data.forEach(r => { if (r.partyName) set.add(r.partyName.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [filtered]);
+  }, [data]);
 
   const itemNamesList = useMemo(() => {
     const set = new Set<string>();
-    filtered.forEach(r => { if (r.itemName) set.add(r.itemName.trim()); });
+    data.forEach(r => { if (r.itemName) set.add(r.itemName.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [filtered]);
+  }, [data]);
 
   const partyRefsList = useMemo(() => {
     const set = new Set<string>();
-    filtered.forEach(r => { if (r.partyRefNo) set.add(r.partyRefNo.trim()); });
+    data.forEach(r => { if (r.partyRefNo) set.add(r.partyRefNo.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [filtered]);
+  }, [data]);
 
   const contractsList = useMemo(() => {
     const set = new Set<string>();
-    filtered.forEach(r => { if (r.contractVrNo) set.add(r.contractVrNo.trim()); });
+    data.forEach(r => { if (r.contractVrNo) set.add(r.contractVrNo.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [filtered]);
+  }, [data]);
+
+  const quotationNosList = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(r => { if (r.quotationNo) set.add(r.quotationNo.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [data]);
+
+  const docketsList = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(r => { if (r.docketNo) set.add(r.docketNo.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [data]);
+
+  const utilitiesList = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(r => { if (r.utility) set.add(r.utility.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [data]);
+
+  const fyList = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(r => { if (r.fy) set.add(r.fy.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [data]);
+
+  const billNosList = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(r => { if (r.saleBillNumber) set.add(r.saleBillNumber.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [data]);
+
+  const itemCodesList = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(r => { if (r.itemCode) set.add(r.itemCode.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [data]);
+
+  const lrNosList = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach(r => { if (r.lrNo) set.add(r.lrNo.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [data]);
+
+  const docsList = useMemo(() => ["All", "Yes", "No"], []);
 
   const sorted = useMemo<SupplyHistoryRecord[]>(() => {
     return [...filtered].sort((a, b) => cmp(a[sortField], b[sortField], sortDir));
@@ -413,6 +629,32 @@ export const SupplyHistoryDashboard: React.FC = () => {
       console.error("Index scan failed:", err);
     } finally {
       setIndexing(false);
+    }
+  };
+
+  const handleSyncQuotation = async () => {
+    setSyncingQuotation(true);
+    try {
+      const res = await fetch("/api/supply-history/sync-quotation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE",
+        },
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Sync failed");
+      const s = json.stats;
+      const errCount = s?.errors?.length ?? 0;
+      toast.success(
+        `Quotation sync done: ${s?.updated ?? 0} records updated (${s?.totalContracts ?? 0} contracts, ${errCount} errors)`
+      );
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Quotation sync failed");
+      console.error("Quotation sync failed:", err);
+    } finally {
+      setSyncingQuotation(false);
     }
   };
 
@@ -599,6 +841,14 @@ export const SupplyHistoryDashboard: React.FC = () => {
             style={{ marginTop: "8px" }}
           >
             {indexing ? <><RefreshCw size={14} /> Scanning...</> : <><FolderOpen size={14} /> Scan Documents</>}
+          </button>
+          <button
+            className="supply-refresh-sidebar-btn"
+            onClick={handleSyncQuotation}
+            disabled={syncingQuotation}
+            style={{ marginTop: "8px" }}
+          >
+            {syncingQuotation ? <><RefreshCw size={14} /> Syncing...</> : <><RefreshCw size={14} /> Sync Quotation No</>}
           </button>
         </div>
       </aside>
@@ -828,160 +1078,251 @@ export const SupplyHistoryDashboard: React.FC = () => {
                               </div>
                             )}
                             {col.key === "partyName" && (
-                                <div className="custom-multiselect-container" ref={partyDropdownRef}>
-                                  <button 
-                                    className="multiselect-trigger-btn"
-                                    onClick={() => setShowPartyDropdown(!showPartyDropdown)}
-                                    style={{ marginBottom: "4px" }}
-                                  >
-                                    {selectedParties.length === 0 ? "All Parties" : `${selectedParties.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
-                                  </button>
-                                  {showPartyDropdown && (
-                                    <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                      <div className="multiselect-actions">
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedParties([]); setPage(1); }}>Clear All</button>
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedParties(partyNamesList.filter(p => p !== "All")); setPage(1); }}>Select All</button>
-                                      </div>
-                                      <div className="multiselect-options-list">
-                                        {partyNamesList.filter(p => p !== "All").map(party => (
-                                          <label key={party} className="multiselect-option-label">
-                                            <input 
-                                              type="checkbox"
-                                              checked={selectedParties.includes(party)}
-                                              onChange={() => {
-                                                if (selectedParties.includes(party)) {
-                                                  setSelectedParties(selectedParties.filter(p => p !== party));
-                                                } else {
-                                                  setSelectedParties([...selectedParties, party]);
-                                                }
-                                                setPage(1);
-                                              }}
-                                            />
-                                            <span>{party}</span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Parties"
+                                selected={selectedParties}
+                                options={partyNamesList.filter(p => p !== "All")}
+                                show={showPartyDropdown}
+                                onToggleShow={() => setShowPartyDropdown(!showPartyDropdown)}
+                                onToggleOption={(party) => {
+                                  if (selectedParties.includes(party)) {
+                                    setSelectedParties(selectedParties.filter(p => p !== party));
+                                  } else {
+                                    setSelectedParties([...selectedParties, party]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedParties([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedParties(partyNamesList.filter(p => p !== "All")); setPage(1); }}
+                                containerRef={partyDropdownRef}
+                              />
+                            )}
                             {col.key === "itemName" && (
-                                <div className="custom-multiselect-container" ref={itemDropdownRef}>
-                                  <button 
-                                    className="multiselect-trigger-btn"
-                                    onClick={() => setShowItemDropdown(!showItemDropdown)}
-                                    style={{ marginBottom: "4px" }}
-                                  >
-                                    {selectedItems.length === 0 ? "All Items" : `${selectedItems.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
-                                  </button>
-                                  {showItemDropdown && (
-                                    <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                      <div className="multiselect-actions">
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedItems([]); setPage(1); }}>Clear All</button>
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedItems(itemNamesList.filter(i => i !== "All")); setPage(1); }}>Select All</button>
-                                      </div>
-                                      <div className="multiselect-options-list">
-                                        {itemNamesList.filter(i => i !== "All").map(item => (
-                                          <label key={item} className="multiselect-option-label">
-                                            <input 
-                                              type="checkbox"
-                                              checked={selectedItems.includes(item)}
-                                              onChange={() => {
-                                                if (selectedItems.includes(item)) {
-                                                  setSelectedItems(selectedItems.filter(i => i !== item));
-                                                } else {
-                                                  setSelectedItems([...selectedItems, item]);
-                                                }
-                                                setPage(1);
-                                              }}
-                                            />
-                                            <span>{item}</span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Items"
+                                selected={selectedItems}
+                                options={itemNamesList.filter(i => i !== "All")}
+                                show={showItemDropdown}
+                                onToggleShow={() => setShowItemDropdown(!showItemDropdown)}
+                                onToggleOption={(item) => {
+                                  if (selectedItems.includes(item)) {
+                                    setSelectedItems(selectedItems.filter(i => i !== item));
+                                  } else {
+                                    setSelectedItems([...selectedItems, item]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedItems([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedItems(itemNamesList.filter(i => i !== "All")); setPage(1); }}
+                                containerRef={itemDropdownRef}
+                              />
+                            )}
                             {col.key === "partyRefNo" && (
-                                <div className="custom-multiselect-container" ref={partyRefDropdownRef}>
-                                  <button 
-                                    className="multiselect-trigger-btn"
-                                    onClick={() => setShowPartyRefDropdown(!showPartyRefDropdown)}
-                                    style={{ marginBottom: "4px" }}
-                                  >
-                                    {selectedPartyRefs.length === 0 ? "All Party Refs" : `${selectedPartyRefs.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
-                                  </button>
-                                  {showPartyRefDropdown && (
-                                    <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                      <div className="multiselect-actions">
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedPartyRefs([]); setPage(1); }}>Clear All</button>
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedPartyRefs(partyRefsList.filter(p => p !== "All")); setPage(1); }}>Select All</button>
-                                      </div>
-                                      <div className="multiselect-options-list">
-                                        {partyRefsList.filter(p => p !== "All").map(refNo => (
-                                          <label key={refNo} className="multiselect-option-label">
-                                            <input 
-                                              type="checkbox"
-                                              checked={selectedPartyRefs.includes(refNo)}
-                                              onChange={() => {
-                                                if (selectedPartyRefs.includes(refNo)) {
-                                                  setSelectedPartyRefs(selectedPartyRefs.filter(p => p !== refNo));
-                                                } else {
-                                                  setSelectedPartyRefs([...selectedPartyRefs, refNo]);
-                                                }
-                                                setPage(1);
-                                              }}
-                                            />
-                                            <span>{refNo}</span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Party Refs"
+                                selected={selectedPartyRefs}
+                                options={partyRefsList.filter(p => p !== "All")}
+                                show={showPartyRefDropdown}
+                                onToggleShow={() => setShowPartyRefDropdown(!showPartyRefDropdown)}
+                                onToggleOption={(refNo) => {
+                                  if (selectedPartyRefs.includes(refNo)) {
+                                    setSelectedPartyRefs(selectedPartyRefs.filter(p => p !== refNo));
+                                  } else {
+                                    setSelectedPartyRefs([...selectedPartyRefs, refNo]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedPartyRefs([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedPartyRefs(partyRefsList.filter(p => p !== "All")); setPage(1); }}
+                                containerRef={partyRefDropdownRef}
+                              />
+                            )}
                             {col.key === "contractVrNo" && (
-                                <div className="custom-multiselect-container" ref={contractDropdownRef}>
-                                  <button 
-                                    className="multiselect-trigger-btn"
-                                    onClick={() => setShowContractDropdown(!showContractDropdown)}
-                                    style={{ marginBottom: "4px" }}
-                                  >
-                                    {selectedContracts.length === 0 ? "All Contracts" : `${selectedContracts.length} Selected`} <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
-                                  </button>
-                                  {showContractDropdown && (
-                                    <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                      <div className="multiselect-actions">
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedContracts([]); setPage(1); }}>Clear All</button>
-                                        <button className="multiselect-action-btn" onClick={() => { setSelectedContracts(contractsList.filter(c => c !== "All")); setPage(1); }}>Select All</button>
-                                      </div>
-                                      <div className="multiselect-options-list">
-                                        {contractsList.filter(c => c !== "All").map(cNo => (
-                                          <label key={cNo} className="multiselect-option-label">
-                                            <input 
-                                              type="checkbox"
-                                              checked={selectedContracts.includes(cNo)}
-                                              onChange={() => {
-                                                if (selectedContracts.includes(cNo)) {
-                                                  setSelectedContracts(selectedContracts.filter(c => c !== cNo));
-                                                } else {
-                                                  setSelectedContracts([...selectedContracts, cNo]);
-                                                }
-                                                setPage(1);
-                                              }}
-                                            />
-                                            <span>{cNo}</span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Contracts"
+                                selected={selectedContracts}
+                                options={contractsList.filter(c => c !== "All")}
+                                show={showContractDropdown}
+                                onToggleShow={() => setShowContractDropdown(!showContractDropdown)}
+                                onToggleOption={(cNo) => {
+                                  if (selectedContracts.includes(cNo)) {
+                                    setSelectedContracts(selectedContracts.filter(c => c !== cNo));
+                                  } else {
+                                    setSelectedContracts([...selectedContracts, cNo]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedContracts([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedContracts(contractsList.filter(c => c !== "All")); setPage(1); }}
+                                containerRef={contractDropdownRef}
+                              />
+                            )}
+                            {col.key === "quotationNo" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Quotations"
+                                selected={selectedQuotations}
+                                options={quotationNosList.filter(q => q !== "All")}
+                                show={showQuotationDropdown}
+                                onToggleShow={() => setShowQuotationDropdown(!showQuotationDropdown)}
+                                onToggleOption={(qNo) => {
+                                  if (selectedQuotations.includes(qNo)) {
+                                    setSelectedQuotations(selectedQuotations.filter(q => q !== qNo));
+                                  } else {
+                                    setSelectedQuotations([...selectedQuotations, qNo]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedQuotations([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedQuotations(quotationNosList.filter(q => q !== "All")); setPage(1); }}
+                                containerRef={quotationDropdownRef}
+                              />
+                            )}
+                            {col.key === "docketNo" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Docket Nos"
+                                selected={selectedDockets}
+                                options={docketsList.filter(d => d !== "All")}
+                                show={showDocketDropdown}
+                                onToggleShow={() => setShowDocketDropdown(!showDocketDropdown)}
+                                onToggleOption={(dNo) => {
+                                  if (selectedDockets.includes(dNo)) {
+                                    setSelectedDockets(selectedDockets.filter(d => d !== dNo));
+                                  } else {
+                                    setSelectedDockets([...selectedDockets, dNo]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedDockets([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedDockets(docketsList.filter(d => d !== "All")); setPage(1); }}
+                                containerRef={docketDropdownRef}
+                              />
+                            )}
+                            {col.key === "utility" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Utilities"
+                                selected={selectedUtilities}
+                                options={utilitiesList.filter(u => u !== "All")}
+                                show={showUtilityDropdown}
+                                onToggleShow={() => setShowUtilityDropdown(!showUtilityDropdown)}
+                                onToggleOption={(uVal) => {
+                                  if (selectedUtilities.includes(uVal)) {
+                                    setSelectedUtilities(selectedUtilities.filter(u => u !== uVal));
+                                  } else {
+                                    setSelectedUtilities([...selectedUtilities, uVal]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedUtilities([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedUtilities(utilitiesList.filter(u => u !== "All")); setPage(1); }}
+                                containerRef={utilityDropdownRef}
+                              />
+                            )}
+                            {col.key === "fy" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All FY"
+                                selected={selectedFy}
+                                options={fyList.filter(f => f !== "All")}
+                                show={showFyDropdown}
+                                onToggleShow={() => setShowFyDropdown(!showFyDropdown)}
+                                onToggleOption={(fy) => {
+                                  if (selectedFy.includes(fy)) {
+                                    setSelectedFy(selectedFy.filter(f => f !== fy));
+                                  } else {
+                                    setSelectedFy([...selectedFy, fy]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedFy([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedFy(fyList.filter(f => f !== "All")); setPage(1); }}
+                                containerRef={fyDropdownRef}
+                              />
+                            )}
+                            {col.key === "saleBillNumber" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Bill Nos"
+                                selected={selectedBillNos}
+                                options={billNosList.filter(b => b !== "All")}
+                                show={showBillNoDropdown}
+                                onToggleShow={() => setShowBillNoDropdown(!showBillNoDropdown)}
+                                onToggleOption={(bNo) => {
+                                  if (selectedBillNos.includes(bNo)) {
+                                    setSelectedBillNos(selectedBillNos.filter(b => b !== bNo));
+                                  } else {
+                                    setSelectedBillNos([...selectedBillNos, bNo]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedBillNos([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedBillNos(billNosList.filter(b => b !== "All")); setPage(1); }}
+                                containerRef={billNoDropdownRef}
+                              />
+                            )}
+                            {col.key === "itemCode" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Item Codes"
+                                selected={selectedItemCodes}
+                                options={itemCodesList.filter(i => i !== "All")}
+                                show={showItemCodeDropdown}
+                                onToggleShow={() => setShowItemCodeDropdown(!showItemCodeDropdown)}
+                                onToggleOption={(code) => {
+                                  if (selectedItemCodes.includes(code)) {
+                                    setSelectedItemCodes(selectedItemCodes.filter(c => c !== code));
+                                  } else {
+                                    setSelectedItemCodes([...selectedItemCodes, code]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedItemCodes([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedItemCodes(itemCodesList.filter(i => i !== "All")); setPage(1); }}
+                                containerRef={itemCodeDropdownRef}
+                              />
+                            )}
+                            {col.key === "lrNo" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All LR Nos"
+                                selected={selectedLrNos}
+                                options={lrNosList.filter(l => l !== "All")}
+                                show={showLrNoDropdown}
+                                onToggleShow={() => setShowLrNoDropdown(!showLrNoDropdown)}
+                                onToggleOption={(lNo) => {
+                                  if (selectedLrNos.includes(lNo)) {
+                                    setSelectedLrNos(selectedLrNos.filter(l => l !== lNo));
+                                  } else {
+                                    setSelectedLrNos([...selectedLrNos, lNo]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedLrNos([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedLrNos(lrNosList.filter(l => l !== "All")); setPage(1); }}
+                                containerRef={lrNoDropdownRef}
+                              />
+                            )}
+                            {col.key === "hasDocuments" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All"
+                                selected={selectedDocs}
+                                options={docsList.filter(d => d !== "All")}
+                                show={showDocsDropdown}
+                                onToggleShow={() => setShowDocsDropdown(!showDocsDropdown)}
+                                onToggleOption={(doc) => {
+                                  if (selectedDocs.includes(doc)) {
+                                    setSelectedDocs(selectedDocs.filter(d => d !== doc));
+                                  } else {
+                                    setSelectedDocs([...selectedDocs, doc]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedDocs([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedDocs(docsList.filter(d => d !== "All")); setPage(1); }}
+                                containerRef={docsDropdownRef}
+                              />
+                            )}
                             {![
                               "saleBillDate", "partyRefDate",
                               "fy", "lrNo",
+                              "partyName", "itemName", "partyRefNo",
+                              "contractVrNo", "quotationNo", "docketNo", "utility", "saleBillNumber", "itemCode",
+                              "hasDocuments",
                             ].includes(col.key) && (
                               <input
                                 type="text"
@@ -1052,6 +1393,15 @@ export const SupplyHistoryDashboard: React.FC = () => {
                         </td>
                         <td title={row.contractVrNo ?? undefined}>
                           {row.contractVrNo ?? <span className="supply-null-cell">—</span>}
+                        </td>
+                        <td title={row.quotationNo ?? undefined}>
+                          {row.quotationNo ?? <span className="supply-null-cell">—</span>}
+                        </td>
+                        <td title={row.docketNo ?? undefined}>
+                          {row.docketNo ?? <span className="supply-null-cell">—</span>}
+                        </td>
+                        <td title={row.utility ?? undefined}>
+                          {row.utility ?? <span className="supply-null-cell">—</span>}
                         </td>
                         <td className="supply-number-cell">
                           {row.rate !== null && row.rate !== undefined
