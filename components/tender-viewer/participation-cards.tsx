@@ -77,9 +77,6 @@ export function isFinancialOpenRow(row: Record<string, unknown>): boolean {
 export function isWeL1Row(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    row.reverseAuctionApplicable === "true" &&
-    !!row.reverseAuctionStartDate &&
-    !!row.reverseAuctionEndDate &&
     String(row.ourRank ?? "").trim() === "1"
   );
 }
@@ -87,9 +84,6 @@ export function isWeL1Row(row: Record<string, unknown>): boolean {
 export function isWeLostRow(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    row.reverseAuctionApplicable === "true" &&
-    !!row.reverseAuctionStartDate &&
-    !!row.reverseAuctionEndDate &&
     String(row.ourRank ?? "").trim() !== "1"
   );
 }
@@ -107,9 +101,6 @@ export function isExpRaDateRow(row: Record<string, unknown>): boolean {
 export function isContractReceivedRow(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    row.reverseAuctionApplicable === "true" &&
-    !!row.reverseAuctionStartDate &&
-    !!row.reverseAuctionEndDate &&
     String(row.ourRank ?? "").trim() === "1" &&
     row.contractNo != null &&
     String(row.contractNo).trim() !== ""
@@ -119,9 +110,6 @@ export function isContractReceivedRow(row: Record<string, unknown>): boolean {
 export function isContractPendingRow(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    row.reverseAuctionApplicable === "true" &&
-    !!row.reverseAuctionStartDate &&
-    !!row.reverseAuctionEndDate &&
     String(row.ourRank ?? "").trim() === "1" &&
     (row.contractNo == null || String(row.contractNo).trim() === "")
   );

@@ -16,6 +16,7 @@ import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 import { describeTenderFile } from "@/lib/tenderFileDescriptor";
 import { format } from "date-fns";
 import { parseDate } from "@/lib/parse-date";
+import { calcDiffDecimal, calcDiffString } from "@/lib/diffCalculator";
 
 export const updateTenderAssignmentsAction = withLog(
   async (params: {
@@ -568,7 +569,7 @@ export async function updateTenderMergedStringField(params: {
   tenderMergedId: number;
   field: string;
   value: string;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; diffPercentFromL1?: number | null; diffPercentFromL2?: number | null; differenceBetweenRank1?: string | null; differenceBetweenRank2?: string | null }> {
   const { tenderMergedId, field, value } = params;
 
   if (
@@ -759,6 +760,63 @@ export async function updateTenderMergedStringField(params: {
     recordId: String(tenderMergedId),
     details: `Updated ${field} to "${value}" on tender #${tenderMergedId}`,
   });
+
+  // Auto-calc Diff L1/L2 when Our Value or L price changes — same thunk/DB write
+  const DIFF_TRIGGERS = new Set(["ourValue", "valueOfRank1", "valueOfRank2"]);
+  if (DIFF_TRIGGERS.has(field)) {
+    const rec = await prisma.tenderMerged.findUnique({
+      where: { id: tenderMergedId },
+      select: { ourValue: true, valueOfRank1: true, valueOfRank2: true, referenceNo: true },
+    });
+    if (rec) {
+      const effectiveOur = field === "ourValue" ? value : rec.ourValue;
+      const effectiveL1 = field === "valueOfRank1" ? value : rec.valueOfRank1;
+      const effectiveL2 = field === "valueOfRank2" ? value : rec.valueOfRank2;
+
+      const shouldCalcL1 = field === "ourValue" || field === "valueOfRank1";
+      const shouldCalcL2 = field === "ourValue" || field === "valueOfRank2";
+
+      const diffData: Record<string, number | string | null> = {};
+      let d1: number | null | undefined;
+      let d2: number | null | undefined;
+      let s1: string | null | undefined;
+      let s2: string | null | undefined;
+
+      if (shouldCalcL1) {
+        d1 = calcDiffDecimal(effectiveOur, effectiveL1);
+        s1 = calcDiffString(effectiveOur, effectiveL1);
+        diffData.diffPercentFromL1 = d1;
+        diffData.differenceBetweenRank1 = s1;
+      }
+      if (shouldCalcL2) {
+        d2 = calcDiffDecimal(effectiveOur, effectiveL2);
+        s2 = calcDiffString(effectiveOur, effectiveL2);
+        diffData.diffPercentFromL2 = d2;
+        diffData.differenceBetweenRank2 = s2;
+      }
+
+      if (Object.keys(diffData).length > 0) {
+        await prisma.tenderMerged.update({
+          where: { id: tenderMergedId },
+          data: diffData,
+        });
+        logActivity({
+          action: "UPDATE",
+          tableName: "TenderMerged",
+          recordId: String(tenderMergedId),
+          referenceNo: rec.referenceNo ?? undefined,
+          details: `Auto-calc diff triggered by ${field}: L1=${d1 ?? "null"} (${s1 ?? "null"}), L2=${d2 ?? "null"} (${s2 ?? "null"})`,
+        });
+        return {
+          ok: true,
+          diffPercentFromL1: d1 as number | null,
+          diffPercentFromL2: d2 as number | null,
+          differenceBetweenRank1: s1 as string | null,
+          differenceBetweenRank2: s2 as string | null,
+        };
+      }
+    }
+  }
 
   return { ok: true };
 }

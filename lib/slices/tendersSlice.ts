@@ -155,6 +155,12 @@ export const updateTenderMergedField = createAsyncThunk(
     tenderMergedId: number;
     oldValue: string;
   }) => {
+    let diffs: {
+      diffPercentFromL1?: number | null;
+      diffPercentFromL2?: number | null;
+      differenceBetweenRank1?: string | null;
+      differenceBetweenRank2?: string | null;
+    } | undefined;
     if (params.field === "emdPaymentMode") {
       const result = await updateTenderMergedStringField({
         tenderMergedId: params.tenderMergedId,
@@ -162,6 +168,7 @@ export const updateTenderMergedField = createAsyncThunk(
         value: params.value,
       });
       if (!result.ok) throw new Error(result.error);
+      diffs = result;
     } else if (
       params.field === "emdValidity" ||
       params.field === "reverseAuctionDate" ||
@@ -193,8 +200,9 @@ export const updateTenderMergedField = createAsyncThunk(
         value: params.value,
       });
       if (!result.ok) throw new Error(result.error);
+      diffs = result;
     }
-    return params;
+    return { ...params, diffs };
   },
 );
 
@@ -1051,6 +1059,28 @@ export const tendersSlice = createSlice({
           row[field] = value;
           if (field === "raQualificationRule") {
             row.reverseAuctionApplicable = value ? "true" : row.reverseAuctionApplicable;
+          }
+          const diffs = (action.payload as any)?.diffs as
+            | {
+                diffPercentFromL1?: number | null;
+                diffPercentFromL2?: number | null;
+                differenceBetweenRank1?: string | null;
+                differenceBetweenRank2?: string | null;
+              }
+            | undefined;
+          if (diffs) {
+            if (diffs.diffPercentFromL1 !== undefined) {
+              row.diffPercentFromL1 = diffs.diffPercentFromL1 == null ? "" : String(diffs.diffPercentFromL1);
+            }
+            if (diffs.diffPercentFromL2 !== undefined) {
+              row.diffPercentFromL2 = diffs.diffPercentFromL2 == null ? "" : String(diffs.diffPercentFromL2);
+            }
+            if (diffs.differenceBetweenRank1 !== undefined) {
+              row.differenceBetweenRank1 = diffs.differenceBetweenRank1 == null ? "" : String(diffs.differenceBetweenRank1);
+            }
+            if (diffs.differenceBetweenRank2 !== undefined) {
+              row.differenceBetweenRank2 = diffs.differenceBetweenRank2 == null ? "" : String(diffs.differenceBetweenRank2);
+            }
           }
         }
       }

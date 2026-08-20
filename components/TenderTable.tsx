@@ -9,7 +9,7 @@ import {
 import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import type { AppDispatch } from "@/lib/store";
-import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderDiffPercentFromL1, updateTenderDiffPercentFromL2, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping, uploadTenderDocument, triggerReverseAuctionWebhook } from "@/lib/slices/tendersSlice";
+import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping, uploadTenderDocument, triggerReverseAuctionWebhook } from "@/lib/slices/tendersSlice";
 import { toast } from "sonner";
 import {
   Search,
@@ -323,57 +323,6 @@ const textFieldConfig = (
     successMessage ?? (() => `${accessor} updated successfully!`),
 });
 
-const diffFieldConfig = (
-  accessor: "diffPercentFromL1" | "diffPercentFromL2",
-  label: string,
-  saveThunk: (
-    dispatch: AppDispatch,
-    record: EpcTenderRecord,
-    stored: unknown,
-  ) => Promise<unknown>,
-): EditableFieldConfig => ({
-  accessor,
-  kind: "number",
-  editableClass: "col-right col-editable diff-col",
-  readOnlyClass: "col-right diff-col",
-  canEdit: () => true,
-  display: (record) => {
-    const storedVal = record[accessor] as number | null;
-    const pctVal =
-      storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
-    return pctVal !== null
-      ? `${pctVal >= 0 ? "+" : ""}${pctVal.toFixed(1)}%`
-      : "—";
-  },
-  displayClass: (record) => {
-    const storedVal = record[accessor] as number | null;
-    const pctVal =
-      storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
-    return pctVal !== null && pctVal < 0 ? " col-lost" : "";
-  },
-  toDraft: (record) => {
-    const storedVal = record[accessor] as number | null;
-    const pctVal =
-      storedVal !== null ? parseFloat((storedVal * 100).toFixed(4)) : null;
-    return pctVal !== null ? String(pctVal) : "";
-  },
-  parse: (draft) => {
-    const t = draft.trim();
-    if (t !== "" && isNaN(parseFloat(t))) {
-      return { error: "Please enter a valid number." };
-    }
-    return {};
-  },
-  toStored: (draft) => {
-    const t = draft.trim();
-    const n = t === "" ? null : parseFloat(t);
-    return n !== null ? parseFloat((n / 100).toFixed(6)) : null;
-  },
-  fromStored: (record) => (record[accessor] as number | null) ?? null,
-  save: (dispatch, record, stored) => saveThunk(dispatch, record, stored),
-  successMessage: () => `${label} saved!`,
-});
-
 const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
   docketNo: textFieldConfig(
     "docketNo",
@@ -545,9 +494,9 @@ const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
   differenceBetweenRank1: textFieldConfig(
     "differenceBetweenRank1",
     "text",
-    "col-right col-editable",
-    "col-right",
-    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("differenceBetweenRank1")),
+    "col-right diff-col",
+    "col-right diff-col",
+    () => false,
   ),
   nameOfRank2: textFieldConfig(
     "nameOfRank2",
@@ -566,9 +515,9 @@ const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
   differenceBetweenRank2: textFieldConfig(
     "differenceBetweenRank2",
     "text",
-    "col-right col-editable",
-    "col-right",
-    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("differenceBetweenRank2")),
+    "col-right diff-col",
+    "col-right diff-col",
+    () => false,
   ),
   quotationNo: textFieldConfig(
     "quotationNo",
@@ -588,30 +537,6 @@ const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
   bgDate: textFieldConfig("bgDate", "text", "col-editable"),
   bgExpiryDate: textFieldConfig("bgExpiryDate", "text", "col-editable"),
   claimDate: textFieldConfig("claimDate", "text", "col-editable"),
-  diffPercentFromL1: diffFieldConfig(
-    "diffPercentFromL1",
-    "Diff L1",
-    (dispatch, record, stored) =>
-      dispatch(
-        updateTenderDiffPercentFromL1({
-          tenderMergedId: Number(record.id),
-          diffPercentFromL1: stored as number | null,
-          oldDiffPercentFromL1: String(record.diffPercentFromL1 ?? ""),
-        }),
-      ).unwrap(),
-  ),
-  diffPercentFromL2: diffFieldConfig(
-    "diffPercentFromL2",
-    "Diff L2",
-    (dispatch, record, stored) =>
-      dispatch(
-        updateTenderDiffPercentFromL2({
-          tenderMergedId: Number(record.id),
-          diffPercentFromL2: stored as number | null,
-          oldDiffPercentFromL2: String(record.diffPercentFromL2 ?? ""),
-        }),
-      ).unwrap(),
-  ),
 };
 
 const InlineEditor: React.FC<{
@@ -1082,20 +1007,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
-      header: "Diff L1 (%)",
-      accessor: "diffPercentFromL1",
-      defaultWidth: 180,
-      align: "right",
-      type: "custom",
-    },
-    {
-      header: "Diff L2 (%)",
-      accessor: "diffPercentFromL2",
-      defaultWidth: 180,
-      align: "right",
-      type: "custom",
-    },
-    {
       header: "Competitors",
       accessor: "competitors",
       defaultWidth: 250,
@@ -1282,12 +1193,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   const postParticipationAccessors = new Set([
     "bgNoUtrNo", "remarks", "loiPoNoAndDate",
-    "competitors", "diffPercentFromL1", "diffPercentFromL2",
+    "competitors",
     "nextAction",
     "quotationNo", "currentStatus",
     "ourRank", "ourValue",
-    "nameOfRank1", "valueOfRank1", "differenceBetweenRank1",
-    "nameOfRank2", "valueOfRank2", "differenceBetweenRank2",
+    "nameOfRank1", "valueOfRank1",
+    "nameOfRank2", "valueOfRank2",
     "issuingBank", "expectedRaDate",
   ]);
   const postParticipationExcludeAccessors = new Set([
@@ -1304,8 +1215,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "statusCategory",
     "reason",
     "loiPoNoAndDate",
-    "diffPercentFromL1",
-    "diffPercentFromL2",
     "managementDecision",
     "catalogueDone",
     "participated",
@@ -1736,7 +1645,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const BOOLEAN_COLUMNS = new Set(["participated", "reverseAuctionApplicable"]);
   const SKIP_FILTER_COLUMNS = new Set([
     "lastDateOfSubmission", "attachmentUrl", "files", "boqChart",
-    "rawMaterials", "diffPercentFromL1", "diffPercentFromL2",
+    "rawMaterials",
     "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
     "itemCategory", "publishedDate", "assignedDate", "itemSchedules",
     "reverseAuctionStartDate",

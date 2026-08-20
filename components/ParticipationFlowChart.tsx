@@ -146,6 +146,18 @@ export function ParticipationFlowChart({
         String(r.currentStatus ?? "").trim().toUpperCase(),
       ),
     );
+    const financialWeL1 = financialOpen.filter(
+      (r) => String(r.ourRank ?? "").trim() === "1",
+    );
+    const financialWeLost = financialOpen.filter(
+      (r) => String(r.ourRank ?? "").trim() !== "1",
+    );
+    const financialContractReceived = financialWeL1.filter(
+      (r) => r.contractNo != null && String(r.contractNo).trim() !== "",
+    );
+    const financialContractPending = financialWeL1.filter(
+      (r) => r.contractNo == null || String(r.contractNo).trim() === "",
+    );
     return {
       withRa: withRa.length,
       withoutRa: withoutRa.length,
@@ -159,6 +171,10 @@ export function ParticipationFlowChart({
       contractReceived: contractReceived.length,
       contractPending: contractPending.length,
       financialOpen: financialOpen.length,
+      financialWeL1: financialWeL1.length,
+      financialWeLost: financialWeLost.length,
+      financialContractReceived: financialContractReceived.length,
+      financialContractPending: financialContractPending.length,
     };
   }, [rows, participatedDateRange]);
 
@@ -185,6 +201,7 @@ export function ParticipationFlowChart({
       raPending: ["expRaDate"],
       weL1: ["contractReceived", "contractPending"],
       technicalOpen: ["financialOpen"],
+      financialOpen: ["weL1", "weLost"],
     };
 
     // Deactivating parent → deactivate children first
@@ -207,6 +224,46 @@ export function ParticipationFlowChart({
       dispatch(toggleParticipationFilter("participatedTotal"));
     }
 
+    dispatch(toggleParticipationFilter(filter));
+    dispatch(resetSelectedDateRange());
+    onClearAssociation?.();
+  };
+
+  const handleFinancialWeClick = (filter: ParticipationFilter) => {
+    const isActiveCurrently = participationFilters.includes(filter);
+    if (!isActiveCurrently) {
+      // Ensure financial We L1 parent chain for contract children
+      if (
+        (filter === "contractReceived" || filter === "contractPending") &&
+        !participationFilters.includes("weL1")
+      ) {
+        if (!participationFilters.includes("financialOpen")) {
+          if (!participationFilters.includes("technicalOpen")) {
+            if (!participationFilters.includes("participatedWithoutRa")) {
+              dispatch(toggleParticipationFilter("participatedWithoutRa"));
+            }
+            dispatch(toggleParticipationFilter("technicalOpen"));
+          }
+          dispatch(toggleParticipationFilter("financialOpen"));
+        }
+        dispatch(toggleParticipationFilter("weL1"));
+      }
+      if (
+        (filter === "weL1" || filter === "weLost") &&
+        !participationFilters.includes("financialOpen")
+      ) {
+        if (!participationFilters.includes("technicalOpen")) {
+          if (!participationFilters.includes("participatedWithoutRa")) {
+            dispatch(toggleParticipationFilter("participatedWithoutRa"));
+          }
+          dispatch(toggleParticipationFilter("technicalOpen"));
+        }
+        dispatch(toggleParticipationFilter("financialOpen"));
+      }
+    }
+    if (!isActiveCurrently && !participationFilters.includes("participatedTotal")) {
+      dispatch(toggleParticipationFilter("participatedTotal"));
+    }
     dispatch(toggleParticipationFilter(filter));
     dispatch(resetSelectedDateRange());
     onClearAssociation?.();
@@ -394,18 +451,82 @@ export function ParticipationFlowChart({
 
             <VerticalConnector />
 
-            <button
-              type="button"
-              onClick={() => handleNodeClick("financialOpen")}
-              className={nodeClass(isActive("financialOpen"))}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                Financial Open
+            <div>
+              <button
+                type="button"
+                onClick={() => handleNodeClick("financialOpen")}
+                className={nodeClass(isActive("financialOpen"))}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                  Financial Open
+                </div>
+                <div className="text-lg font-bold text-amber-400 leading-tight">
+                  {counts.financialOpen}
+                </div>
+              </button>
+
+              <VerticalConnector />
+              <BranchConnector />
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleFinancialWeClick("weL1")}
+                    className={nodeClass(isActive("weL1"))}
+                  >
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                      We L1
+                    </div>
+                    <div className="text-lg font-bold text-emerald-400 leading-tight">
+                      {counts.financialWeL1}
+                    </div>
+                  </button>
+
+                  <VerticalConnector />
+                  <BranchConnector />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleFinancialWeClick("contractReceived")}
+                      className={nodeClass(isActive("contractReceived"))}
+                    >
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                        Contract Received
+                      </div>
+                      <div className="text-lg font-bold text-emerald-300 leading-tight">
+                        {counts.financialContractReceived}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleFinancialWeClick("contractPending")}
+                      className={nodeClass(isActive("contractPending"))}
+                    >
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                        Contract Pending
+                      </div>
+                      <div className="text-lg font-bold text-orange-400 leading-tight">
+                        {counts.financialContractPending}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleFinancialWeClick("weLost")}
+                  className={nodeClass(isActive("weLost"))}
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                    We Lost
+                  </div>
+                  <div className="text-lg font-bold text-rose-400 leading-tight">
+                    {counts.financialWeLost}
+                  </div>
+                </button>
               </div>
-              <div className="text-lg font-bold text-amber-400 leading-tight">
-                {counts.financialOpen}
-              </div>
-            </button>
+            </div>
           </div>
           <button
             type="button"
