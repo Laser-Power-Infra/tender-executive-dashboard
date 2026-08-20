@@ -1075,7 +1075,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
-      header: "Contract No",
+      header: "Contract Number",
       accessor: "contractNo",
       defaultWidth: 180,
       align: "left",
@@ -1284,7 +1284,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "bgNoUtrNo", "remarks", "loiPoNoAndDate",
     "competitors", "diffPercentFromL1", "diffPercentFromL2",
     "nextAction",
-    "quotationNo", "contractNo", "currentStatus",
+    "quotationNo", "currentStatus",
     "ourRank", "ourValue",
     "nameOfRank1", "valueOfRank1", "differenceBetweenRank1",
     "nameOfRank2", "valueOfRank2", "differenceBetweenRank2",

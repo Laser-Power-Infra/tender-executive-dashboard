@@ -50,3 +50,4 @@ kestra/data/database.mv.db
 # kestra/data/database.mv.db
 *.tar
 *.sql
+*.xls

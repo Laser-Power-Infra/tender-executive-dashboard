@@ -48,6 +48,8 @@ const COLUMNS: { columnName: string; displayName?: string; displayOrder: number;
   { columnName: "bgNoUtrNo", displayName: "Bg No Utr No", displayOrder: 30 },
   { columnName: "emdValidity", displayName: "Emd Validity", displayOrder: 31 },
   { columnName: "bidValidityExpired", displayName: "Bid Validity Expired", displayOrder: 32 },
+  { columnName: "contractNo", displayName: "Contract Number", displayOrder: 33, visible: true, width: 180 },
+  { columnName: "quotationNo", displayName: "Quotation No", displayOrder: 34, visible: false, width: 180 },
 ];
 
 async function main() {

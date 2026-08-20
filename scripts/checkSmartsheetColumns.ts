@@ -21,6 +21,8 @@ async function main() {
     "Enquiry / Tender No. (Marketing Team)",
     "Reference No  (Debosmita Nath)",
     "Docket No  (Debosmita Nath)",
+    "Quotation No. (Dipankar)",
+    "Quotation DateFORMAT(MM-DD-YY)(Dipankar)",
   ];
 
   console.log("=== All Column Titles ===");

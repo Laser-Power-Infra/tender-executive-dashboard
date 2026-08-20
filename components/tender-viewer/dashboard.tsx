@@ -463,6 +463,8 @@ export default function Dashboard() {
       "ready",
       "remarks",
       "remark",
+      "quotationno",
+      "quotation no",
     ]);
     const seen = new Set<string>();
     let cols = [...tenderData.columns].filter((col) => {
