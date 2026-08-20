@@ -20,6 +20,7 @@ export class DatabaseSupplyService {
       saleBillDate: r.saleBillDate,
       partyName: r.partyName,
       itemCode: r.itemCode,
+      itemSchedule: r.itemSchedule ?? null,
       itemName: r.itemName,
       lrNo: r.lrNo,
       truckNo: r.truckNo,
@@ -33,6 +34,8 @@ export class DatabaseSupplyService {
       invoiceQty: r.invoiceQty,
       invoiceAmt: r.invoiceAmt,
       attachmentUrl: r.attachmentUrl,
+      email: r.email ?? null,
+      contactNo: r.contactNo ?? null,
     }));
   }
 
@@ -91,6 +94,7 @@ export class DatabaseSupplyService {
           saleBillDate: record.saleBillDate || null,
           partyName: record.partyName || null,
           itemCode: itemCode || null,
+          itemSchedule: (record as any).itemSchedule ?? null,
           itemName: record.itemName || null,
           lrNo: record.lrNo || null,
           truckNo: record.truckNo || null,
@@ -103,13 +107,20 @@ export class DatabaseSupplyService {
           lastSyncedAt: new Date(),
         };
 
+        // Preserve user-edited fields (email/contactNo/itemSchedule) on sheet sync — they are not provided by sheet
+        const updateData: any = { ...data };
+        delete updateData.email;
+        delete updateData.contactNo;
+        // Only update itemSchedule if sheet record actually has a value; otherwise preserve DB value
+        if (!(record as any).itemSchedule) delete updateData.itemSchedule;
+
         try {
           const result = await prisma!.supplyHistory.upsert({
             where: {
               saleBillNumber_itemCode: { saleBillNumber, itemCode },
             },
             create: data,
-            update: data,
+            update: updateData,
           });
           return result.createdAt.getTime() === result.updatedAt.getTime()
             ? "inserted"

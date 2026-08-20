@@ -4,7 +4,7 @@ import { useSupplyHistory } from "@/hooks/useSupplyHistory";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
 // import { Package, RefreshCw, Eraser, ExternalLink, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
-import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText, ExternalLink, Download } from "lucide-react";
+import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText, ExternalLink, Download, Pencil, Check } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import {
@@ -32,6 +32,7 @@ const COLUMNS: ColDef[] = [
   { key: "saleBillDate",    label: "Sale Bill Date",    width: 150, align: "center" },
   { key: "partyName",       label: "Party Name",        width: 200, align: "left"   },
   { key: "itemCode",        label: "Item Code",         width: 120, align: "left"   },
+  { key: "itemSchedule",    label: "Item Schedule",     width: 180, align: "left"   },
   { key: "itemName",        label: "Item Name",         width: 220, align: "left"   },
   { key: "lrNo",            label: "LR No",             width: 140, align: "left"   },
   { key: "partyRefNo",      label: "Party Ref No",      width: 140, align: "left"   },
@@ -43,6 +44,8 @@ const COLUMNS: ColDef[] = [
   { key: "rate",            label: "Rate",              width: 110, align: "right"  },
   { key: "invoiceQty",      label: "Invoice Qty",       width: 110, align: "right"  },
   { key: "invoiceAmt",      label: "Invoice Amt",       width: 130, align: "right"  },
+  { key: "email",           label: "Email",             width: 200, align: "left"   },
+  { key: "contactNo",       label: "Contact No",        width: 150, align: "left"   },
   { key: "hasDocuments",    label: "Documents",         width: 140, align: "center" },
 ];
 
@@ -95,6 +98,15 @@ const ColumnMultiselectDropdown: React.FC<ColumnMultiselectDropdownProps> = ({
   onSelectAll,
   containerRef,
 }) => {
+  const [optSearch, setOptSearch] = useState("");
+  const filteredOptions = useMemo(() => {
+    const q = optSearch.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(o => o.toLowerCase().includes(q));
+  }, [options, optSearch]);
+  useEffect(() => {
+    if (!show) setOptSearch("");
+  }, [show]);
   return (
     <div className="custom-multiselect-container" ref={containerRef}>
       <button
@@ -106,12 +118,36 @@ const ColumnMultiselectDropdown: React.FC<ColumnMultiselectDropdownProps> = ({
       </button>
       {show && (
         <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
+          <div className="multiselect-search-wrap">
+            <Search size={12} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+            <input
+              type="text"
+              className="multiselect-search-input"
+              placeholder="Search options..."
+              value={optSearch}
+              onChange={e => setOptSearch(e.target.value)}
+              autoFocus
+              onClick={e => e.stopPropagation()}
+            />
+            {optSearch && (
+              <button
+                className="multiselect-search-clear"
+                onClick={e => { e.stopPropagation(); setOptSearch(""); }}
+                title="Clear"
+                style={{ display: "inline-flex", alignItems: "center" }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
           <div className="multiselect-actions">
             <button className="multiselect-action-btn" onClick={onClearAll}>Clear All</button>
             <button className="multiselect-action-btn" onClick={onSelectAll}>Select All</button>
           </div>
           <div className="multiselect-options-list">
-            {options.map(option => (
+            {filteredOptions.length === 0 ? (
+              <span className="multiselect-no-options">No matching options</span>
+            ) : filteredOptions.map(option => (
               <label key={option} className="multiselect-option-label">
                 <input
                   type="checkbox"
@@ -128,7 +164,7 @@ const ColumnMultiselectDropdown: React.FC<ColumnMultiselectDropdownProps> = ({
   );
 };
 
-export const SupplyHistoryDashboard: React.FC = () => {
+const SupplyHistoryDashboard: React.FC = () => {
   const { data, loading, error, refresh } = useSupplyHistory();
 
   const [search, setSearch]       = useState("");
@@ -195,6 +231,18 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   const docsDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [showItemScheduleDropdown, setShowItemScheduleDropdown] = useState(false);
+  const [selectedItemSchedules, setSelectedItemSchedules] = useState<string[]>([]);
+  const itemScheduleDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showEmailDropdown, setShowEmailDropdown] = useState(false);
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
+  const emailDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const contactDropdownRef = useRef<HTMLDivElement>(null);
+
   const [rateMin, setRateMin] = useState("");
   const [rateMax, setRateMax] = useState("");
   const [qtyMin, setQtyMin] = useState("");
@@ -207,6 +255,13 @@ export const SupplyHistoryDashboard: React.FC = () => {
   const [syncingQuotation, setSyncingQuotation] = useState(false);
   const [downloadingDocs, setDownloadingDocs] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
+
+  // Inline editing for Email / Contact No / Item Schedule
+  const [editingCell, setEditingCell] = useState<{ saleBillNumber: string; itemCode: string; field: "email" | "contactNo" | "itemSchedule" } | null>(null);
+  const [editingDraft, setEditingDraft] = useState("");
+  const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
+  const [localData, setLocalData] = useState<SupplyHistoryRecord[] | null>(null);
+  const displayData = localData ?? data;
 
   type CertState =
     | { status: "idle" }
@@ -234,7 +289,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
 
       setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "generating" } }));
 
-      const group = data.filter((r) => r.partyRefNo === partyRefNo);
+      const group = displayData.filter((r) => r.partyRefNo === partyRefNo);
       const fileName = `Certificate_${partyRefNo || "NAN"}.pdf`;
 
       try {
@@ -259,8 +314,64 @@ export const SupplyHistoryDashboard: React.FC = () => {
         certGeneratingRef.current.delete(partyRefNo);
       }
     },
-    [data, triggerDownload]
+    [displayData, triggerDownload]
   );
+
+  // Keep localData in sync when server data refreshes (unless editing)
+  useEffect(() => {
+    if (localData) setLocalData(null);
+  }, [data]);
+
+  const handleEditStart = useCallback((row: SupplyHistoryRecord, field: "email" | "contactNo" | "itemSchedule") => {
+    setEditingCell({ saleBillNumber: row.saleBillNumber ?? "", itemCode: row.itemCode ?? "", field });
+    setEditingDraft(String((row as any)[field] ?? ""));
+  }, []);
+
+  const handleEditCancel = useCallback(() => {
+    setEditingCell(null);
+    setEditingDraft("");
+  }, []);
+
+  const handleEditSave = useCallback(async () => {
+    if (!editingCell) return;
+    const { saleBillNumber, itemCode, field } = editingCell;
+    const key = `${saleBillNumber}|${itemCode}|${field}`;
+    const value = editingDraft.trim();
+    // Validation
+    if (field === "email" && value) {
+      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!re.test(value)) { toast.error("Invalid email format"); return; }
+    }
+    if (field === "contactNo" && value) {
+      const re = /^[0-9+\-()\s]+$/;
+      if (!re.test(value)) { toast.error("Contact number may only contain digits, +, -, (), spaces"); return; }
+      const digits = value.replace(/\D/g, "");
+      if (digits.length < 7 || digits.length > 15) { toast.error("Contact number must be 7-15 digits"); return; }
+    }
+    setSavingCells(prev => new Set(prev).add(key));
+    try {
+      const res = await fetch("/api/supply-history/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saleBillNumber, itemCode, field, value }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Update failed");
+      // Optimistic local update
+      const updatedRow = json.data;
+      setLocalData(prev => {
+        const base = prev ?? data;
+        return base.map(r => (r.saleBillNumber === saleBillNumber && r.itemCode === itemCode ? { ...r, [field]: updatedRow[field] ?? value } : r));
+      });
+      toast.success(`${field} updated successfully!`);
+      setEditingCell(null);
+      setEditingDraft("");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update");
+    } finally {
+      setSavingCells(prev => { const n = new Set(prev); n.delete(key); return n; });
+    }
+  }, [editingCell, editingDraft, data]);
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
@@ -335,6 +446,15 @@ export const SupplyHistoryDashboard: React.FC = () => {
       if (docsDropdownRef.current && !docsDropdownRef.current.contains(event.target as Node)) {
         setShowDocsDropdown(false);
       }
+      if (itemScheduleDropdownRef.current && !itemScheduleDropdownRef.current.contains(event.target as Node)) {
+        setShowItemScheduleDropdown(false);
+      }
+      if (emailDropdownRef.current && !emailDropdownRef.current.contains(event.target as Node)) {
+        setShowEmailDropdown(false);
+      }
+      if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
+        setShowContactDropdown(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
@@ -385,6 +505,12 @@ export const SupplyHistoryDashboard: React.FC = () => {
     setShowLrNoDropdown(false);
     setSelectedDocs([]);
     setShowDocsDropdown(false);
+    setSelectedItemSchedules([]);
+    setShowItemScheduleDropdown(false);
+    setSelectedEmails([]);
+    setShowEmailDropdown(false);
+    setSelectedContacts([]);
+    setShowContactDropdown(false);
     const cleared: Record<string, string> = {};
     COLUMNS.forEach(c => { cleared[c.key] = ""; });
     setColSearches(cleared);
@@ -392,7 +518,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
   };
 
   const filtered = useMemo<SupplyHistoryRecord[]>(() => {
-    let rows = data;
+    let rows = displayData;
 
     const q = search.trim().toLowerCase();
     if (q) {
@@ -409,7 +535,21 @@ export const SupplyHistoryDashboard: React.FC = () => {
       if (sVal) {
         rows = rows.filter(row => {
           const v = row[key as keyof SupplyHistoryRecord];
-          return v !== null && v !== undefined && String(v).toLowerCase().includes(sVal);
+          if (v === null || v === undefined) return false;
+          if (key === "hasDocuments") {
+            const label = v ? "yes" : "no";
+            return label.includes(sVal) || String(v).toLowerCase().includes(sVal);
+          }
+          if (typeof v === "number") {
+            const numStr = String(v).toLowerCase();
+            const fmt = formatNumber(v).toLowerCase();
+            return numStr.includes(sVal) || fmt.includes(sVal);
+          }
+          if ((key === "saleBillDate" || key === "partyRefDate") && typeof v === "string") {
+            const fmt = formatDate(v);
+            return String(v).toLowerCase().includes(sVal) || Boolean(fmt && fmt.toLowerCase().includes(sVal));
+          }
+          return String(v).toLowerCase().includes(sVal);
         });
       }
     });
@@ -460,6 +600,18 @@ export const SupplyHistoryDashboard: React.FC = () => {
 
     if (selectedDocs.length > 0) {
       rows = rows.filter(row => selectedDocs.includes(row.hasDocuments ? "Yes" : "No"));
+    }
+
+    if (selectedItemSchedules.length > 0) {
+      rows = rows.filter(row => row.itemSchedule && selectedItemSchedules.includes(row.itemSchedule.trim()));
+    }
+
+    if (selectedEmails.length > 0) {
+      rows = rows.filter(row => row.email && selectedEmails.includes(row.email.trim()));
+    }
+
+    if (selectedContacts.length > 0) {
+      rows = rows.filter(row => row.contactNo && selectedContacts.includes(row.contactNo.trim()));
     }
 
     if (saleBillDateStart) {
@@ -514,7 +666,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
 
     return rows;
   }, [
-    data, search, colSearches,
+    displayData, search, colSearches,
     saleBillDateStart, saleBillDateEnd,
     partyRefDateStart, partyRefDateEnd,
     rateMin, rateMax, qtyMin, qtyMax, amtMin, amtMax,
@@ -530,73 +682,94 @@ export const SupplyHistoryDashboard: React.FC = () => {
     selectedItemCodes,
     selectedLrNos,
     selectedDocs,
+    selectedItemSchedules,
+    selectedEmails,
+    selectedContacts,
   ]);
 
   const partyNamesList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.partyName) set.add(r.partyName.trim()); });
+    displayData.forEach(r => { if (r.partyName) set.add(r.partyName.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const itemNamesList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.itemName) set.add(r.itemName.trim()); });
+    displayData.forEach(r => { if (r.itemName) set.add(r.itemName.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const partyRefsList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.partyRefNo) set.add(r.partyRefNo.trim()); });
+    displayData.forEach(r => { if (r.partyRefNo) set.add(r.partyRefNo.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const contractsList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.contractVrNo) set.add(r.contractVrNo.trim()); });
+    displayData.forEach(r => { if (r.contractVrNo) set.add(r.contractVrNo.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const quotationNosList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.quotationNo) set.add(r.quotationNo.trim()); });
+    displayData.forEach(r => { if (r.quotationNo) set.add(r.quotationNo.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const docketsList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.docketNo) set.add(r.docketNo.trim()); });
+    displayData.forEach(r => { if (r.docketNo) set.add(r.docketNo.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const utilitiesList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.utility) set.add(r.utility.trim()); });
+    displayData.forEach(r => { if (r.utility) set.add(r.utility.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const fyList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.fy) set.add(r.fy.trim()); });
+    displayData.forEach(r => { if (r.fy) set.add(r.fy.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const billNosList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.saleBillNumber) set.add(r.saleBillNumber.trim()); });
+    displayData.forEach(r => { if (r.saleBillNumber) set.add(r.saleBillNumber.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const itemCodesList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.itemCode) set.add(r.itemCode.trim()); });
+    displayData.forEach(r => { if (r.itemCode) set.add(r.itemCode.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
 
   const lrNosList = useMemo(() => {
     const set = new Set<string>();
-    data.forEach(r => { if (r.lrNo) set.add(r.lrNo.trim()); });
+    displayData.forEach(r => { if (r.lrNo) set.add(r.lrNo.trim()); });
     return ["All", ...Array.from(set).sort()];
-  }, [data]);
+  }, [displayData]);
+
+  const itemSchedulesList = useMemo(() => {
+    const set = new Set<string>();
+    displayData.forEach(r => { if (r.itemSchedule) set.add(r.itemSchedule.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [displayData]);
+
+  const emailsList = useMemo(() => {
+    const set = new Set<string>();
+    displayData.forEach(r => { if (r.email) set.add(r.email.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [displayData]);
+
+  const contactsList = useMemo(() => {
+    const set = new Set<string>();
+    displayData.forEach(r => { if (r.contactNo) set.add(r.contactNo.trim()); });
+    return ["All", ...Array.from(set).sort()];
+  }, [displayData]);
 
   const docsList = useMemo(() => ["All", "Yes", "No"], []);
 
@@ -700,7 +873,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
     const date = new Date().toISOString().split("T")[0]
 
     try {
-      const exportData = data.map((rec) => {
+      const exportData = displayData.map((rec) => {
         const obj: Record<string, string | number | boolean> = {};
         for (const col of COLUMNS) {
           obj[col.label] = rec[col.key] ?? "";
@@ -753,7 +926,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
     } finally {
       setExportingAll(false)
     }
-  }, [data, filtered, triggerDownload])
+  }, [displayData, filtered, triggerDownload])
 
   const handleExportExcel = () => {
     const exportData = sorted.map((rec) => {
@@ -924,7 +1097,7 @@ export const SupplyHistoryDashboard: React.FC = () => {
                 <div className="supply-toolbar-left">
                   <p className="supply-table-title">Supply Records</p>
                   <span className="supply-record-badge">
-                    {filtered.length.toLocaleString()} of {data.length.toLocaleString()} Records
+                    {filtered.length.toLocaleString()} of {displayData.length.toLocaleString()} Records
                   </span>
                   <div className="supply-search-container">
                     <span className="supply-search-icon" style={{ display: "inline-flex", alignItems: "center" }}><Search size={16} /></span>
@@ -958,6 +1131,25 @@ export const SupplyHistoryDashboard: React.FC = () => {
                             </span>
                           </div>
                           <div className="column-filter-container" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+                            <div className="column-search-wrap">
+                              <input
+                                type="text"
+                                className="column-search-input"
+                                placeholder="Search..."
+                                value={colSearches[col.key] || ""}
+                                onChange={e => handleColSearchChange(col.key, e.target.value)}
+                              />
+                              {colSearches[col.key] && (
+                                <button
+                                  className="column-search-clear-btn"
+                                  onClick={() => handleColSearchChange(col.key, "")}
+                                  title="Clear search"
+                                  style={{ display: "inline-flex", alignItems: "center" }}
+                                >
+                                  <X size={12} />
+                                </button>
+                              )}
+                            </div>
                             {col.key === "saleBillDate" && (
                               <div className="column-date-filter">
                                 <input
@@ -1297,6 +1489,66 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                 containerRef={lrNoDropdownRef}
                               />
                             )}
+                            {col.key === "itemSchedule" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Schedules"
+                                selected={selectedItemSchedules}
+                                options={itemSchedulesList.filter(s => s !== "All")}
+                                show={showItemScheduleDropdown}
+                                onToggleShow={() => setShowItemScheduleDropdown(!showItemScheduleDropdown)}
+                                onToggleOption={(val) => {
+                                  if (selectedItemSchedules.includes(val)) {
+                                    setSelectedItemSchedules(selectedItemSchedules.filter(v => v !== val));
+                                  } else {
+                                    setSelectedItemSchedules([...selectedItemSchedules, val]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedItemSchedules([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedItemSchedules(itemSchedulesList.filter(v => v !== "All")); setPage(1); }}
+                                containerRef={itemScheduleDropdownRef}
+                              />
+                            )}
+                            {col.key === "email" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Emails"
+                                selected={selectedEmails}
+                                options={emailsList.filter(e => e !== "All")}
+                                show={showEmailDropdown}
+                                onToggleShow={() => setShowEmailDropdown(!showEmailDropdown)}
+                                onToggleOption={(val) => {
+                                  if (selectedEmails.includes(val)) {
+                                    setSelectedEmails(selectedEmails.filter(v => v !== val));
+                                  } else {
+                                    setSelectedEmails([...selectedEmails, val]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedEmails([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedEmails(emailsList.filter(v => v !== "All")); setPage(1); }}
+                                containerRef={emailDropdownRef}
+                              />
+                            )}
+                            {col.key === "contactNo" && (
+                              <ColumnMultiselectDropdown
+                                triggerLabel="All Contacts"
+                                selected={selectedContacts}
+                                options={contactsList.filter(c => c !== "All")}
+                                show={showContactDropdown}
+                                onToggleShow={() => setShowContactDropdown(!showContactDropdown)}
+                                onToggleOption={(val) => {
+                                  if (selectedContacts.includes(val)) {
+                                    setSelectedContacts(selectedContacts.filter(v => v !== val));
+                                  } else {
+                                    setSelectedContacts([...selectedContacts, val]);
+                                  }
+                                  setPage(1);
+                                }}
+                                onClearAll={() => { setSelectedContacts([]); setPage(1); }}
+                                onSelectAll={() => { setSelectedContacts(contactsList.filter(v => v !== "All")); setPage(1); }}
+                                containerRef={contactDropdownRef}
+                              />
+                            )}
                             {col.key === "hasDocuments" && (
                               <ColumnMultiselectDropdown
                                 triggerLabel="All"
@@ -1315,21 +1567,6 @@ export const SupplyHistoryDashboard: React.FC = () => {
                                 onClearAll={() => { setSelectedDocs([]); setPage(1); }}
                                 onSelectAll={() => { setSelectedDocs(docsList.filter(d => d !== "All")); setPage(1); }}
                                 containerRef={docsDropdownRef}
-                              />
-                            )}
-                            {![
-                              "saleBillDate", "partyRefDate",
-                              "fy", "lrNo",
-                              "partyName", "itemName", "partyRefNo",
-                              "contractVrNo", "quotationNo", "docketNo", "utility", "saleBillNumber", "itemCode",
-                              "hasDocuments",
-                            ].includes(col.key) && (
-                              <input
-                                type="text"
-                                className="column-search-input"
-                                placeholder="Search..."
-                                value={colSearches[col.key] || ""}
-                                onChange={e => handleColSearchChange(col.key, e.target.value)}
                               />
                             )}
                           </div>
@@ -1362,9 +1599,9 @@ export const SupplyHistoryDashboard: React.FC = () => {
                       </tr>
                     ) : paginated.map((row, idx) => (
                       <tr key={pageStart + idx} className="supply-row">
-                        <td className="col-center">{row.fy ?? <span className="supply-null-cell">—</span>}</td>
+                        <td className="col-center"><div className="supply-cell-text" style={{ textAlign: "center" }}>{row.fy ?? <span className="supply-null-cell">—</span>}</div></td>
                         <td title={row.saleBillNumber ?? undefined}>
-                          {row.saleBillNumber ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.saleBillNumber ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td className="col-center">
                           {row.saleBillDate
@@ -1372,19 +1609,50 @@ export const SupplyHistoryDashboard: React.FC = () => {
                             : <span className="supply-null-cell">—</span>}
                         </td>
                         <td title={row.partyName ?? undefined}>
-                          {row.partyName ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.partyName ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td title={row.itemCode ?? undefined}>
-                          {row.itemCode ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.itemCode ?? <span className="supply-null-cell">—</span>}</div>
+                        </td>
+                        <td title={row.itemSchedule ?? undefined} style={{ position: "relative" }}>
+                          {(() => {
+                            const isEditing = editingCell?.saleBillNumber === row.saleBillNumber && editingCell?.itemCode === row.itemCode && editingCell?.field === "itemSchedule";
+                            const key = `${row.saleBillNumber}|${row.itemCode}|itemSchedule`;
+                            const isSaving = savingCells.has(key);
+                            if (isEditing) {
+                              return (
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }} onClick={(e)=>e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    value={editingDraft}
+                                    onChange={(e)=>setEditingDraft(e.target.value)}
+                                    onKeyDown={(e)=>{ if(e.key==="Enter"){ e.preventDefault(); handleEditSave(); } else if(e.key==="Escape"){ handleEditCancel(); } }}
+                                    autoFocus
+                                    disabled={isSaving}
+                                    placeholder="Item Schedule"
+                                    style={{ fontSize: "12px", padding: "2px 6px", border: "1px solid #dadce0", borderRadius: 4, width: 140 }}
+                                  />
+                                  <button onClick={handleEditSave} disabled={isSaving} title="Save" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:"50%", background:"#1a73e8", color:"#fff", border:"none", cursor:"pointer" }}><Check size={12} /></button>
+                                  <button onClick={handleEditCancel} disabled={isSaving} title="Cancel" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:"50%", background:"#e8eaed", color:"#5f6368", border:"none", cursor:"pointer" }}><X size={12} /></button>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div style={{ display:"flex", alignItems:"flex-start", gap:6, justifyContent:"space-between" }}>
+                                <span title={row.itemSchedule ?? undefined} className="supply-cell-text">{row.itemSchedule ?? <span className="supply-null-cell">—</span>}</span>
+                                <button onClick={()=>handleEditStart(row, "itemSchedule")} title="Edit Item Schedule" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:20, height:20, borderRadius:"50%", background:"#f1f3f4", border:"1px solid #dadce0", cursor:"pointer", flexShrink:0, marginTop:2 }}><Pencil size={10} /></button>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td title={row.itemName ?? undefined}>
-                          {row.itemName ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.itemName ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td title={row.lrNo ?? undefined}>
-                          {row.lrNo ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.lrNo ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td title={row.partyRefNo ?? undefined}>
-                          {row.partyRefNo ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.partyRefNo ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td className="col-center">
                           {row.partyRefDate
@@ -1392,16 +1660,16 @@ export const SupplyHistoryDashboard: React.FC = () => {
                             : <span className="supply-null-cell">—</span>}
                         </td>
                         <td title={row.contractVrNo ?? undefined}>
-                          {row.contractVrNo ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.contractVrNo ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td title={row.quotationNo ?? undefined}>
-                          {row.quotationNo ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.quotationNo ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td title={row.docketNo ?? undefined}>
-                          {row.docketNo ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.docketNo ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td title={row.utility ?? undefined}>
-                          {row.utility ?? <span className="supply-null-cell">—</span>}
+                          <div className="supply-cell-text">{row.utility ?? <span className="supply-null-cell">—</span>}</div>
                         </td>
                         <td className="supply-number-cell">
                           {row.rate !== null && row.rate !== undefined
@@ -1417,6 +1685,68 @@ export const SupplyHistoryDashboard: React.FC = () => {
                           {row.invoiceAmt !== null && row.invoiceAmt !== undefined
                             ? formatNumber(row.invoiceAmt)
                             : <span className="supply-null-cell">—</span>}
+                        </td>
+                        <td title={row.email ?? undefined} style={{ position: "relative" }}>
+                          {(() => {
+                            const isEditing = editingCell?.saleBillNumber === row.saleBillNumber && editingCell?.itemCode === row.itemCode && editingCell?.field === "email";
+                            const key = `${row.saleBillNumber}|${row.itemCode}|email`;
+                            const isSaving = savingCells.has(key);
+                            if (isEditing) {
+                              return (
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }} onClick={(e)=>e.stopPropagation()}>
+                                  <input
+                                    type="email"
+                                    value={editingDraft}
+                                    onChange={(e)=>setEditingDraft(e.target.value)}
+                                    onKeyDown={(e)=>{ if(e.key==="Enter"){ e.preventDefault(); handleEditSave(); } else if(e.key==="Escape"){ handleEditCancel(); } }}
+                                    autoFocus
+                                    disabled={isSaving}
+                                    placeholder="Email"
+                                    style={{ fontSize: "12px", padding: "2px 6px", border: "1px solid #dadce0", borderRadius: 4, width: 160 }}
+                                  />
+                                  <button onClick={handleEditSave} disabled={isSaving} title="Save" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:"50%", background:"#1a73e8", color:"#fff", border:"none", cursor:"pointer" }}><Check size={12} /></button>
+                                  <button onClick={handleEditCancel} disabled={isSaving} title="Cancel" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:"50%", background:"#e8eaed", color:"#5f6368", border:"none", cursor:"pointer" }}><X size={12} /></button>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div style={{ display:"flex", alignItems:"flex-start", gap:6, justifyContent:"space-between" }}>
+                                <span title={row.email ?? undefined} className="supply-cell-text">{row.email ?? <span className="supply-null-cell">—</span>}</span>
+                                <button onClick={()=>handleEditStart(row, "email")} title="Edit Email" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:20, height:20, borderRadius:"50%", background:"#f1f3f4", border:"1px solid #dadce0", cursor:"pointer", flexShrink:0, marginTop:2 }}><Pencil size={10} /></button>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td title={row.contactNo ?? undefined} style={{ position: "relative" }}>
+                          {(() => {
+                            const isEditing = editingCell?.saleBillNumber === row.saleBillNumber && editingCell?.itemCode === row.itemCode && editingCell?.field === "contactNo";
+                            const key = `${row.saleBillNumber}|${row.itemCode}|contactNo`;
+                            const isSaving = savingCells.has(key);
+                            if (isEditing) {
+                              return (
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }} onClick={(e)=>e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    value={editingDraft}
+                                    onChange={(e)=>setEditingDraft(e.target.value)}
+                                    onKeyDown={(e)=>{ if(e.key==="Enter"){ e.preventDefault(); handleEditSave(); } else if(e.key==="Escape"){ handleEditCancel(); } }}
+                                    autoFocus
+                                    disabled={isSaving}
+                                    placeholder="Contact No"
+                                    style={{ fontSize: "12px", padding: "2px 6px", border: "1px solid #dadce0", borderRadius: 4, width: 120 }}
+                                  />
+                                  <button onClick={handleEditSave} disabled={isSaving} title="Save" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:"50%", background:"#1a73e8", color:"#fff", border:"none", cursor:"pointer" }}><Check size={12} /></button>
+                                  <button onClick={handleEditCancel} disabled={isSaving} title="Cancel" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:"50%", background:"#e8eaed", color:"#5f6368", border:"none", cursor:"pointer" }}><X size={12} /></button>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div style={{ display:"flex", alignItems:"flex-start", gap:6, justifyContent:"space-between" }}>
+                                <span title={row.contactNo ?? undefined} className="supply-cell-text">{row.contactNo ?? <span className="supply-null-cell">—</span>}</span>
+                                <button onClick={()=>handleEditStart(row, "contactNo")} title="Edit Contact No" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:20, height:20, borderRadius:"50%", background:"#f1f3f4", border:"1px solid #dadce0", cursor:"pointer", flexShrink:0, marginTop:2 }}><Pencil size={10} /></button>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="col-center">
                           {row.hasDocuments || row.attachmentUrl ? (
