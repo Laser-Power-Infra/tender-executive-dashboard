@@ -30,7 +30,7 @@ function twoDaysAgoString(): string {
 }
 
 const initialState: FilesState = {
-  selectedDateFrom: twoDaysAgoString(),
+  selectedDateFrom: "2026-01-01T00:00:00.000Z",
   selectedDateTo: todayString(),
   items: [],
   loading: false,

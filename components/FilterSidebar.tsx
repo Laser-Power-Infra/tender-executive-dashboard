@@ -1,6 +1,5 @@
 "use client";
-import React from "react";
-import { ManagementDecision } from "@/types/tender";
+import React, { useRef, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -8,23 +7,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ParticipationCards } from "@/components/tender-viewer/participation-cards";
+import { ParticipationFlowChart } from "@/components/ParticipationFlowChart";
 import "./FilterSidebar.css";
 
 interface FilterSidebarProps {
-  clientSearch: string;
-  setClientSearch: (val: string) => void;
-  selectedStatuses: string[];
-  setSelectedStatuses: (statuses: string[]) => void;
-  uniqueStatuses: string[];
-  selectedEngineer: string;
-  setSelectedEngineer: (val: string) => void;
-  engineersList: string[];
-  selectedDecision: string;
-  setSelectedDecision: (val: string) => void;
-  valueMin: string;
-  setValueMin: (val: string) => void;
-  valueMax: string;
-  setValueMax: (val: string) => void;
+  priceBasisFilter: string;
+  setPriceBasisFilter: (val: string) => void;
   aluminiumMin: string;
   setAluminiumMin: (val: string) => void;
   aluminiumMax: string;
@@ -33,83 +22,48 @@ interface FilterSidebarProps {
   setCopperMin: (val: string) => void;
   copperMax: string;
   setCopperMax: (val: string) => void;
-  priceBasisFilter: string;
-  setPriceBasisFilter: (val: string) => void;
-  onRefresh?: () => void;
+  rows?: Record<string, unknown>[];
 }
 
 export const FilterSidebar: React.FC<FilterSidebarProps> = ({
-  clientSearch, setClientSearch,
-  selectedStatuses, setSelectedStatuses, uniqueStatuses,
-  selectedEngineer, setSelectedEngineer, engineersList,
-  selectedDecision, setSelectedDecision,
-  valueMin, setValueMin, valueMax, setValueMax,
+  priceBasisFilter, setPriceBasisFilter,
   aluminiumMin, setAluminiumMin, aluminiumMax, setAluminiumMax,
   copperMin, setCopperMin, copperMax, setCopperMax,
-  priceBasisFilter, setPriceBasisFilter,
-  onRefresh
+  rows = [],
 }) => {
-  const handleStatusToggle = (status: string) => {
-    if (selectedStatuses.includes(status)) {
-      setSelectedStatuses(selectedStatuses.filter(s => s !== status));
-    } else {
-      setSelectedStatuses([...selectedStatuses, status]);
-    }
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    startXRef.current = e.clientX;
+    startWidthRef.current = sidebarWidth;
+    document.addEventListener("mousemove", handleResizeMove);
+    document.addEventListener("mouseup", handleResizeEnd);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const handleResizeMove = (e: MouseEvent) => {
+    const diff = e.clientX - startXRef.current;
+    const newWidth = Math.max(200, startWidthRef.current + diff);
+    setSidebarWidth(newWidth);
+  };
+
+  const handleResizeEnd = () => {
+    document.removeEventListener("mousemove", handleResizeMove);
+    document.removeEventListener("mouseup", handleResizeEnd);
+    document.body.style.cursor = "default";
+    document.body.style.userSelect = "";
   };
 
   return (
-    <div className="filter-sidebar-container">
+    <div className="filter-sidebar-container" style={{ width: sidebarWidth }}>
       <div className="sidebar-header">Participation Filters</div>
       <div className="sidebar-content">
-        <div className="filter-section">
-          <label className="filter-label">Client</label>
-          <input type="text" className="filter-text-input" placeholder="Search Client..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
-        </div>
-        <div className="filter-section">
-          <label className="filter-label">Status</label>
-          <div className="checkbox-group">
-            {uniqueStatuses.map(status => (
-              <label key={status} className="checkbox-label">
-                <input type="checkbox" className="checkbox-input" checked={selectedStatuses.includes(status)} onChange={() => handleStatusToggle(status)} />
-                <span>{status || "(Blank)"}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="filter-section">
-          <label className="filter-label">Engineer (Prepare By)</label>
-          <Select value={selectedEngineer} onValueChange={(v) => setSelectedEngineer(v ?? "All")}>
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue placeholder="All Engineers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Engineers</SelectItem>
-              {engineersList.map(eng => (<SelectItem key={eng} value={eng}>{eng}</SelectItem>))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="filter-section">
-          <label className="filter-label">Mgmt Decision</label>
-          <Select value={selectedDecision} onValueChange={(v) => setSelectedDecision(v ?? "All")}>
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue placeholder="All Decisions" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Decisions</SelectItem>
-              <SelectItem value={ManagementDecision.GO}>Go</SelectItem>
-              <SelectItem value={ManagementDecision.NO_GO}>No Go</SelectItem>
-              <SelectItem value={ManagementDecision.PENDING}>Pending</SelectItem>
-              <SelectItem value={ManagementDecision.DEFERRED}>Deferred</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="filter-section">
-          <label className="filter-label">Value Range (\u20B9 Cr)</label>
-          <div className="range-grid">
-            <input type="number" className="filter-text-input" placeholder="Min" value={valueMin} onChange={(e) => setValueMin(e.target.value)} min="0" />
-            <input type="number" className="filter-text-input" placeholder="Max" value={valueMax} onChange={(e) => setValueMax(e.target.value)} min="0" />
-          </div>
-        </div>
+        <ParticipationCards variant="dark" rows={rows} />
+        <ParticipationFlowChart rows={rows} />
         <div className="filter-section">
           <label className="filter-label">Price</label>
           <Select value={priceBasisFilter} onValueChange={(v) => setPriceBasisFilter(v ?? "All")}>
@@ -138,11 +92,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           </div>
         </div>
       </div>
-      {onRefresh && (
-        <div className="sidebar-footer">
-          <button className="refresh-btn" onClick={onRefresh}>Refresh Dashboard</button>
-        </div>
-      )}
+      <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />
     </div>
   );
 };

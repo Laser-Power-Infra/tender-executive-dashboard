@@ -39,6 +39,7 @@ export interface EmdWebhookPayload {
   senderName: string
   senderDesignation: string | null
   companyName: string | null
+  fileUrls: string[]
 }
 
 export interface EmdWebhookAttachment {
@@ -124,6 +125,7 @@ export async function triggerEmdPaymentWebhook(
   attachments: EmdWebhookAttachment[] = [],
 ) {
   const url = process.env.N8N_EMD_WEBHOOK_URL
+  console.log(process.env.N8N_EMD_WEBHOOK_URL)
   if (!url) {
     console.warn("[n8n] N8N_EMD_WEBHOOK_URL not configured, skipping webhook")
     return
@@ -158,6 +160,7 @@ export async function triggerEmdPaymentWebhook(
       appendFormField(formData, "senderName", payload.senderName)
       appendFormField(formData, "senderDesignation", payload.senderDesignation)
       appendFormField(formData, "companyName", payload.companyName)
+      formData.append("fileUrls", JSON.stringify(payload.fileUrls))
 
       for (const attachment of attachments) {
         const { buffer } = attachment
@@ -307,6 +310,7 @@ export async function triggerReverseAuctionWebhook(
   data: ReverseAuctionWebhookData,
 ): Promise<boolean> {
   const url = process.env.N8N_RA_WEBHOOK_URL
+  console.log(process.env.N8N_RA_WEBHOOK_URL)
   if (!url) {
     console.warn(
       "[n8n] N8N_RA_WEBHOOK_URL not configured, skipping reverse auction webhook",

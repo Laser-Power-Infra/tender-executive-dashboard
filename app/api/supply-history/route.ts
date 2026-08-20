@@ -29,7 +29,9 @@ export async function GET(req: NextRequest) {
     } catch (err: any) {
       console.error("[API:GET /api/supply-history] DB upsert error:", err.message);
     }
-    const withDocs = await DatabaseSupplyService.enrichWithDocumentStatus(records);
+    // 4. Return from DB so synced fields (e.g. quotationNo) are included
+    const dbData = await DatabaseSupplyService.getAllSupplyHistory();
+    const withDocs = await DatabaseSupplyService.enrichWithDocumentStatus(dbData);
     console.log(`[API:GET /api/supply-history] Fetched ${withDocs.length} records from Google Sheets`);
     return NextResponse.json({ success: true, data: withDocs });
   } catch (err: any) {

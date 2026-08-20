@@ -28,12 +28,20 @@ const OVERWRITE_FIELDS = new Set([
 ]);
 const COMPETITORS_SEPARATOR = " - ";
 
+interface RejectedRow {
+  fileName: string;
+  sheetName: string;
+  reason: string;
+  row: Record<string, unknown>;
+}
+
 interface SheetResult {
   sheetName: string;
   count: number;
   excludedCount: number;
   errors: string[];
   skipped: boolean;
+  rejected: RejectedRow[];
 }
 
 interface FileResult {
@@ -43,12 +51,14 @@ interface FileResult {
   totalCount: number;
   totalErrors: string[];
   excludedCount: number;
+  rejected: RejectedRow[];
 }
 
 interface PreparedTender {
   refNo: string;
   tenderType: "GEM" | "NON_GEM";
   createData: Record<string, unknown>;
+  originalRow: Record<string, unknown>;
 }
 
 interface ParsedSheet {
@@ -56,6 +66,7 @@ interface ParsedSheet {
   prepared: PreparedTender[];
   skipped: boolean;
   excludedCount: number;
+  rejected: RejectedRow[];
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -124,6 +135,7 @@ function buildCreateData(
 function parseSheetData(
   workbook: XLSX.WorkBook,
   sheetName: string,
+  fileName: string,
   cableKeywords: string[],
   conductorsKeywords: string[],
   today: Date,
@@ -142,6 +154,7 @@ function parseSheetData(
       prepared: [],
       skipped: true,
       excludedCount: 0,
+      rejected: [],
     };
   }
 
@@ -152,6 +165,7 @@ function parseSheetData(
       prepared: [],
       skipped: true,
       excludedCount: 0,
+      rejected: [],
     };
   }
 
@@ -167,6 +181,7 @@ function parseSheetData(
       prepared: [],
       skipped: true,
       excludedCount: 0,
+      rejected: [],
     };
   }
 
@@ -182,11 +197,20 @@ function parseSheetData(
     });
 
   const prepared: PreparedTender[] = [];
+  const rejected: RejectedRow[] = [];
   let excludedCount = 0;
 
   for (const row of jsonData) {
     const refNo = getReferenceNo(row, headers, customColumnMap) || "";
-    if (!refNo) continue;
+    if (!refNo) {
+      rejected.push({
+        fileName,
+        sheetName,
+        reason: "Missing reference number",
+        row,
+      });
+      continue;
+    }
 
     const tenderBrief = getFieldValue(row, headers, "tenderBrief", customColumnMap);
     const briefText =
@@ -206,8 +230,17 @@ function parseSheetData(
 
     const deadlineRaw = getFieldValue(row, headers, "deadline", customColumnMap);
     const deadlineDate = deadlineRaw ? parseDate(deadlineRaw) : null;
-    const isDateExcluded =
-      deadlineDate !== null && deadlineDate.getTime() <= today.getTime();
+    if (!deadlineDate) {
+      const isEmpty = deadlineRaw == null || String(deadlineRaw).trim() === "";
+      rejected.push({
+        fileName,
+        sheetName,
+        reason: isEmpty ? "Missing deadline date" : "Invalid deadline date",
+        row,
+      });
+      continue;
+    }
+    const isDateExcluded = deadlineDate.getTime() <= today.getTime();
     if (isDateExcluded) excludedCategories.push("date");
 
     const excludedCategory =
@@ -227,7 +260,7 @@ function parseSheetData(
       `[UPLOAD] Deadline for ${r}:`,
       createData.deadline ? format(createData.deadline as Date, "do MMM yyyy") : "null",
     );
-    prepared.push({ refNo: r, tenderType, createData });
+    prepared.push({ refNo: r, tenderType, createData, originalRow: row });
   }
 
   return {
@@ -235,6 +268,7 @@ function parseSheetData(
     prepared,
     skipped: false,
     excludedCount,
+    rejected,
   };
 }
 
@@ -242,6 +276,7 @@ async function insertTenderMerged(
   prepared: PreparedTender[],
   fileId: number,
   sheetResult: SheetResult,
+  fileName: string,
 ): Promise<void> {
   if (!prepared.length) return;
 
@@ -257,6 +292,7 @@ async function insertTenderMerged(
   const toCreate: Record<string, unknown>[] = [];
   const webhookQueue: string[] = [];
   const seenRefs = new Set<string>();
+  const originalRowByRef = new Map<string, Record<string, unknown>>();
 
   for (const p of prepared) {
     const old = existingMap.get(p.refNo);
@@ -354,14 +390,27 @@ async function insertTenderMerged(
         String(p.createData.tenderBrief).trim() !== "";
       if (!hasBrief) {
         console.log(`[SKIP] ${p.refNo} - missing tender brief`);
+        sheetResult.rejected.push({
+          fileName,
+          sheetName: sheetResult.sheetName,
+          reason: "Missing tender brief",
+          row: p.originalRow,
+        });
         continue;
       }
       if (seenRefs.has(p.refNo)) {
         console.log(`[SKIP] Duplicate refNo in same batch: ${p.refNo}`);
+        sheetResult.rejected.push({
+          fileName,
+          sheetName: sheetResult.sheetName,
+          reason: "Duplicate reference number in batch",
+          row: p.originalRow,
+        });
         continue;
       }
       seenRefs.add(p.refNo);
       // console.log(`[INSERT] ${p.refNo}`);
+      originalRowByRef.set(p.refNo, p.originalRow);
       toCreate.push({ ...p.createData, fileId });
       if (p.createData.apm === "YES" && p.createData.tenderAssociations) {
         webhookQueue.push(p.refNo);
@@ -386,9 +435,18 @@ async function insertTenderMerged(
           await prisma.tenderMerged.create({ data: data as any });
           sheetResult.count++;
         } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : "Unknown error";
           sheetResult.errors.push(
-            `Row ${(data as any).referenceNo || "unknown"}: ${err instanceof Error ? err.message : "Unknown error"}`,
+            `Row ${(data as any).referenceNo || "unknown"}: ${errorMessage}`,
           );
+          const refNo = (data as any).referenceNo as string | undefined;
+          const originalRow = refNo ? originalRowByRef.get(refNo) : undefined;
+          sheetResult.rejected.push({
+            fileName,
+            sheetName: sheetResult.sheetName,
+            reason: `Insert failed: ${errorMessage}`,
+            row: originalRow ?? {},
+          });
         }
       }
     }
@@ -456,6 +514,7 @@ async function processFile(file: File): Promise<FileResult> {
     totalCount: 0,
     totalErrors: [],
     excludedCount: 0,
+    rejected: [],
   };
 
   const arrayBuffer = await file.arrayBuffer();
@@ -512,6 +571,7 @@ async function processFile(file: File): Promise<FileResult> {
       const parsed = parseSheetData(
         workbook,
         sheetName,
+        file.name,
         cableKeywords,
         conductorsKeywords,
         today,
@@ -525,11 +585,12 @@ async function processFile(file: File): Promise<FileResult> {
         excludedCount: parsed.excludedCount,
         errors: [],
         skipped: parsed.skipped,
+        rejected: parsed.rejected,
       };
 
       if (parsed.skipped) return sheetResult;
 
-      await insertTenderMerged(parsed.prepared, fileRecord.id, sheetResult);
+      await insertTenderMerged(parsed.prepared, fileRecord.id, sheetResult, file.name);
 
       return sheetResult;
     }),
@@ -542,6 +603,7 @@ async function processFile(file: File): Promise<FileResult> {
     fileResult.totalCount += s.count;
     fileResult.excludedCount += s.excludedCount;
     fileResult.totalErrors.push(...s.errors);
+    fileResult.rejected.push(...s.rejected);
   }
 
   await prisma.file.update({

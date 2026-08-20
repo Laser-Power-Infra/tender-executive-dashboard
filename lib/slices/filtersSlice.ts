@@ -5,7 +5,8 @@ import type { ColumnFilterState, ColumnFilterType } from "@/lib/types";
 
 type DeadlinePreset = "thisWeek" | "thisMonth" | "thisYear";
 
-type ParticipationFilter = "participated" | "notParticipated" | "upcomingRa" | null;
+type ParticipationFilter = "participated" | "notParticipated" | "upcomingRa" | "participatedWithRa" | "participatedWithoutRa" | "yetToOpenRa" | "bidOpeningPendingExclRa" | "participatedTotal" | "raDone" | "raPending" | "technicalOpen" | "technicalNotOpen" | "weL1" | "weLost" | "expRaDate" | "contractReceived" | "contractPending" | "financialOpen";
+type AnalyticsFilter = "aiYes" | "aiYesUnallocated" | "apmYesAllocated" | "apmYesUnallocated" | null;
 
 interface FiltersState {
   exclusionFilter: string | null;
@@ -20,7 +21,9 @@ interface FiltersState {
   aiRelevanceFilter: "all" | "yes" | "no" | "not_analysed";
   showFilterTray: boolean;
   columnFilters: Record<string, ColumnFilterState>;
-  participationFilter: ParticipationFilter;
+  participationFilters: ParticipationFilter[];
+  participatedDateRange: { from: string; to: string } | null;
+  analyticsFilter: AnalyticsFilter;
 }
 
 const initialState: FiltersState = {
@@ -36,7 +39,9 @@ const initialState: FiltersState = {
   aiRelevanceFilter: "all",
   showFilterTray: false,
   columnFilters: {},
-  participationFilter: null,
+  participationFilters: [],
+  participatedDateRange: { from: "2026-01-01", to: "" },
+  analyticsFilter: null,
 };
 
 export const filtersSlice = createSlice({
@@ -89,8 +94,29 @@ export const filtersSlice = createSlice({
     setShowFilterTray(state, action: PayloadAction<boolean>) {
       state.showFilterTray = action.payload;
     },
-    setParticipationFilter(state, action: PayloadAction<ParticipationFilter>) {
-      state.participationFilter = action.payload;
+    toggleParticipationFilter(state, action: PayloadAction<ParticipationFilter>) {
+      const value = action.payload;
+      const idx = state.participationFilters.indexOf(value);
+      if (idx >= 0) {
+        state.participationFilters.splice(idx, 1);
+      } else {
+        state.participationFilters.push(value);
+      }
+    },
+    clearParticipationFilters(state) {
+      state.participationFilters = [];
+    },
+    setAnalyticsFilter(state, action: PayloadAction<AnalyticsFilter>) {
+      state.analyticsFilter = action.payload;
+    },
+    setParticipatedDateRange(
+      state,
+      action: PayloadAction<{ from: string; to: string }>,
+    ) {
+      state.participatedDateRange = action.payload;
+    },
+    clearParticipatedDateRange(state) {
+      state.participatedDateRange = null;
     },
     setColumnFilter(state, action: PayloadAction<{ accessor: string; filterType: ColumnFilterType; value: unknown }>) {
       const { accessor, filterType, value } = action.payload;
@@ -168,7 +194,9 @@ export const filtersSlice = createSlice({
       state.typeFilter = "all";
       state.aiRelevanceFilter = "all";
       state.globalFilter = "";
-      state.participationFilter = null;
+      state.participationFilters = [];
+      state.participatedDateRange = null;
+      state.analyticsFilter = null;
     },
   },
 });
@@ -186,13 +214,17 @@ export const {
   setAiRelevanceFilter,
   toggleFilterTray,
   setShowFilterTray,
-  setParticipationFilter,
+  toggleParticipationFilter,
+  clearParticipationFilters,
+  setAnalyticsFilter,
+  setParticipatedDateRange,
+  clearParticipatedDateRange,
   setColumnFilter,
   clearColumnFilter,
   resetColumnFilters,
   resetAllFilters,
 } = filtersSlice.actions;
 
-export type { DeadlinePreset, ParticipationFilter };
+export type { DeadlinePreset, ParticipationFilter, AnalyticsFilter };
 
 export default filtersSlice.reducer;

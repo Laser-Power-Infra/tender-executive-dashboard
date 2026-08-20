@@ -2,10 +2,11 @@
 
 import { useRef, useCallback, useState, useEffect } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
-import { addFiles, removeFile, uploadFiles } from "@/lib/slices/uploadSlice";
+import { addFiles, removeFile, uploadFiles, uploadResultFiles } from "@/lib/slices/uploadSlice";
 import { clearState } from "@/lib/slices/filesSlice";
 
 function UploadIcon() {
@@ -70,13 +71,38 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-export default function FileUpload() {
+interface FileUploadProps {
+  mode?: "parse" | "result";
+}
+
+export default function FileUpload({ mode = "parse" }: FileUploadProps) {
   const dispatch = useAppDispatch();
   const pendingFiles = useAppSelector((s) => s.upload.pendingFiles);
   const parsing = useAppSelector((s) => s.upload.parsing);
+  const rejectedRows = useAppSelector((s) => s.upload.rejectedRows);
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounter = useRef(0);
+
+  useEffect(() => {
+    if (parsing || rejectedRows.length === 0) return;
+    const exportData = rejectedRows.map((r) => ({
+      "Source File": r.fileName,
+      Sheet: r.sheetName,
+      "Rejection Reason": r.reason,
+      ...r.row,
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rejected Tenders");
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `rejected-tenders-${date}.xlsx`);
+    if (rejectedRows.length > 0) {
+      toast.error(`${rejectedRows.length} tender(s) rejected`, {
+        description: "Downloaded rejected-tenders excel",
+      });
+    }
+  }, [parsing, rejectedRows]);
 
   useEffect(() => {
     const preventDefault = (e: DragEvent) => {
@@ -150,6 +176,11 @@ export default function FileUpload() {
   const handleParse = useCallback(async () => {
     if (!pendingFiles.length) return;
     dispatch(uploadFiles(pendingFiles));
+  }, [dispatch, pendingFiles]);
+
+  const handleResultParse = useCallback(async () => {
+    if (!pendingFiles.length) return;
+    dispatch(uploadResultFiles(pendingFiles));
   }, [dispatch, pendingFiles]);
 
   return (
@@ -263,21 +294,39 @@ export default function FileUpload() {
               ))}
             </div>
 
-            <Button
-              size="sm"
-              onClick={handleParse}
-              disabled={parsing}
-              className="bg-primary text-primary-foreground hover:bg-primary/80 rounded-sm h-8 px-4 text-xs font-medium transition-all shadow-sm"
-            >
-              {parsing ? (
-                <>
-                  <Spinner />
-                  <span className="ml-1.5">Parsing...</span>
-                </>
-              ) : (
-                `Parse ${pendingFiles.length} File${pendingFiles.length !== 1 ? "s" : ""}`
-              )}
-            </Button>
+            {mode === "parse" ? (
+              <Button
+                size="sm"
+                onClick={handleParse}
+                disabled={parsing}
+                className="bg-primary text-primary-foreground hover:bg-primary/80 rounded-sm h-8 px-4 text-xs font-medium transition-all shadow-sm"
+              >
+                {parsing ? (
+                  <>
+                    <Spinner />
+                    <span className="ml-1.5">Parsing...</span>
+                  </>
+                ) : (
+                  `Parse ${pendingFiles.length} File${pendingFiles.length !== 1 ? "s" : ""}`
+                )}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={handleResultParse}
+                disabled={parsing}
+                className="bg-emerald-600 text-white hover:bg-emerald-700 rounded-sm h-8 px-4 text-xs font-medium transition-all shadow-sm"
+              >
+                {parsing ? (
+                  <>
+                    <Spinner />
+                    <span className="ml-1.5">Processing...</span>
+                  </>
+                ) : (
+                  `Upload Result ${pendingFiles.length} File${pendingFiles.length !== 1 ? "s" : ""}`
+                )}
+              </Button>
+            )}
           </div>
         )}
       </div>

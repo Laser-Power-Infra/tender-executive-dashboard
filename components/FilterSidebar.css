@@ -10,6 +10,24 @@
   border-right: 1px solid #1e3d59;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   box-sizing: border-box;
+  position: relative;
+}
+
+/* Draggable Resize Handle on the right edge */
+.sidebar-resize-handle {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 20;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background-color: rgba(0, 112, 243, 0.6);
 }
 
 .sidebar-header {

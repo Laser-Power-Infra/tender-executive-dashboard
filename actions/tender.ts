@@ -13,7 +13,7 @@ import type {
   ReverseAuctionWebhookData,
 } from "@/lib/integrations/n8n";
 import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
-import { auth } from "@/auth";
+import { describeTenderFile } from "@/lib/tenderFileDescriptor";
 import { format } from "date-fns";
 import { parseDate } from "@/lib/parse-date";
 
@@ -251,22 +251,9 @@ export const updateDocketNumber = withLog(
     const docketNo = params.docketNo.trim();
 
     if (docketNo) {
-      if (!/^ENQ-\d+-(\d{2}|\d{4})-\1$/i.test(docketNo)) {
+      if (!/^ENQ-\d+-(?:(\d{4})-\1|\d{2}-\d{2})$/i.test(docketNo)) {
         throw new Error(
-          'Docket No must match format ENQ-{number}-{year}-{year} (e.g., ENQ-12345-2026-2026).',
-        );
-      }
-
-      const existing = await prisma.tenderMerged.findFirst({
-        where: {
-          docketNo: { equals: docketNo, mode: "insensitive" },
-          id: { not: params.tenderMergedId },
-        },
-        select: { id: true, referenceNo: true },
-      });
-      if (existing) {
-        throw new Error(
-          `Docket No "${docketNo}" already exists on tender ${existing.referenceNo ?? existing.id}. Docket numbers must be unique.`,
+          'Docket No must match format ENQ-{number}-{year}-{year} (e.g., ENQ-12345-2025-2026 or ENQ-12345-2026-2026).',
         );
       }
     }
@@ -604,6 +591,7 @@ export async function updateTenderMergedStringField(params: {
         remarks: true,
         beneficiaryBankDetails: true,
         organization: true,
+        itemCategory: true,
         CostingSheetDetails: {
           select: {
             itemSchedule: true,
@@ -620,6 +608,9 @@ export async function updateTenderMergedStringField(params: {
             tags: true,
           },
         },
+        tenderAssociations: {
+          include: { association: true },
+        },
       },
     });
 
@@ -627,13 +618,13 @@ export async function updateTenderMergedStringField(params: {
 
     if (current.emdPaymentMode === value) return { ok: true };
 
-    const missing = validateEmdPayloadData(current);
-    if (missing.length > 0) {
-      return {
-        ok: false,
-        error: `Cannot update EMD Payment Mode. Please fill in the following fields first: ${missing.join(", ")}`,
-      };
-    }
+    // const missing = validateEmdPayloadData(current);
+    // if (missing.length > 0) {
+    //   return {
+    //     ok: false,
+    //     error: `Cannot update EMD Payment Mode. Please fill in the following fields first: ${missing.join(", ")}`,
+    //   };
+    // }
 
     await prisma.tenderMerged.update({
       where: { id: tenderMergedId },
@@ -668,14 +659,20 @@ export async function updateTenderMergedStringField(params: {
         if (resolved) attachments.push(resolved);
       }
 
-      const session = await auth();
+      const associationName =
+        current.tenderAssociations?.[0]?.association?.name?.trim() ?? "";
+
+      const fileUrls = (current.tenderFiles ?? [])
+        .filter((f) => f.tags.includes(TENDER_FILE_TYPES.TENDER_DOCUMENT))
+        .map((f) => describeTenderFile(f).decrypted_fileId || f.url)
+        .filter(Boolean) as string[];
 
       await triggerEmdPaymentWebhook(
         {
           tenderEnquiryNo: current.docketNo ?? "",
           tenderReferenceNo: current.referenceNo ?? "",
           clientName: current.organization ?? null,
-          itemDescription: null,
+          itemDescription: [current.tenderBrief, current.itemCategory].filter(Boolean).join(" @ "),
           itemList,
           bidSubmissionEndDate: current.deadline
             ? format(current.deadline, "yyyy-MM-dd")
@@ -689,9 +686,10 @@ export async function updateTenderMergedStringField(params: {
           hardCopySubmissionDate: null,
           remarks: null,
           hasAttachments: !!tenderDocument,
-          senderName: session?.user?.name ?? "",
+          senderName: associationName,
           senderDesignation: null,
           companyName: null,
+          fileUrls,
         },
         attachments,
       );

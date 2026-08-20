@@ -82,6 +82,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     reverseAuctionEndDate: row.reverseAuctionEndDate
       ? new Date(row.reverseAuctionEndDate)
       : null,
+    expectedRaDate: row.expectedRaDate || null,
     emdPaymentMode: (row.emdPaymentMode as EMDExchangeMode) || null,
     bgNoUtrNo: row.bgNoUtrNo || null,
     emdValidity: null,

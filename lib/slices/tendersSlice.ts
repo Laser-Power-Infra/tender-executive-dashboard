@@ -218,16 +218,25 @@ export const updateTenderCell = createAsyncThunk(
 
 export const updateTenderDocketNo = createAsyncThunk(
   "tenders/updateDocketNo",
-  async (params: {
-    tenderMergedId: number;
-    docketNo: string;
-    oldDocketNo: string;
-  }) => {
-    await updateDocketNumber({
-      tenderMergedId: params.tenderMergedId,
-      docketNo: params.docketNo,
-    });
-    return params;
+  async (
+    params: {
+      tenderMergedId: number;
+      docketNo: string;
+      oldDocketNo: string;
+    },
+    { rejectWithValue },
+  ) => {
+    try {
+      await updateDocketNumber({
+        tenderMergedId: params.tenderMergedId,
+        docketNo: params.docketNo,
+      });
+      return params;
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.message || "Failed to update docket number",
+      );
+    }
   },
 );
 

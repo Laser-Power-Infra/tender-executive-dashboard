@@ -281,6 +281,11 @@
   background-color: #f8fafc;
 }
 
+.tender-data-table td[rowspan] {
+  vertical-align: top;
+  border-bottom: 2px solid #d0d5dd;
+}
+
 /* Column Specific Alignments & Typography */
 .col-docket { font-family: monospace; font-weight: 600; color: var(--color-primary); cursor: pointer; }
 .col-currency { text-align: right; font-variant-numeric: tabular-nums; }

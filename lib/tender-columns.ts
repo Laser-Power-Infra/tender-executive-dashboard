@@ -55,6 +55,7 @@ const MERGED_FIELDS = new Set([
   "evaluationMethod",
   "evaluationTableData",
   "excludedCategory",
+  "expectedRaDate",
   "finalRemarks",
   "financialDocumentPriceBreakupRequired",
   "inspectionRequired",
@@ -127,15 +128,8 @@ type ColumnMap = Record<string, string>;
 
 export const COLUMN_MAP: ColumnMap = {
   referenceNo: "referenceNo",
-  referenceNumber: "referenceNo",
-  tenderReference: "referenceNo",
-  tenderReferenceNo: "referenceNo",
-  refNo: "referenceNo",
-  ref: "referenceNo",
   deptTenderNumber: "referenceNo",
-  deptTender: "referenceNo",
-  tenderId: "referenceNo",
-  portalId: "referenceNo",
+  actualTenderNumber: "referenceNo",
 
   tenderBrief: "tenderBrief",
   brief: "tenderBrief",
@@ -370,6 +364,8 @@ export const COLUMN_MAP: ColumnMap = {
   evaluationTableData: "evaluationTableData",
   excludedCategory: "excludedCategory",
   "Excluded Category": "excludedCategory",
+  expectedRaDate: "expectedRaDate",
+  "Expected RA Date": "expectedRaDate",
   finalRemarks: "finalRemarks",
   "Final Remarks": "finalRemarks",
   locationCount: "locationCount",
@@ -544,14 +540,11 @@ function findReferenceNoColumn(
 
 export function findHeaderRowIndex(rows: unknown[][]): number {
   for (let i = 0; i < rows.length; i++) {
-    for (const cell of rows[i]) {
-      const val = cell == null ? "" : String(cell).trim();
-      if (!val) continue;
-      if (val === "referenceNo" || val === "tenderReferenceNo") return i;
-      const n = normalizeHeader(val);
-      if (n === "referenceno" || n === "tenderreferenceno") return i;
-      if (n.includes("ref") && n.includes("no")) return i;
-    }
+    const rowHeaders = (rows[i] as unknown[])
+      .map((h) => (h == null ? "" : String(h).trim()))
+      .filter(Boolean);
+    if (rowHeaders.length === 0) continue;
+    if (findReferenceNoColumn(rowHeaders)) return i;
   }
   return -1;
 }

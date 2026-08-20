@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const files = await prisma.file.findMany();
+    const files = await prisma.file.findMany({
+      orderBy:{
+        createdAt: "desc"
+      }
+      
+    });
     return NextResponse.json({ files });
   } catch (error) {
     console.error("Files fetch error:", error instanceof Error ? error.message : error, error instanceof Error ? error.stack : "");

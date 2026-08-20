@@ -10,7 +10,7 @@ interface ScanRecord {
 }
 
 export function resolveRootPath(): string {
-  const networkRoot = process.env.INDEXER_NETWORK_PATH;
+  const networkRoot = process.env.INDEXER_NETWORK_PATH ;
   if (!networkRoot) {
     throw new Error(
       "INDEXER_NETWORK_PATH is not set. Configure it before running the indexer.",
@@ -89,7 +89,7 @@ function extractDocketNumber(folderName: string): string | null {
   return null;
 }
 
-async function scanDirectoryRecursive(
+export async function scanDirectoryRecursive(
   currentDir: string,
   scannedIndex: Map<string, ScanRecord>,
   depth: number

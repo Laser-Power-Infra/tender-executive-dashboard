@@ -165,6 +165,9 @@ model SupplyHistory {
   partyRefNo     String?
   partyRefDate   String?
   contractVrNo   String?
+  quotationNo    String?
+  utility        String?
+  docketNo       String?
   rate           Float?
   invoiceQty     Float?
   invoiceAmt     Float?
@@ -680,10 +683,15 @@ model TenderMerged {
   contractPeriodDays       Int?
   participated             Boolean?
   currentStatus            String?
+
   reverseAuctionApplicable Boolean?
   reverseAuctionDate       DateTime?
   reverseAuctionStartDate       DateTime?
   reverseAuctionEndDate       DateTime?
+  reverseAuctionAutomationStatus String?
+  expectedRaDate String?
+
+
   emdPaymentMode           String?
   bgNoUtrNo                String?
   bgDate                   String?

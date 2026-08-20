@@ -22,12 +22,12 @@ import { Button } from "@/components/ui/button";
 import FileUpload from "@/components/upload/file-upload";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import { clearFiles, clearResults } from "@/lib/slices/uploadSlice";
-import { setSelectedDateRange } from "@/lib/slices/filesSlice";
+import { setSelectedDateRange, resetSelectedDateRange } from "@/lib/slices/filesSlice";
 import { importEpcGoTenders } from "@/lib/slices/tendersSlice";
-import type { TenderMergedRow } from "@/lib/slices/tendersSlice";
+import { setAnalyticsFilter } from "@/lib/slices/filtersSlice";
 
 interface TenderSidebarProps {
-  rows?: TenderMergedRow[];
+  rows?: Record<string, unknown>[];
   associations?: { id: number; name: string; email: string }[];
   associationFilter?: string | null;
   onAssociationFilterChange?: (val: string | null) => void;
@@ -42,7 +42,9 @@ export default function TenderSidebar({
   const dispatch = useAppDispatch();
   const selectedDateFrom = useAppSelector((s) => s.files.selectedDateFrom);
   const selectedDateTo = useAppSelector((s) => s.files.selectedDateTo);
+  const analyticsFilter = useAppSelector((s) => s.filters.analyticsFilter);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadDialogMode, setUploadDialogMode] = useState<"parse" | "result">("parse");
 
   const analytics = useMemo(() => {
     if (rows.length === 0) return null;
@@ -59,7 +61,9 @@ export default function TenderSidebar({
         .map((a) => ({
           ...a,
           count: rows.filter((r) => {
-            const assignedIds = (r.assignedTo || "").split(",").filter(Boolean);
+            const assignedIds = String(r.assignedTo ?? "")
+              .split(",")
+              .filter(Boolean);
             return assignedIds.includes(String(a.id));
           }).length,
         }))
@@ -108,6 +112,15 @@ export default function TenderSidebar({
     setShowUploadDialog(false);
   }, [dispatch]);
 
+  const handleAnalyticsCardClick = useCallback(
+    (value: "aiYes" | "aiYesUnallocated" | "apmYesAllocated" | "apmYesUnallocated") => {
+      dispatch(setAnalyticsFilter(analyticsFilter === value ? null : value));
+      dispatch(resetSelectedDateRange());
+      onAssociationFilterChange?.(null);
+    },
+    [dispatch, analyticsFilter, onAssociationFilterChange],
+  );
+
   return (
     <>
       <aside className="w-65 min-w-65 bg-linear-to-b from-[#0a2540] to-[#0d2f4f] flex flex-col overflow-y-auto shrink-0">
@@ -126,19 +139,19 @@ export default function TenderSidebar({
               Upload Tenders
             </div>
             <button
-              onClick={() => setShowUploadDialog(true)}
+              onClick={() => { setUploadDialogMode("parse"); setShowUploadDialog(true); }}
               className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md bg-white/10 text-white/80 text-xs font-medium hover:bg-white/20 transition-colors border border-dashed border-white/20 cursor-pointer"
             >
               <Upload size={14} />
               Upload Files
             </button>
-            {/* <button
-              onClick={handleImportEpc}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors border border-dashed border-green-400 cursor-pointer mt-2"
+            <button
+              onClick={() => { setUploadDialogMode("result"); setShowUploadDialog(true); }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-md bg-emerald-600/20 text-emerald-300 text-xs font-medium hover:bg-emerald-600/30 transition-colors border border-dashed border-emerald-400/30 cursor-pointer mt-2"
             >
-              <Download size={14} />
-              Sync Executive Dashboard
-            </button> */}
+              <Upload size={14} />
+              Upload Result
+            </button>
           </div>
 
           <div>
@@ -221,55 +234,100 @@ export default function TenderSidebar({
 
           {analytics && (
             <>
-              <div className="bg-white/10 rounded-lg p-3">
+              <button
+                type="button"
+                onClick={() => handleAnalyticsCardClick("aiYes")}
+                className={`w-full rounded-lg p-3 text-left transition-colors cursor-pointer ${
+                  analyticsFilter === "aiYes"
+                    ? "bg-blue-500/20 border border-blue-400/50"
+                    : "bg-white/10 border border-transparent hover:bg-white/20"
+                }`}
+              >
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-white mb-1">
                   AI Relevance Yes
                 </div>
                 <div className="text-xl font-bold text-lime-500 leading-tight">
                   {analytics.aiYes}
                 </div>
-              </div>
-              <div className="bg-white/10 rounded-lg p-3">
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnalyticsCardClick("aiYesUnallocated")}
+                className={`w-full rounded-lg p-3 text-left transition-colors cursor-pointer ${
+                  analyticsFilter === "aiYesUnallocated"
+                    ? "bg-blue-500/20 border border-blue-400/50"
+                    : "bg-white/10 border border-transparent hover:bg-white/20"
+                }`}
+              >
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-white mb-1">
                   AI Relevance Yes (Unallocated)
                 </div>
                 <div className="text-xl font-bold text-rose-500 leading-tight">
                   {analytics.aiYesUnallocated}
                 </div>
-              </div>
-              <div className="bg-white/10 rounded-lg p-3">
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnalyticsCardClick("apmYesAllocated")}
+                className={`w-full rounded-lg p-3 text-left transition-colors cursor-pointer ${
+                  analyticsFilter === "apmYesAllocated"
+                    ? "bg-blue-500/20 border border-blue-400/50"
+                    : "bg-white/10 border border-transparent hover:bg-white/20"
+                }`}
+              >
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-white mb-1">
                   APM Yes (Allocated)
                 </div>
                 <div className="text-xl font-bold text-yellow-500 leading-tight">
                   {analytics.apmYesAllocated}
                 </div>
-              </div>
-              <div className="bg-white/10 rounded-lg p-3">
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnalyticsCardClick("apmYesUnallocated")}
+                className={`w-full rounded-lg p-3 text-left transition-colors cursor-pointer ${
+                  analyticsFilter === "apmYesUnallocated"
+                    ? "bg-blue-500/20 border border-blue-400/50"
+                    : "bg-white/10 border border-transparent hover:bg-white/20"
+                }`}
+              >
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-white mb-1">
                   APM Yes (Unallocated)
                 </div>
                 <div className="text-xl font-bold text-blue-500 leading-tight">
                   {analytics.apmYesUnallocated}
                 </div>
-              </div>
+              </button>
               {analytics.personCounts.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-white mb-2.5">
                     Assigned Tenders by Person
                   </div>
                   <div className="space-y-1.5">
-                    {analytics.personCounts.map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between py-1.5 px-2.5 bg-white/10 rounded-lg"
-                      >
-                        <span className="text-xs text-white/70">{p.name}</span>
-                        <span className="text-xs font-semibold text-white">
-                          {p.count}
-                        </span>
-                      </div>
-                    ))}
+                    {analytics.personCounts.map((p) => {
+                      const isActive = associationFilter === String(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() =>
+                            onAssociationFilterChange?.(
+                              isActive ? null : String(p.id),
+                            )
+                          }
+                          className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg transition-colors cursor-pointer ${
+                            isActive
+                              ? "bg-blue-500/20 border border-blue-400/50"
+                              : "bg-white/10 border border-transparent hover:bg-white/20"
+                          }`}
+                        >
+                          <span className="text-xs text-white/70">{p.name}</span>
+                          <span className="text-xs font-semibold text-white">
+                            {p.count}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -289,7 +347,7 @@ export default function TenderSidebar({
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-slate-800">
-                Upload Tenders
+                {uploadDialogMode === "parse" ? "Upload Tenders" : "Upload Result"}
               </h3>
               <button
                 onClick={closeDialog}
@@ -298,7 +356,7 @@ export default function TenderSidebar({
                 ×
               </button>
             </div>
-            <FileUpload />
+            <FileUpload mode={uploadDialogMode} />
           </div>
         </div>
       )}

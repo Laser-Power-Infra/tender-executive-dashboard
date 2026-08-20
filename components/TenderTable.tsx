@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/popover";
 import { countRawMaterials } from "@/lib/rawMaterials";
 import { parseDate } from "@/lib/parse-date";
+import { normalizeDocketKey } from "@/lib/docket";
 import {
   Select,
   SelectContent,
@@ -287,6 +288,7 @@ const textFieldConfig = (
     draft: string,
   ) => Promise<unknown>,
   successMessage?: (record: EpcTenderRecord, draft: string) => string,
+  parse?: (draft: string) => { error?: string },
 ): EditableFieldConfig => ({
   accessor,
   kind,
@@ -301,6 +303,7 @@ const textFieldConfig = (
     const v = record[accessor as keyof EpcTenderRecord];
     return v !== null && v !== undefined ? String(v) : "";
   },
+  parse,
   toStored: (draft) => draft.trim(),
   fromStored: (record) =>
     String(record[accessor as keyof EpcTenderRecord] ?? ""),
@@ -387,6 +390,16 @@ const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
         }),
       ).unwrap(),
     (_, draft) => `Docket ${draft.trim()} updated successfully!`,
+    (draft) => {
+      const v = draft.trim();
+      if (v && !/^ENQ-\d+-(?:(\d{4})-\1|\d{2}-\d{2})$/i.test(v)) {
+        return {
+          error:
+            'Docket No must match format ENQ-{number}-{year}-{year} (e.g., ENQ-12345-2025-2026 or ENQ-12345-2026-2026).',
+        };
+      }
+      return {};
+    },
   ),
   bgNoUtrNo: textFieldConfig(
     "bgNoUtrNo",
@@ -494,6 +507,13 @@ const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
   ),
   yearsOfPastExperience: textFieldConfig("yearsOfPastExperience", "text", "col-editable"),
   ePbgDurationMonths: textFieldConfig("ePbgDurationMonths", "text", "col-editable"),
+  expectedRaDate: textFieldConfig(
+    "expectedRaDate",
+    "text",
+    "col-center col-editable",
+    "col-center",
+    (r, readOnly, editableColumns) => !(readOnly && !editableColumns.includes("expectedRaDate")),
+  ),
   ourRank: textFieldConfig(
     "ourRank",
     "text",
@@ -1034,6 +1054,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "custom",
     },
     {
+      header: "Expected RA Date",
+      accessor: "expectedRaDate",
+      defaultWidth: 180,
+      align: "center",
+      type: "string",
+    },
+    {
       header: "LOI / PO No.",
       accessor: "loiPoNoAndDate",
       defaultWidth: 180,
@@ -1261,7 +1288,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "ourRank", "ourValue",
     "nameOfRank1", "valueOfRank1", "differenceBetweenRank1",
     "nameOfRank2", "valueOfRank2", "differenceBetweenRank2",
-    "issuingBank",
+    "issuingBank", "expectedRaDate",
   ]);
   const postParticipationExcludeAccessors = new Set([
     "merged_office_consignees", "miiPurchasePreference", "tenderDocument",
@@ -1269,8 +1296,23 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "minimumAverageAnnualTurnover", "yearsOfPastExperience", "ePbgDurationMonths",
     "beneficiaryBankDetails",
   ]);
+  // UI-only hide for post-participation view (requested columns remain in data/model)
+  const postParticipationHiddenAccessors = new Set([
+    "publishedDate",
+    "assignedDate",
+    "claimDate",
+    "currentStatus",
+    "statusCategory",
+    "reason",
+    "loiPoNoAndDate",
+    "diffPercentFromL1",
+    "diffPercentFromL2",
+    "managementDecision",
+    "catalogueDone",
+    "participated",
+  ]);
   const visibleColumns = showPostParticipationColumns
-    ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor))
+    ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor) && !postParticipationHiddenAccessors.has(col.accessor))
     : columns.filter((col) => !postParticipationAccessors.has(col.accessor));
 
   // 2. States
@@ -2419,17 +2461,49 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     proposedErpItemCategoryFilter,
   ]);
 
-  // 6. Pagination Calculations
-  const totalRecords = processedRecords.length;
+  // 6. Group by Docket No
+  interface DocketGroup {
+    docketNo: string;
+    records: EpcTenderRecord[];
+  }
+
+  const getDocketGroupKey = (record: EpcTenderRecord): string => {
+    const raw = String(record.docketNo ?? "").trim();
+    if (!raw) return `__no_docket_${record.id}`;
+    return normalizeDocketKey(raw);
+  };
+
+  const processedGroups = useMemo((): DocketGroup[] => {
+    const groupMap = new Map<string, EpcTenderRecord[]>();
+    for (const record of processedRecords) {
+      const key = getDocketGroupKey(record);
+      const existing = groupMap.get(key);
+      if (existing) existing.push(record);
+      else groupMap.set(key, [record]);
+    }
+    const seen = new Set<string>();
+    const groups: DocketGroup[] = [];
+    for (const record of processedRecords) {
+      const key = getDocketGroupKey(record);
+      if (!seen.has(key)) {
+        seen.add(key);
+        groups.push({ docketNo: key, records: groupMap.get(key)! });
+      }
+    }
+    return groups;
+  }, [processedRecords]);
+
+  // 7. Pagination Calculations (by groups)
+  const totalRecords = processedGroups.length;
   const totalPages = Math.ceil(totalRecords / rowsPerPage) || 1;
 
   // Adjust current page if out of bounds
   const activePage = Math.min(currentPage, totalPages);
 
-  const paginatedRecords = useMemo(() => {
+  const paginatedGroups = useMemo(() => {
     const startIndex = (activePage - 1) * rowsPerPage;
-    return processedRecords.slice(startIndex, startIndex + rowsPerPage);
-  }, [processedRecords, activePage, rowsPerPage]);
+    return processedGroups.slice(startIndex, startIndex + rowsPerPage);
+  }, [processedGroups, activePage, rowsPerPage]);
 
   // Reset page when search, sort, date filters, or row limit changes
   useEffect(() => {
@@ -2650,8 +2724,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       <div className="tender-table-toolbar">
         <div className="toolbar-left">
           <h2 className="table-title">Master Tender Participation Tracker</h2>
-          <span className="record-count-badge">
-            {totalRecords} Records Total
+          <span className="record-count-badge" title={`${processedRecords.length} total records`}>
+            {totalRecords} {totalRecords === 1 ? "Tender" : "Tenders"}
           </span>
           <div className="global-search-container">
             <span
@@ -3172,7 +3246,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
             </tr>
           </thead>
           <tbody>
-            {paginatedRecords.length === 0 ? (
+            {paginatedGroups.length === 0 ? (
               <tr>
                 <td
                   colSpan={visibleColumns.length}
@@ -3186,9 +3260,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                 </td>
               </tr>
             ) : (
-              paginatedRecords.map((record) => (
+              paginatedGroups.map((group) => group.records.map((record, rowIdx) => (
                 <tr key={record.id ?? record.slNo} className="tender-row">
                   {visibleColumns.map((col) => {
+                        if (col.accessor === "docketNo" && rowIdx > 0) return null;
+
                         let cellVal: any;
                         let cellContent: React.ReactNode = "-";
                         let cellClass = "";
@@ -4303,6 +4379,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         return (
                           <td
                             key={col.accessor}
+                            {...(col.accessor === "docketNo" && rowIdx === 0 ? { rowSpan: group.records.length } : {})}
                             className={col.sticky ? `${cellClass} sticky-col` : cellClass}
                             style={{
                               width: `${columnWidths[col.accessor]}px`,
@@ -4340,7 +4417,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         );
                       })}
                     </tr>
-                  ))
+                  )))
                 )}
             </tbody>
         </table>

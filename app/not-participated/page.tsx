@@ -6,6 +6,7 @@ import { useAppSelector } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
 import { matchesRawMaterialRange } from "@/lib/rawMaterials";
+import { matchesEpcParticipationFilter } from "@/lib/participationFilter";
 import { Eraser, ExternalLink } from "lucide-react";
 import "../Dashboard.css";
 
@@ -13,6 +14,9 @@ export default function NotParticipated() {
   const referenceDate = useMemo(() => new Date(), []);
   const tenderSliceData = useAppSelector((s) => s.tenders.data);
   const loadingTenders = useAppSelector((s) => s.tenders.loading);
+  const participationFilters = useAppSelector(
+    (s) => s.filters.participationFilters,
+  );
   const postFilteredData = useMemo(() => {
     if (!tenderSliceData) return null;
     return {
@@ -31,12 +35,6 @@ export default function NotParticipated() {
     return `${y}-${m}-${day}`;
   }, []);
   const [clearTrigger, setClearTrigger] = useState<number>(0);
-  const [clientSearch, setClientSearch] = useState<string>("");
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedEngineer, setSelectedEngineer] = useState<string>("All");
-  const [selectedDecision, setSelectedDecision] = useState<string>("All");
-  const [valueMin, setValueMin] = useState<string>("");
-  const [valueMax, setValueMax] = useState<string>("");
   const [priceBasisFilter, setPriceBasisFilter] = useState<string>("All");
   const [aluminiumMin, setAluminiumMin] = useState<string>("");
   const [aluminiumMax, setAluminiumMax] = useState<string>("");
@@ -45,41 +43,9 @@ export default function NotParticipated() {
 
   const calculations = useMemo(() => new TenderCalculations(mappedRecords, referenceDate), [mappedRecords, referenceDate]);
   const primaryDataset = useMemo(() => calculations.getPrimaryDataset(), [calculations]);
-  const engineersList = useMemo(() => {
-    const list = primaryDataset.map(r => r.tenderPrepareBy).filter(name => name && name.trim() !== "");
-    return Array.from(new Set(list)).sort();
-  }, [primaryDataset]);
-  const uniqueStatuses = useMemo(() => {
-    const list = primaryDataset.map(r => r.currentStatus || "");
-    return Array.from(new Set(list)).sort();
-  }, [primaryDataset]);
 
   const activeDataset = useMemo(() => {
-    return primaryDataset.filter(record => {
-      if (clientSearch.trim() !== "") {
-        if (!record.nameOfTheClient.toLowerCase().includes(clientSearch.toLowerCase().trim())) return false;
-      }
-      if (selectedStatuses.length > 0) {
-        if (!selectedStatuses.includes(record.currentStatus || "")) return false;
-      }
-      if (selectedEngineer !== "All") {
-        if (record.tenderPrepareBy !== selectedEngineer) return false;
-      }
-      if (selectedDecision !== "All") {
-        if (record.managementDecision !== selectedDecision) return false;
-      }
-      if (record.estimatedCostRs !== null) {
-        if (valueMin.trim() !== "") {
-          const minRs = parseFloat(valueMin) * 10000000;
-          if (record.estimatedCostRs < minRs) return false;
-        }
-        if (valueMax.trim() !== "") {
-          const maxRs = parseFloat(valueMax) * 10000000;
-          if (record.estimatedCostRs > maxRs) return false;
-        }
-      } else if (valueMin.trim() !== "" || valueMax.trim() !== "") {
-        return false;
-      }
+    const filtered = primaryDataset.filter(record => {
       if (priceBasisFilter !== "All") {
         const basis = (record.price || "Firm").toString().toLowerCase();
         if (basis !== priceBasisFilter.toLowerCase()) return false;
@@ -87,14 +53,13 @@ export default function NotParticipated() {
       if (!matchesRawMaterialRange(record, { aluMin: aluminiumMin, aluMax: aluminiumMax, cuMin: copperMin, cuMax: copperMax })) return false;
       return true;
     });
-  }, [primaryDataset, clientSearch, selectedStatuses, selectedEngineer, selectedDecision, valueMin, valueMax, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax]);
+    if (participationFilters.length === 0) return filtered;
+    return filtered.filter((record) =>
+      matchesEpcParticipationFilter(record, participationFilters),
+    );
+  }, [primaryDataset, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax, participationFilters]);
 
   const handleClearAllFilters = () => {
-    setClientSearch("");
-    setSelectedStatuses([]);
-    setSelectedEngineer("All");
-    setSelectedDecision("All");
-    setValueMin(""); setValueMax("");
     setPriceBasisFilter("All");
     setAluminiumMin(""); setAluminiumMax("");
     setCopperMin(""); setCopperMax("");
@@ -105,14 +70,10 @@ export default function NotParticipated() {
     <div className="dashboard-layout-container">
       <div className="dashboard-sidebar-wrapper">
         <FilterSidebar
-          clientSearch={clientSearch} setClientSearch={setClientSearch}
-          selectedStatuses={selectedStatuses} setSelectedStatuses={setSelectedStatuses} uniqueStatuses={uniqueStatuses}
-          selectedEngineer={selectedEngineer} setSelectedEngineer={setSelectedEngineer} engineersList={engineersList}
-          selectedDecision={selectedDecision} setSelectedDecision={setSelectedDecision}
-          valueMin={valueMin} setValueMin={setValueMin} valueMax={valueMax} setValueMax={setValueMax}
           priceBasisFilter={priceBasisFilter} setPriceBasisFilter={setPriceBasisFilter}
           aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
           copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
+          rows={tenderSliceData?.rows ?? []}
         />
       </div>
       <div className="dashboard-workspace">

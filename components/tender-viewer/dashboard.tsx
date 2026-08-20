@@ -19,8 +19,12 @@ import {
   saveFeedbackAndReanalyze,
   uploadTenderDocument,
 } from "@/lib/slices/tendersSlice";
-import { setExclusionFilter, setParticipationFilter, clearColumnFilter, type ParticipationFilter } from "@/lib/slices/filtersSlice";
-import { resetSelectedDateRange } from "@/lib/slices/filesSlice";
+import { setExclusionFilter } from "@/lib/slices/filtersSlice";
+import {
+  OptimizedTenderTable,
+  ColumnDef,
+} from "@/components/tender-viewer/optimized-tender-table/OptimizedTenderTable";
+import { matchesParticipationFilter } from "@/components/tender-viewer/participation-cards";
 import { toast } from "sonner";
 import TenderSidebar from "@/components/tender-viewer/tender-sidebar";
 import ConfirmAnalysisDialog from "@/components/tender-viewer/confirm-analysis-dialog";
@@ -45,15 +49,8 @@ import {
   Check,
   FileText,
   Lock,
-  CheckCircle2,
-  Clock,
-  CalendarClock,
 } from "lucide-react";
 import { getDisplayNameMap } from "@/lib/tender-columns";
-import {
-  OptimizedTenderTable,
-  ColumnDef,
-} from "@/components/tender-viewer/optimized-tender-table/OptimizedTenderTable";
 
 const normalizeKey = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
 
@@ -63,41 +60,6 @@ function formatColumnName(name: string): string {
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (s) => s.toUpperCase())
     .trim();
-}
-
-function isParticipatedRow(row: Record<string, unknown>): boolean {
-  return row.apm === "YES" && row.participated === "true";
-}
-
-function isNotParticipatedRow(row: Record<string, unknown>): boolean {
-  return (
-    row.apm === "YES" &&
-    row.participated !== "true" &&
-    row.participated !== "false"
-  );
-}
-
-function isUpcomingRaRow(
-  row: Record<string, unknown>,
-  now: Date = new Date(),
-): boolean {
-  if (row.reverseAuctionApplicable !== "true") return false;
-  const start = String(row.reverseAuctionStartDate ?? "");
-  if (!start) return false;
-  const date = new Date(start);
-  if (isNaN(date.getTime())) return false;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return date >= today;
-}
-
-function matchesParticipationFilter(
-  row: Record<string, unknown>,
-  filter: ParticipationFilter,
-): boolean {
-  if (filter === "participated") return isParticipatedRow(row);
-  if (filter === "notParticipated") return isNotParticipatedRow(row);
-  if (filter === "upcomingRa") return isUpcomingRaRow(row);
-  return true;
 }
 
 export default function Dashboard() {
@@ -112,6 +74,7 @@ export default function Dashboard() {
   const completedFiles = useAppSelector((s) => s.tenders.completedFiles);
   const updatingCells = useAppSelector((s) => s.tenders.updatingCells);
   const uploadResults = useAppSelector((s) => s.upload.results);
+  const resultUploadVersion = useAppSelector((s) => s.upload.resultUploadVersion);
 
   const [displayNameMap, setDisplayNameMap] = useState<Record<string, string>>({});
   // const [mergedGroups, setMergedGroups] = useState<{
@@ -221,6 +184,12 @@ export default function Dashboard() {
       dispatch(appendTenders(fileIds));
     }
   }, [uploadResults, dispatch]);
+
+  useEffect(() => {
+    if (resultUploadVersion > 0) {
+      dispatch(fetchAllTenders());
+    }
+  }, [resultUploadVersion, dispatch]);
 
   useEffect(() => {
     Promise.all([
@@ -528,33 +497,23 @@ export default function Dashboard() {
   const [filteredRows, setFilteredRows] = useState<Record<string, unknown>[]>(
     [],
   );
-  const filteredRowsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const handleFilteredRowsChange = useCallback(
     (rows: Record<string, unknown>[]) => {
-      if (filteredRowsTimerRef.current)
-        clearTimeout(filteredRowsTimerRef.current);
-      filteredRowsTimerRef.current = setTimeout(() => {
-        setFilteredRows(rows);
-      }, 250);
+      setFilteredRows(rows);
     },
     [],
   );
-  useEffect(() => {
-    return () => {
-      if (filteredRowsTimerRef.current)
-        clearTimeout(filteredRowsTimerRef.current);
-    };
-  }, []);
 
   const [showExclusionDropdown, setShowExclusionDropdown] = useState(false);
   const [associationFilter, setAssociationFilter] = useState<string | null>(
     null,
   );
   const exclusionFilter = useAppSelector((s) => s.filters.exclusionFilter);
-  const participationFilter = useAppSelector(
-    (s) => s.filters.participationFilter,
+  const participationFilters = useAppSelector(
+    (s) => s.filters.participationFilters,
+  );
+  const analyticsFilter = useAppSelector(
+    (s) => s.filters.analyticsFilter,
   );
 
   const excludedRows = useMemo(() => {
@@ -575,21 +534,12 @@ export default function Dashboard() {
     });
   }, [tenderData, exclusionFilter, dateFilteredRows]);
 
-  const participationCounts = useMemo(() => {
-    const allRows = tenderData?.rows ?? [];
-    return {
-      participated: allRows.filter(isParticipatedRow).length,
-      notParticipated: allRows.filter(isNotParticipatedRow).length,
-      upcomingRa: allRows.filter((row) => isUpcomingRaRow(row)).length,
-    };
-  }, [tenderData?.rows]);
-
   const cardFilteredRows = useMemo(() => {
-    if (!participationFilter) return excludedRows;
+    if (participationFilters.length === 0) return excludedRows;
     return excludedRows.filter((row) =>
-      matchesParticipationFilter(row, participationFilter),
+      matchesParticipationFilter(row, participationFilters),
     );
-  }, [excludedRows, participationFilter]);
+  }, [excludedRows, participationFilters]);
 
   const associationFilteredRows = useMemo(() => {
     if (!associationFilter) return cardFilteredRows;
@@ -602,9 +552,23 @@ export default function Dashboard() {
     });
   }, [cardFilteredRows, associationFilter]);
 
+  const analyticsFilteredRows = useMemo(() => {
+    if (!analyticsFilter) return associationFilteredRows;
+    return associationFilteredRows.filter((row) => {
+      if (analyticsFilter === "aiYes") return row.aiRelevanceValid === "true";
+      if (analyticsFilter === "aiYesUnallocated")
+        return row.aiRelevanceValid === "true" && !row.assignedTo;
+      if (analyticsFilter === "apmYesAllocated")
+        return row.apm === "YES" && !!row.assignedTo;
+      if (analyticsFilter === "apmYesUnallocated")
+        return row.apm === "YES" && !row.assignedTo;
+      return true;
+    });
+  }, [associationFilteredRows, analyticsFilter]);
+
   const rowsWithMergedValues = useMemo(() => {
-    if (mergedGroups.length === 0) return associationFilteredRows;
-    return associationFilteredRows.map((row) => {
+    if (mergedGroups.length === 0) return analyticsFilteredRows;
+    return analyticsFilteredRows.map((row) => {
       const newRow = { ...row } as Record<string, unknown>;
       for (const g of mergedGroups) {
         if (g.fields.length >= 2) {
@@ -1836,7 +1800,7 @@ export default function Dashboard() {
   return (
     <div className="flex flex-1 overflow-hidden bg-[#f4f6f8]">
       <TenderSidebar
-        rows={dateFilteredRows}
+        rows={filteredRows}
         associations={tenderData?.associations ?? []}
         associationFilter={associationFilter}
         onAssociationFilterChange={setAssociationFilter}
@@ -1873,76 +1837,6 @@ export default function Dashboard() {
 
           {tenderData && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                {[
-                  {
-                    value: "participated" as const,
-                    label: "Participated",
-                    count: participationCounts.participated,
-                    icon: CheckCircle2,
-                    iconClass: "text-emerald-600",
-                  },
-                  {
-                    value: "notParticipated" as const,
-                    label: "Yet to Participate",
-                    count: participationCounts.notParticipated,
-                    icon: Clock,
-                    iconClass: "text-blue-600",
-                  },
-                  {
-                    value: "upcomingRa" as const,
-                    label: "Upcoming of RA",
-                    count: participationCounts.upcomingRa,
-                    icon: CalendarClock,
-                    iconClass: "text-amber-600",
-                  },
-                ].map((card) => {
-                  const active = participationFilter === card.value;
-                  const Icon = card.icon;
-                  return (
-                    <button
-                      key={card.value}
-                      type="button"
-                      onClick={() => {
-                        dispatch(
-                          setParticipationFilter(
-                            active ? null : card.value,
-                          ),
-                        );
-                        dispatch(
-                          clearColumnFilter({
-                            accessor: "deadline",
-                            filterType: "select",
-                          }),
-                        );
-                        dispatch(
-                          clearColumnFilter({
-                            accessor: "deadline",
-                            filterType: "dateRange",
-                          }),
-                        );
-                        dispatch(resetSelectedDateRange());
-                        setAssociationFilter(null);
-                      }}
-                      className={`flex items-center justify-between gap-3 rounded-sm border px-4 py-3 text-left transition-colors cursor-pointer ${
-                        active
-                          ? "bg-blue-50 border-blue-300 shadow-sm"
-                          : "bg-white border-slate-200 hover:border-slate-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Icon className={`size-4 shrink-0 ${card.iconClass}`} />
-                        <span className="text-xs font-medium text-slate-600 truncate">
-                          {card.label}
-                        </span>
-                      </div>
-                      <span className="text-xl font-bold text-slate-800 tabular-nums">
-                        {card.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
               <OptimizedTenderTable
                 onFilteredRowsChange={handleFilteredRowsChange}
                 onParseComplete={refreshTenders}
@@ -1950,7 +1844,7 @@ export default function Dashboard() {
                 columns={columnDefs}
                 rows={rowsWithMergedValues as Record<string, unknown>[]}
                 associations={tenderData.associations ?? []}
-                disableDefaultDeadlineFilter={!!participationFilter}
+                disableDefaultDeadlineFilter={participationFilters.length > 0}
                 title="Tender Table"
               />
             </div>

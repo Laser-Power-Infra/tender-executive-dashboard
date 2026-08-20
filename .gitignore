@@ -48,3 +48,5 @@ token.json
 kestra/data/database.mv.db
 *.db
 # kestra/data/database.mv.db
+*.tar
+*.sql
