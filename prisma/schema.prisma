@@ -685,7 +685,7 @@ model TenderMerged {
   bidValidityDays          Int?
   contractPeriodDays       Int?
   participated             Boolean?
-  currentStatus            String  @default("NOT EVALUATED")
+  currentStatus            String?  @default("NOT EVALUATED")
 
   reverseAuctionApplicable Boolean?
   reverseAuctionDate       DateTime?
