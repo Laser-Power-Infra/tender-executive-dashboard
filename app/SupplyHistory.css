@@ -411,6 +411,9 @@
 }
 
 .supply-data-table th .column-filter-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 0 6px 6px;
   overflow: visible;
   width: 100%;
@@ -433,6 +436,89 @@
 
 .supply-data-table th .column-search-input:focus {
   border-color: #0070f3;
+}
+
+.column-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.column-search-wrap .column-search-input {
+  padding-right: 22px;
+}
+
+.column-search-clear-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #5f6368;
+  cursor: pointer;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.column-search-clear-btn:hover {
+  color: #202124;
+}
+
+.multiselect-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.multiselect-search-input {
+  width: 100%;
+  padding: 5px 22px 5px 26px;
+  font-size: 11px;
+  border: 1px solid #e1e6eb;
+  border-radius: 4px;
+  outline: none;
+  font-family: inherit;
+  color: #202124;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.multiselect-search-input:focus {
+  border-color: #0070f3;
+}
+
+.multiselect-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #5f6368;
+  cursor: pointer;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.multiselect-search-clear:hover {
+  color: #202124;
+}
+
+.multiselect-no-options {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 6px 4px;
+  text-align: center;
+  font-style: italic;
 }
 
 .supply-data-table th .column-date-filter {
@@ -509,10 +595,32 @@
   border-bottom: 1px solid #f1f3f4;
   border-right: 1px solid #f1f3f4;
   color: #202124;
-  vertical-align: middle;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.4;
+  height: auto;
+  max-height: none;
+}
+
+.supply-cell-text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+
+.supply-data-table td:has(.view-docs-btn),
+.supply-data-table td:has(.generate-pdf-btn),
+.supply-data-table td:has(.retry-pdf-btn) {
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .supply-data-table td:last-child {

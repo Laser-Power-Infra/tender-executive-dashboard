@@ -4,6 +4,7 @@ export interface SupplyHistoryRecord {
   saleBillDate: string | null;
   partyName: string | null;
   itemCode: string | null;
+  itemSchedule?: string | null;
   itemName: string | null;
   lrNo: string | null;
   truckNo: string | null;
@@ -18,4 +19,6 @@ export interface SupplyHistoryRecord {
   invoiceAmt: number | null;
   hasDocuments?: boolean;
   attachmentUrl?: string | null;
+  email?: string | null;
+  contactNo?: string | null;
 }

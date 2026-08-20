@@ -424,17 +424,25 @@ export function ParticipationCards({
         const Icon = card.icon;
         return (
           <div key={card.value} className="relative">
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => handleCardClick(card.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleCardClick(card.value);
+                }
+              }}
+              aria-pressed={active}
               className={
                 isDark
-                  ? `flex w-full flex-col rounded-lg border px-3 py-2.5 text-left transition-colors cursor-pointer ${
+                  ? `flex w-full flex-col rounded-lg border px-3 py-2.5 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
                       active
                         ? "bg-blue-500/20 border-blue-400/50"
                         : "bg-white/10 border-white/20 hover:bg-white/20"
                     }`
-                  : `flex w-full flex-col rounded-sm border px-4 py-3 text-left transition-colors cursor-pointer ${
+                  : `flex w-full flex-col rounded-sm border px-4 py-3 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 ${
                       active
                         ? "bg-blue-50 border-blue-300 shadow-sm"
                         : "bg-white border-slate-200 hover:border-slate-300"
@@ -469,7 +477,7 @@ export function ParticipationCards({
                 </span>
               </div>
               {card.value === "participated" && rangeInputs}
-            </button>
+            </div>
           </div>
         );
       })}
