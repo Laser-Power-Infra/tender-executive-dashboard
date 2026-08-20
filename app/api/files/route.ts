@@ -4,14 +4,22 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const files = await prisma.file.findMany({
-      orderBy:{
-        createdAt: "desc"
-      }
-      
+      where: {
+        tenderMergedList: {
+          some: {},
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
     return NextResponse.json({ files });
   } catch (error) {
-    console.error("Files fetch error:", error instanceof Error ? error.message : error, error instanceof Error ? error.stack : "");
+    console.error(
+      "Files fetch error:",
+      error instanceof Error ? error.message : error,
+      error instanceof Error ? error.stack : "",
+    );
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Internal server error",

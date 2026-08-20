@@ -26,11 +26,18 @@ export default function Home() {
   );
   const preFilteredData = useMemo(() => {
     if (!tenderSliceData) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return {
       ...tenderSliceData,
-      rows: tenderSliceData.rows.filter(
-        (r) => (r.apm === "YES" ) && !r.participated ,
-      ),
+      rows: tenderSliceData.rows.filter((r) => {
+        if (r.apm !== "YES") return false;
+        if (r.participated === "true" || r.participated === "false") return false;
+        const d = new Date(r.deadline as string);
+        if (isNaN(d.getTime())) return false;
+        // today is NOT over — deadline >= today is still actionable
+        return d.getTime() >= today.getTime();
+      }),
     };
   }, [tenderSliceData]);
   const mappedRecords = useMemo(() => mapTenderSliceToEpcRecords(preFilteredData), [preFilteredData]);

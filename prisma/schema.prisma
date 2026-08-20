@@ -159,6 +159,7 @@ model SupplyHistory {
   saleBillDate   String?
   partyName      String?
   itemCode       String?
+  itemSchedule String?
   itemName       String?
   lrNo           String?
   truckNo        String?

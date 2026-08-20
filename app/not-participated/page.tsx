@@ -19,11 +19,19 @@ export default function NotParticipated() {
   );
   const postFilteredData = useMemo(() => {
     if (!tenderSliceData) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return {
       ...tenderSliceData,
-      rows: tenderSliceData.rows.filter(
-        (r) => r.apm === "YES" && r.participated === "false",
-      ),
+      rows: tenderSliceData.rows.filter((r) => {
+        if (r.apm !== "YES") return false;
+        if (r.participated === "false") return true;
+        if (r.participated === "true") return false;
+        const d = new Date(r.deadline as string);
+        if (isNaN(d.getTime())) return false;
+        // deadline over includes only past days; today is NOT over
+        return d.getTime() < today.getTime();
+      }),
     };
   }, [tenderSliceData]);
   const mappedRecords = useMemo(() => mapTenderSliceToEpcRecords(postFilteredData), [postFilteredData]);
