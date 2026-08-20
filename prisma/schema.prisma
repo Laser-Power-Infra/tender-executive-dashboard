@@ -175,6 +175,8 @@ model SupplyHistory {
 
   documentUrls  String?
   attachmentUrl String?
+  email    String?
+  contactNo   String?
 
   lastSyncedAt DateTime @default(now())
 
@@ -683,7 +685,7 @@ model TenderMerged {
   bidValidityDays          Int?
   contractPeriodDays       Int?
   participated             Boolean?
-  currentStatus            String?
+  currentStatus            String  @default("NOT EVALUATED")
 
   reverseAuctionApplicable Boolean?
   reverseAuctionDate       DateTime?
