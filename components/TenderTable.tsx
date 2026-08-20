@@ -1301,7 +1301,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "publishedDate",
     "assignedDate",
     "claimDate",
-    "currentStatus",
     "statusCategory",
     "reason",
     "loiPoNoAndDate",

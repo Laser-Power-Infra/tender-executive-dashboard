@@ -6,7 +6,8 @@ import { useAppSelector } from "@/lib/hooks";
 import { TenderCalculations } from "@/services/tenderCalculations";
 import { mapTenderSliceToEpcRecords } from "@/lib/mapTenderSliceToEpcRecords";
 import { matchesRawMaterialRange } from "@/lib/rawMaterials";
-import { matchesEpcParticipationFilter } from "@/lib/participationFilter";
+import { epcRecordToParticipationRow, matchesEpcParticipationFilter } from "@/lib/participationFilter";
+import { deadlineMatchesRange } from "@/components/tender-viewer/participation-cards";
 import { Eraser, ExternalLink } from "lucide-react";
 import "../Dashboard.css";
 
@@ -16,6 +17,9 @@ export default function PostParticipation() {
   const loadingTenders = useAppSelector((s) => s.tenders.loading);
   const participationFilters = useAppSelector(
     (s) => s.filters.participationFilters,
+  );
+  const participatedDateRange = useAppSelector(
+    (s) => s.filters.participatedDateRange,
   );
   const postFilteredData = useMemo(() => {
     if (!tenderSliceData) return null;
@@ -39,6 +43,10 @@ export default function PostParticipation() {
 
   const activeDataset = useMemo(() => {
     const filtered = primaryDataset.filter(record => {
+      if (participatedDateRange?.from || participatedDateRange?.to) {
+        const row = epcRecordToParticipationRow(record);
+        if (!deadlineMatchesRange(row, participatedDateRange.from, participatedDateRange.to)) return false;
+      }
       if (priceBasisFilter !== "All") {
         const basis = (record.price || "Firm").toString().toLowerCase();
         if (basis !== priceBasisFilter.toLowerCase()) return false;
@@ -50,7 +58,7 @@ export default function PostParticipation() {
     return filtered.filter((record) =>
       matchesEpcParticipationFilter(record, participationFilters),
     );
-  }, [primaryDataset, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax, participationFilters]);
+  }, [primaryDataset, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax, participationFilters, participatedDateRange]);
 
   const handleClearAllFilters = () => {
     setPriceBasisFilter("All");

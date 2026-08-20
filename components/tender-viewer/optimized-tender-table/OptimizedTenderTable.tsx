@@ -158,6 +158,16 @@ const UNIQUE_OPTION_SKIP = new Set([
   "deadline",
 ]);
 
+// Static select columns whose options are hardcoded and must not be pruned
+const STATIC_SELECT_SKIP = new Set([
+  "app",
+  "aps",
+  "apm",
+  "price",
+  "parseStatus",
+  "aiRelevanceValid",
+]);
+
 export interface ColumnDef<T> {
   header: string;
   accessor: keyof T | string;
@@ -706,7 +716,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
         opts.push({ value, label: label ?? value });
       };
 
-      for (const row of rows) {
+      for (const row of processedRows) {
         const raw = row[col.accessor as keyof T];
         if (raw === null || raw === undefined || raw === "") continue;
         if (accessorStr === "assignedTo") {
@@ -728,7 +738,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
       }
     }
     return map;
-  }, [columns, rows, associations]);
+  }, [columns, processedRows, associations]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1032,9 +1042,23 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
         case "select": {
           const configuredOptions = col.filter.options ?? [];
           const computedOptions = uniqueSelectOptions[accessorStr] ?? [];
+          let filteredConfigured = configuredOptions;
+          if (
+            !STATIC_SELECT_SKIP.has(accessorStr) &&
+            !UNIQUE_OPTION_SKIP.has(accessorStr)
+          ) {
+            const allowed = new Set<string>();
+            for (const opt of computedOptions) allowed.add(opt.value);
+            const activeSelected = columnFilters[accessorStr]?.select ?? [];
+            for (const v of activeSelected) allowed.add(v);
+            allowed.add("__blank__");
+            filteredConfigured = configuredOptions.filter((opt) =>
+              allowed.has(opt.value),
+            );
+          }
           const mergedOptions: FilterOption[] = [];
           const seenOptions = new Set<string>();
-          for (const opt of [...configuredOptions, ...computedOptions]) {
+          for (const opt of [...filteredConfigured, ...computedOptions]) {
             if (seenOptions.has(opt.value)) continue;
             seenOptions.add(opt.value);
             mergedOptions.push(opt);
