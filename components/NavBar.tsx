@@ -22,6 +22,7 @@ const links = [
     label: "Not Participated",
   },
   { href: "/supply-history", label: "Supply History Dashboard" },
+  { href: "/emd-details-cash", label: "EMD Cash" },
   { href: "/activity", label: "Activity" },
   { href: "/sop", label: "SOP" },
   { href: "/merge-conflict", label: "Merge Conflict" },

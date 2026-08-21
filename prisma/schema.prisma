@@ -159,7 +159,7 @@ model SupplyHistory {
   saleBillDate   String?
   partyName      String?
   itemCode       String?
-  itemSchedule String?
+  itemSchedule   String?
   itemName       String?
   lrNo           String?
   truckNo        String?
@@ -175,8 +175,8 @@ model SupplyHistory {
 
   documentUrls  String?
   attachmentUrl String?
-  email    String?
-  contactNo   String?
+  email         String?
+  contactNo     String?
 
   lastSyncedAt DateTime @default(now())
 
@@ -501,7 +501,7 @@ model ExlusionKeywords {
 model Association {
   id        Int      @id @default(autoincrement())
   name      String
-  email     String @unique
+  email     String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -641,7 +641,7 @@ model TenderMerged {
   tenderType TenderType
   originalId Int?
 
-  referenceNo       String    @unique
+  referenceNo       String          @unique
   tenderBrief       String?
   deadline          DateTime?
   location          String?
@@ -669,54 +669,52 @@ model TenderMerged {
   docketNo          String?
   attachmentUrl     String?
   remarks           String?
-  app               Decision  @default(NOT_DECIDED)
-  aps               Decision  @default(NOT_DECIDED)
-  apm               Decision  @default(NOT_DECIDED)
-  catalogueDone     Decision  @default(NOT_DECIDED)
+  app               Decision        @default(NOT_DECIDED)
+  aps               Decision        @default(NOT_DECIDED)
+  apm               Decision        @default(NOT_DECIDED)
+  catalogueDone     Decision        @default(NOT_DECIDED)
   state             String?
   statusCategory    StatusCategory?
   website           String?
   locationCount     Int?
   size              String?
 
-  slNo                     Int?
-  tenderFor                String?
-  tenderOpeningDate        DateTime?
-  bidValidityDays          Int?
-  contractPeriodDays       Int?
-  participated             Boolean?
-  currentStatus            String?  @default("NOT EVALUATED")
+  slNo               Int?
+  tenderFor          String?
+  tenderOpeningDate  DateTime?
+  bidValidityDays    Int?
+  contractPeriodDays Int?
+  participated       Boolean?
+  currentStatus      String?   @default("NOT EVALUATED")
 
-  reverseAuctionApplicable Boolean?
-  reverseAuctionDate       DateTime?
-  reverseAuctionStartDate       DateTime?
-  reverseAuctionEndDate       DateTime?
+  reverseAuctionApplicable       Boolean?
+  reverseAuctionDate             DateTime?
+  reverseAuctionStartDate        DateTime?
+  reverseAuctionEndDate          DateTime?
   reverseAuctionAutomationStatus String?
-  expectedRaDate String?
+  expectedRaDate                 String?
 
-
-  emdPaymentMode           String?
-  bgNoUtrNo                String?
-  bgDate                   String?
-  bgExpiryDate             String?
-  claimDate                String?
-  bgStatus                 String?
-  emdValidity              DateTime?
-  loiPoNoAndDate           String?
-  bidValidityExpired       Boolean?
-  price                    PriceType?
-  diffPercentFromL1        Float?
-  diffPercentFromL2        Float?
-  reason                   String?
-  finalRemarks             String?
-  tenderUpdateStatus       TenderUpdateStatus?
-  nextAction               NextAction?
-  diffL1ManuallyEdited     Boolean?
-  diffL2ManuallyEdited     Boolean?
-  cva                      String?
-  quotationNo              String?
-  rawMaterials             String?
-
+  emdPaymentMode       String?
+  bgNoUtrNo            String?
+  bgDate               String?
+  bgExpiryDate         String?
+  claimDate            String?
+  bgStatus             String?
+  emdValidity          DateTime?
+  loiPoNoAndDate       String?
+  bidValidityExpired   Boolean?
+  price                PriceType?
+  diffPercentFromL1    Float?
+  diffPercentFromL2    Float?
+  reason               String?
+  finalRemarks         String?
+  tenderUpdateStatus   TenderUpdateStatus?
+  nextAction           NextAction?
+  diffL1ManuallyEdited Boolean?
+  diffL2ManuallyEdited Boolean?
+  cva                  String?
+  quotationNo          String?
+  rawMaterials         String?
 
   value                                   String?
   bidOpeningDateTime                      String?
@@ -742,7 +740,7 @@ model TenderMerged {
   typeOfBid                               String?
   technicalClarificationTimeAllowed       String?
   inspectionRequired                      String?
-  inspectionAgency String?
+  inspectionAgency                        String?
   estimatedBidValue                       String?
   evaluationMethod                        String?
   advisoryBank                            String?
@@ -757,40 +755,34 @@ model TenderMerged {
   totalQuantity                           String?
   bidStatus                               String?
 
-  differenceBetweenRank1                  String?
-  nameOfRank1                             String?
-  valueOfRank1                            String?
-  differenceBetweenRank2                  String?
-  nameOfRank2                             String?
-  valueOfRank2                            String?
-  evaluationTableData                     String?
-  parseStatus                             String?
-  parseError                              String?
-  resultAutomationStatus                  String?
-  resultAutomationError                   String?
-  notificationStatus                      String?
-  beneficiaryBankDetails                             String?
-  issuingBank                                        String?
+  differenceBetweenRank1 String?
+  nameOfRank1            String?
+  valueOfRank1           String?
+  differenceBetweenRank2 String?
+  nameOfRank2            String?
+  valueOfRank2           String?
+  evaluationTableData    String?
+  parseStatus            String?
+  parseError             String?
+  resultAutomationStatus String?
+  resultAutomationError  String?
+  notificationStatus     String?
+  beneficiaryBankDetails String?
+  issuingBank            String?
 
-  ourRank String?
+  ourRank  String?
   ourValue String?
 
   proposedErpItemName String?
   proposedErpQuantity String?
-  contractNo String?
+  contractNo          String?
 
-  competitors String?
+  competitors     String?
   applicableIndex String?
-  publishedDate DateTime?
+  publishedDate   DateTime?
 
-  baseDate DateTime?
+  baseDate     DateTime?
   buyerDetails String?
-
-
-
-
-
-
 
   fileId Int
   file   File @relation(fields: [fileId], references: [id], onDelete: Cascade)
@@ -801,11 +793,11 @@ model TenderMerged {
   utilityMappingId Int?
   utilityMapping   UtilityMapping? @relation(fields: [utilityMappingId], references: [id])
 
-  extraFields        TenderExtraField[]
-  tenderAssociations TenderAssociation[]
-  reportings         Reporting[]
-  evaluations        Evaluation[]
-  tenderFiles        TenderFile[]
+  extraFields         TenderExtraField[]
+  tenderAssociations  TenderAssociation[]
+  reportings          Reporting[]
+  evaluations         Evaluation[]
+  tenderFiles         TenderFile[]
   CostingSheetDetails CostingSheetDetails[]
 
   createdAt DateTime @default(now())
@@ -820,22 +812,20 @@ model TenderMerged {
 model CostingSheetDetails {
   id Int @id @default(autoincrement())
 
-  itemCode String
-  itemSchedule String?
+  itemCode            String
+  itemSchedule        String?
   proposedErpItemName String?
   proposedErpQuantity String?
   priceOfFullQuantity String?
-  cva String?
-  location String?
+  cva                 String?
+  location            String?
 
   tenderMergedId Int?
-  TenderMerged TenderMerged? @relation(fields: [tenderMergedId], references: [id], onDelete: Cascade)
+  TenderMerged   TenderMerged? @relation(fields: [tenderMergedId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
-
 
 // ---------- TENDER FILES ----------
 model TenderFile {
@@ -855,15 +845,16 @@ model TenderFile {
   @@index([tenderMergedId])
   @@map("tender_files")
 }
+
 model SupplyDoc {
-  id             String   @id @default(uuid())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   saleBillNumber String
   fileName       String
   extension      String
-  filePath       String        // raw absolute network path, encrypted at response time
+  filePath       String // raw absolute network path, encrypted at response time
   fileSize       Int?
   lastModified   DateTime?
 
@@ -871,12 +862,42 @@ model SupplyDoc {
   @@map("supply_docs")
 }
 
-
 model Items {
-  id Int @id @default(autoincrement())
-  itemcode String @unique
-  itemName String 
+  id           Int      @id @default(autoincrement())
+  itemcode     String   @unique
+  itemName     String
   itemSchedule String
-  createdAt DateTime @default( now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model EmdDetailsCash {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  customerName                     String?
+  issueDt                          DateTime?
+  emdAmt                           String?
+  permanent                        String?
+  tenderNo                         String?
+  chDdNo                           String?
+  acHolder                         String?
+  statusAsPerSujibDaAndOther       String?
+  canBeRefunded                    String?
+  tmNo                             String?
+  rank                             String?
+  poIssueStatus                    String?
+  aocAwardOfContractStatus         String?
+  refundableOrNot                  String?
+  statusRefundedPending            String?
+  expectedRefundDateOrRefundedDate DateTime?
+  statusOfTender                   String?
+  conditionsForRefund              String?
+  remarks                          String?
+
+  @@index([tenderNo])
+  @@index([tmNo])
+  @@index([customerName])
+  @@map("emd_details_cash")
 }
