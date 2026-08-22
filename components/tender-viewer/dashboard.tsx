@@ -18,7 +18,9 @@ import {
   bulkAssignUtilityMapping,
   saveFeedbackAndReanalyze,
   uploadTenderDocument,
+  updateTenderRemarks,
 } from "@/lib/slices/tendersSlice";
+import { useSession } from "next-auth/react";
 import { setExclusionFilter } from "@/lib/slices/filtersSlice";
 import {
   OptimizedTenderTable,
@@ -53,6 +55,135 @@ import {
 import { getDisplayNameMap } from "@/lib/tender-columns";
 
 const normalizeKey = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
+
+function RemarksCell({
+  value,
+  row,
+  isSaving,
+  canEdit,
+  dispatch,
+}: {
+  value: unknown;
+  row: Record<string, unknown>;
+  isSaving: boolean;
+  canEdit: boolean;
+  dispatch: ReturnType<typeof useAppDispatch>;
+}) {
+  const val = String(value ?? "");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(val);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const rowKey = `${row.id}-${row.type}`;
+
+  useEffect(() => {
+    setDraft(val);
+    setEditing(false);
+  }, [rowKey]);
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(
+        textareaRef.current.value.length,
+        textareaRef.current.value.length,
+      );
+    }
+  }, [editing]);
+
+  const save = () => {
+    if (draft !== val) {
+      dispatch(
+        updateTenderRemarks({
+          tenderMergedId: Number(row.id),
+          remarks: draft,
+          oldRemarks: val,
+        }),
+      )
+        .unwrap()
+        .then(() => toast.success("Remarks updated"))
+        .catch((err: Error) =>
+          toast.error(err.message || "Failed to update remarks"),
+        );
+    }
+    setEditing(false);
+  };
+
+  if (!canEdit) {
+    return (
+      <div style={{ maxHeight: 80, overflowY: "auto", whiteSpace: "normal" }}>
+        {val || <span className="text-slate-300">-</span>}
+      </div>
+    );
+  }
+
+  if (editing) {
+    return (
+      <div style={{ display: "inline-flex", gap: 4, alignItems: "flex-start" }}>
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          rows={3}
+          disabled={isSaving}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && e.shiftKey) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            } else if (e.key === "Escape") {
+              setDraft(val);
+              setEditing(false);
+            }
+          }}
+          style={{
+            width: "100%",
+            minWidth: 180,
+            fontSize: 11,
+            padding: "4px 6px",
+            resize: "vertical",
+            border: "1px solid #dadce0",
+            borderRadius: 4,
+          }}
+        />
+        <button
+          onClick={save}
+          disabled={isSaving}
+          className="flex-shrink-0 mt-0.5 w-6 h-6 rounded flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+          title="Save"
+        >
+          {isSaving ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Check className="w-3 h-3" />
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative group/cell h-full">
+      <div style={{ maxHeight: 80, overflowY: "auto", whiteSpace: "normal" }}>
+        {val || <span className="text-slate-300">-</span>}
+      </div>
+      <button
+        className="opacity-0 group-hover/cell:opacity-100 transition-all absolute top-0 right-0 w-8 h-8 rounded-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 p-1 shadow-sm cursor-pointer"
+        title="Edit Remarks"
+        onClick={(e) => {
+          e.stopPropagation();
+          setDraft(val);
+          setEditing(true);
+        }}
+      >
+        {isSaving ? (
+          <Loader2 className="w-4 h-4 text-white animate-spin" />
+        ) : (
+          <Pencil className="w-4 h-4 text-white" />
+        )}
+      </button>
+    </div>
+  );
+}
 
 function formatColumnName(name: string): string {
   if (name === "t247Id") return "Portal ID";
@@ -109,6 +240,8 @@ export default function Dashboard() {
   > | null>(null);
   const [syncingDockets, setSyncingDockets] = useState(false);
   const feedbackSaving = useAppSelector((s) => s.tenders.feedbackSaving);
+  const { data: session } = useSession();
+  const canEditRemarks = session?.user?.role === "admin" || session?.user?.role === "developer";
 
   const tenderDataRef = useRef(tenderData);
   tenderDataRef.current = tenderData;
@@ -405,7 +538,6 @@ export default function Dashboard() {
       "parseStatus",
       "parseError",
       "price",
-      "remarks",
     ]);
     const MAX_OPTIONS = 500;
     const map: Record<string, { value: string; label: string }[]> = {};
@@ -461,7 +593,6 @@ export default function Dashboard() {
       "ai relevance reason",
       "searchkey",
       "ready",
-      "remarks",
       "remark",
       "quotationno",
       "quotation no",
@@ -1447,6 +1578,35 @@ export default function Dashboard() {
         };
       }
 
+      if (col === "remarks") {
+        return {
+          header: displayNameMap[col] ?? "Remarks",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: colIndex?.width ?? 250,
+          searchable: true,
+          hidden: colIndex ? !colIndex.visible : false,
+          filter: {
+            type: "select" as const,
+            options: [
+              ...(selectFilterOptions[col] ?? []),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          renderCell: (value: unknown, row: Record<string, unknown>) => {
+            const isSaving = updatingCellsRef.current[`${row.id}-remarks`];
+            return (
+              <RemarksCell
+                value={value}
+                row={row}
+                isSaving={isSaving}
+                canEdit={canEditRemarks}
+                dispatch={dispatch}
+              />
+            );
+          },
+        };
+      }
+
       let filterType: "select" | "dateRange" | undefined;
 
       if (
@@ -1660,6 +1820,7 @@ export default function Dashboard() {
     displayNameMap,
     mergedGroups,
     columnIndices,
+    canEditRemarks,
   ]);
 
   const extraToolbarActions = useMemo(

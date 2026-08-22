@@ -19,6 +19,8 @@ export class TenderController {
       "BG_REFUND_LETTER_TO_BE_SENT",
       "FOLLOW_UP_FOR_FINANCIAL_STATUS",
       "REVERSE_AUCTION_PENDING",
+      "COUNTER_OFFER_YES",
+      "COUNTER_OFFER_NO",
       null
     ];
     if (nextAction !== undefined && !validActions.includes(nextAction as string | null)) {

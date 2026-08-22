@@ -71,6 +71,8 @@ function resolveNetworkFilePath(decrypted: string): string {
   let base: string
   if (type === "condutor") {
     base = process.env.CONDUTOR_PATH ?? ""
+  } else if (type === "RA_COSTING_FILE") {
+    base = process.env.OLD_RA_EXCEL_PATH ?? process.env.INDEXER_NETWORK_PATH ?? ""
   } else {
     base = process.env.INDEXER_NETWORK_PATH ?? ""
   }

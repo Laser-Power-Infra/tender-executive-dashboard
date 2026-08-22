@@ -29,6 +29,7 @@ import {
   Loader2,
   RotateCcw,
   CalendarIcon,
+  Eye,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -48,6 +49,7 @@ import MergedOfficeEditDialog from "./MergedOfficeEditDialog";
 import WebsiteEditDialog from "./tender-viewer/website-edit-dialog";
 import ReportingOfficersEditDialog from "./ReportingOfficersEditDialog";
 import TenderDocumentUploadDialog from "./tender-viewer/tender-document-upload-dialog";
+import TenderDetailSheet from "./TenderDetailSheet";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -57,6 +59,7 @@ import {
 import { countRawMaterials } from "@/lib/rawMaterials";
 import { parseDate } from "@/lib/parse-date";
 import { normalizeDocketKey } from "@/lib/docket";
+import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 import {
   Select,
   SelectContent,
@@ -242,6 +245,23 @@ const BOQChartCell: React.FC<{
       <BarChart3 size={14} /> Comparative Chart
     </button>
   );
+};
+
+const getRaCostingFile = (tenderFilesJson?: string) => {
+  if (!tenderFilesJson) return null;
+  try {
+    const files: Array<{ name?: string; url?: string; source?: string; tags?: string[]; extension?: string }> = JSON.parse(tenderFilesJson);
+    return files.find((f) => f.tags?.includes(TENDER_FILE_TYPES.RA_COSTING_SHEET)) ?? null;
+  } catch { return null; }
+};
+
+const buildRaCostingHref = (raFile: { source?: string; url?: string } | null): string => {
+  if (!raFile) return "";
+  const token = "Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE";
+  if (raFile.source && raFile.source !== "SHEET_SYNC") {
+    return `/api/executive-files/view/${raFile.source}?auth=${encodeURIComponent(token)}`;
+  }
+  return raFile.url ?? "";
 };
 
 type EditableInputKind = "text" | "textarea" | "number";
@@ -1244,6 +1264,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [reportingDialogRecord, setReportingDialogRecord] = useState<EpcTenderRecord | null>(null);
   const [catalogueUploadRow, setCatalogueUploadRow] = useState<EpcTenderRecord | null>(null);
   const [catalogueUploading, setCatalogueUploading] = useState(false);
+  const [detailRecords, setDetailRecords] = useState<EpcTenderRecord[] | null>(null);
 
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
@@ -3198,16 +3219,30 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             );
                           } else {
                             cellContent = (
-                              <span className="docket-display">
-                                {editableCfg.display(record)}
-                                {isSaving && (
-                                  <Loader2
-                                    size={12}
-                                    className="spin"
-                                    style={{ marginLeft: 4 }}
-                                  />
+                              <div className="flex flex-col items-start gap-1">
+                                <span className="docket-display">
+                                  {editableCfg.display(record)}
+                                  {isSaving && (
+                                    <Loader2
+                                      size={12}
+                                      className="spin"
+                                      style={{ marginLeft: 4 }}
+                                    />
+                                  )}
+                                </span>
+                                {col.accessor === "docketNo" && rowIdx === 0 && group.records.length > 0 && (
+                                  <button
+                                    className="flex-shrink-0 h-6 px-2 rounded flex items-center gap-1 border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-medium transition-colors"
+                                    title={`View tender details (${group.records.length} record${group.records.length !== 1 ? "s" : ""})`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDetailRecords(group.records);
+                                    }}
+                                  >
+                                    <Eye size={12} /> View
+                                  </button>
                                 )}
-                              </span>
+                              </div>
                             );
                           }
                           const editable = editableCfg.canEdit(
@@ -3472,6 +3507,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               "BG_REFUND_LETTER_TO_BE_SENT": "BG refund letter to be sent",
                               "FOLLOW_UP_FOR_FINANCIAL_STATUS": "Follow up for financial status",
                               "REVERSE_AUCTION_PENDING": "Reverse auction pending",
+                              "COUNTER_OFFER_YES": "Counter Offer Yes",
+                              "COUNTER_OFFER_NO": "Counter Offer No",
                             };
                             cellContent = (
                               <span>{actionValue ? actionLabels[actionValue] || actionValue : "-"}</span>
@@ -3506,6 +3543,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                   </SelectItem>
                                   <SelectItem value="REVERSE_AUCTION_PENDING">
                                     Reverse auction pending
+                                  </SelectItem>
+                                  <SelectItem value="COUNTER_OFFER_YES">
+                                    Counter Offer Yes
+                                  </SelectItem>
+                                  <SelectItem value="COUNTER_OFFER_NO">
+                                    Counter Offer No
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -3912,13 +3955,35 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
                                 if (readOnly && !editableColumns.includes("reverseAuctionApplicable")) {
                                   const raDisplay = raVal === true ? "Yes" : raVal === false ? "No" : "-";
-                                  cellContent = <span>{raDisplay}</span>;
+                                  const raFile = getRaCostingFile(record.tenderFiles);
+                                  const raHref = buildRaCostingHref(raFile);
+                                  cellContent = (
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                                      <span>{raDisplay}</span>
+                                      {raFile && raHref && (
+                                        <a
+                                          href={raHref}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="table-attachment-link"
+                                          onClick={(e) => e.stopPropagation()}
+                                          title={raFile.name ? `${raFile.name}${raFile.extension ?? ""}` : "RA Costing Sheet"}
+                                          style={{ display: "inline-flex", alignItems: "center", gap: "3px", fontSize: "11px" }}
+                                        >
+                                          <FileSpreadsheet size={12} /> RA Sheet
+                                        </a>
+                                      )}
+                                    </div>
+                                  );
                                   cellClass = "col-center";
                                 } else {
                                   const raIsYes = raVal === true;
                                   const raIsNo = raVal === false;
+                                  const raFile = getRaCostingFile(record.tenderFiles);
+                                  const raHref = buildRaCostingHref(raFile);
                                   cellContent = (
-                                    <div style={{ display: "flex", gap: "4px", padding: "4px 0", justifyContent: "center" }}>
+                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "4px 0" }}>
+                                      <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
                                       <button
                                         type="button"
                                         disabled={isSaving}
@@ -3965,6 +4030,20 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                       >
                                         {isSaving ? "..." : "N"}
                                       </button>
+                                      </div>
+                                      {raFile && raHref && (
+                                        <a
+                                          href={raHref}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="table-attachment-link"
+                                          onClick={(e) => e.stopPropagation()}
+                                          title={raFile.name ? `${raFile.name}${raFile.extension ?? ""}` : "RA Costing Sheet"}
+                                          style={{ display: "inline-flex", alignItems: "center", gap: "3px", fontSize: "11px" }}
+                                        >
+                                          <FileSpreadsheet size={12} /> RA Sheet
+                                        </a>
+                                      )}
                                     </div>
                                   );
                                   cellClass = "col-center";
@@ -4472,6 +4551,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           onClose={() => setReportingDialogRecord(null)}
         />
       )}
+
+      <TenderDetailSheet
+        open={!!detailRecords}
+        onOpenChange={(open) => { if (!open) setDetailRecords(null); }}
+        records={detailRecords ?? []}
+        visibleAccessors={visibleColumns.map((c) => c.accessor)}
+        readOnly={readOnly}
+        editableColumns={editableColumns}
+      />
 
     </div>
   );

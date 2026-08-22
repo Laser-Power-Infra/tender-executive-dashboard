@@ -54,6 +54,93 @@ export class SmartsheetError extends Error {
 }
 
 /**
+ * Fetches a specific Smartsheet sheet by ID and returns its structured data.
+ * Makes exactly ONE API call per invocation.
+ * Throws SmartsheetError for all recoverable and unrecoverable failures.
+ */
+export async function fetchSmartsheetById(sheetId: string): Promise<SmartsheetSheetData> {
+  const token = process.env.SMARTSHEET_API_TOKEN;
+
+  if (!token || token.trim() === "") {
+    throw new SmartsheetError(
+      "SMARTSHEET_API_TOKEN is missing or empty in environment variables.",
+      "MISSING_TOKEN"
+    );
+  }
+
+  if (!sheetId || sheetId.trim() === "") {
+    throw new SmartsheetError(
+      "Sheet ID is missing or empty.",
+      "MISSING_SHEET_ID"
+    );
+  }
+
+  const url = `https://api.smartsheet.com/2.0/sheets/${sheetId.trim()}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token.trim()}`,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (networkErr: unknown) {
+    const msg = networkErr instanceof Error ? networkErr.message : String(networkErr);
+    throw new SmartsheetError(
+      `Network error reaching Smartsheet API: ${msg}`,
+      "NETWORK_ERROR"
+    );
+  }
+
+  if (!response.ok) {
+    let errorBody = "";
+    try {
+      errorBody = await response.text();
+    } catch {
+      // ignore
+    }
+
+    switch (response.status) {
+      case 401:
+        throw new SmartsheetError(
+          `Invalid or expired Smartsheet API token (401). Body: ${errorBody}`,
+          "UNAUTHORIZED",
+          401
+        );
+      case 403:
+        throw new SmartsheetError(
+          `Access forbidden for sheet ${sheetId}. Ensure the token has read access (403). Body: ${errorBody}`,
+          "FORBIDDEN",
+          403
+        );
+      case 404:
+        throw new SmartsheetError(
+          `Sheet ${sheetId} not found. Verify the sheet ID is correct (404). Body: ${errorBody}`,
+          "NOT_FOUND",
+          404
+        );
+      case 429:
+        throw new SmartsheetError(
+          `Smartsheet API rate limit exceeded. Please retry shortly (429).`,
+          "RATE_LIMITED",
+          429
+        );
+      default:
+        throw new SmartsheetError(
+          `Unexpected Smartsheet API error (${response.status}). Body: ${errorBody}`,
+          "UNKNOWN",
+          response.status
+        );
+    }
+  }
+
+  const data = (await response.json()) as SmartsheetSheetData;
+  return data;
+}
+
+/**
  * Fetches the configured Smartsheet sheet and returns its structured data.
  * Makes exactly ONE API call per invocation.
  * Throws SmartsheetError for all recoverable and unrecoverable failures.

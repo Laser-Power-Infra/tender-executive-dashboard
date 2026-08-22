@@ -21,6 +21,7 @@ function getAllowedRoots(): string[] {
   const envPaths = [
     process.env.INDEXER_NETWORK_PATH,
     process.env.COSTING_FILE_NETWORK_PATH,
+    process.env.OLD_RA_EXCEL_PATH,
     process.env.SUPPLY_NETWORK_PATH,
     process.env.CONDUTOR_PATH,
   ];
@@ -94,6 +95,8 @@ export class TenderAttachmentController {
       base = resolveRootPath();
     } else if (type === "costing") {
       base = resolveRootPath();
+    } else if (type === "RA_COSTING_FILE") {
+      base = process.env.OLD_RA_EXCEL_PATH ?? resolveRootPath();
     } else {
       throw new Error(`Unknown path type prefix: ${type}`);
     }

@@ -23,6 +23,7 @@ const links = [
   },
   { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/emd-details-cash", label: "EMD Cash" },
+  { href: "http://192.168.1.190:6008", label: "EMD", isExternal: true },
   { href: "/activity", label: "Activity" },
   { href: "/sop", label: "SOP" },
   { href: "/merge-conflict", label: "Merge Conflict" },
@@ -68,12 +69,18 @@ export function NavBar() {
       <nav className="fixed top-0 left-0 right-0 z-50 h-10.5 bg-white border-b border-gray-200 shadow-md">
         <NavigationMenu className="max-w-full w-full h-full gap-2 flex">
           <NavigationMenuList className="h-full px-2 gap-2 w-full justify-start">
-            {links.map(({ href, label }) => {
+            {links.map(({ href, label, isExternal }) => {
               const isActive = pathname === href;
               return (
                 <NavigationMenuItem key={href}>
                   <NavigationMenuLink
-                    render={<Link href={href} />}
+                    render={
+                      isExternal ? (
+                        <a href={href} target="_self" />
+                      ) : (
+                        <Link href={href} />
+                      )
+                    }
                     className={cn(
                       "px-3 py-1.5 rounded text-sm font-semibold transition-colors hover:bg-[#0a2540] hover:text-white",
                       isActive
