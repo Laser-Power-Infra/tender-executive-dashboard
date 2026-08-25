@@ -57,6 +57,13 @@ export const SKIP_RELATION_FIELDS = new Set([
   "tenderFiles", "file", "tenderStatus", "utilityMapping", "CostingSheetDetails",
 ]);
 
+let flattenCallCount = 0;
+let flattenTotalMs = 0;
+
+export function getFlattenMetrics() {
+  return { flattenCallCount, flattenTotalMs, avgMs: flattenCallCount ? flattenTotalMs / flattenCallCount : 0 };
+}
+
 export function flattenTender(
   tender: Record<string, unknown>,
   type: "Gem" | "Non-Gem",
@@ -66,6 +73,7 @@ export function flattenTender(
   evaluations?: EvaluationInfo[],
   tenderFiles?: TenderFileInfo[],
 ): FlatRow {
+  const fStart = performance.now();
   const assignedIds = tenderAssociations.map((ta) => ta.association.id).join(",");
   const row: FlatRow = { type, id: String(id) };
 
@@ -179,5 +187,8 @@ export function flattenTender(
     row.cva = "";
   }
 
+  flattenTotalMs += performance.now() - fStart;
+  flattenCallCount++;
+  // metrics disabled
   return row;
 }

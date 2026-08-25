@@ -349,21 +349,35 @@ export const fetchTendersIncremental = createAsyncThunk(
   "tenders/fetchTendersIncremental",
   async (fileIds: number[], { dispatch }) => {
     if (fileIds.length === 0) return;
-
+    const t0 = performance.now();
+    void t0;
     dispatch(startFetch(fileIds.length));
 
     const limit = pLimit(6);
+    const perFileMetrics: Array<{ fileId: number; ttfbMs: number; jsonMs: number; rows: number; totalMs: number; status: number }> = [];
 
     const fetches = fileIds.map((id) =>
       limit(async () => {
+        const fStart = performance.now();
+        let ttfbMs = 0;
         try {
+          const fetchStart = performance.now();
           const res = await fetch(`/api/tenders?fileId=${id}`);
-          if (!res.ok) return null;
+          ttfbMs = Math.round(performance.now() - fetchStart);
+          if (!res.ok) {
+            perFileMetrics.push({ fileId: id, ttfbMs, jsonMs: 0, rows: 0, totalMs: Math.round(performance.now() - fStart), status: res.status });
+            return null;
+          }
+          const jsonStart = performance.now();
           const data: TenderData = await res.json();
+          const jsonMs = Math.round(performance.now() - jsonStart);
+          const totalMs = Math.round(performance.now() - fStart);
+          perFileMetrics.push({ fileId: id, ttfbMs, jsonMs, rows: data.rows?.length ?? 0, totalMs, status: res.status });
           data.rows = data.rows.map((r) => ({ ...r, fileId: String(id) }));
           dispatch(mergeFile(data));
           return data;
-        } catch {
+        } catch (err) {
+          perFileMetrics.push({ fileId: id, ttfbMs, jsonMs: 0, rows: 0, totalMs: Math.round(performance.now() - fStart), status: 0 });
           return null;
         }
       }),
@@ -374,12 +388,29 @@ export const fetchTendersIncremental = createAsyncThunk(
   },
 );
 
+function clientLog(_stage: string, _data: Record<string, unknown>) {
+  void _stage; void _data;
+}
+
 export const fetchAllTenders = createAsyncThunk(
   "tenders/fetchAllTenders",
   async (_, { dispatch, rejectWithValue }) => {
+    const t0 = performance.now();
+    let ttfbMs: number | null = null;
+    let headerMs: number | null = null;
+    let totalBytes = 0;
+    let linesParsed = 0;
+    let rowsDecoded = 0;
+    let chunks = 0;
+    let jsonParseMsTotal = 0;
+    let decodeMsTotal = 0;
     dispatch(startFetch(1));
+    clientLog("client_request_start", { t0 });
     try {
+      const fetchStart = performance.now();
       const res = await fetch("/api/tenders-all");
+      ttfbMs = Math.round(performance.now() - fetchStart);
+      clientLog("client_ttfb", { ttfbMs, status: res.status, contentEncoding: res.headers.get("content-encoding"), contentType: res.headers.get("content-type"), reqId: res.headers.get("x-req-id") });
       if (!res.ok || !res.body) {
         throw new Error(`Failed to fetch tenders (${res.status})`);
       }
@@ -389,16 +420,21 @@ export const fetchAllTenders = createAsyncThunk(
       let buffer = "";
       let columns: string[] = [];
       let batch: TenderMergedRow[] = [];
+      let headerReceivedAt: number | null = null;
 
       const flush = () => {
         if (batch.length === 0) return;
+        const dStart = performance.now();
         dispatch(appendStreamBatch({ rows: batch }));
+        decodeMsTotal += performance.now() - dStart;
         batch = [];
       };
 
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        chunks++;
+        totalBytes += value.byteLength;
         buffer += decoder.decode(value, { stream: true });
 
         let newlineIdx: number;
@@ -408,20 +444,26 @@ export const fetchAllTenders = createAsyncThunk(
           if (!line) continue;
 
           let parsed: unknown;
+          const jpStart = performance.now();
           try {
             parsed = JSON.parse(line);
           } catch {
             continue;
           }
+          jsonParseMsTotal += performance.now() - jpStart;
+          linesParsed++;
 
           if (Array.isArray(parsed)) {
             if (columns.length === 0) continue;
+            const rowStart = performance.now();
             const row: TenderMergedRow = { type: "", id: "" };
             for (let i = 0; i < columns.length; i++) {
               const v = parsed[i];
               row[columns[i]] = v == null ? "" : String(v);
             }
             batch.push(row);
+            rowsDecoded++;
+            decodeMsTotal += performance.now() - rowStart;
             if (batch.length >= 100) flush();
           } else if (
             parsed &&
@@ -434,6 +476,9 @@ export const fetchAllTenders = createAsyncThunk(
               total: number;
             };
             columns = meta.columns ?? [];
+            headerReceivedAt = performance.now();
+            headerMs = Math.round(headerReceivedAt - t0);
+            clientLog("client_header_received", { headerMs, columnsCount: columns.length, totalExpected: meta.total, associationsCount: meta.associations?.length });
             dispatch(setStreamMeta(meta));
           } else if (
             parsed &&
@@ -448,8 +493,17 @@ export const fetchAllTenders = createAsyncThunk(
 
       flush();
       dispatch(finishStream({}));
+      const totalMs = Math.round(performance.now() - t0);
+      clientLog("client_complete", {
+        totalMs, ttfbMs, headerMs, chunks, totalBytes, totalBytesMb: (totalBytes / 1024 / 1024).toFixed(2),
+        linesParsed, rowsDecoded, jsonParseMsTotal: Math.round(jsonParseMsTotal), decodeMsTotal: Math.round(decodeMsTotal),
+        avgJsonParseMs: linesParsed ? (jsonParseMsTotal / linesParsed).toFixed(3) : 0,
+        throughputRowsPerSec: totalMs ? Math.round((rowsDecoded / totalMs) * 1000) : 0,
+      });
       return true;
     } catch (err: any) {
+      const totalMs = Math.round(performance.now() - t0);
+      clientLog("client_error", { totalMs, ttfbMs, error: err instanceof Error ? err.message : String(err), chunks, totalBytes, linesParsed, rowsDecoded });
       console.error("[fetchAllTenders] stream error:", err);
       dispatch(finishStream({}));
       return rejectWithValue(

@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { flattenTender } from "@/lib/tender-flatten";
 
+function logMetrics(_stage: string, _data: Record<string, unknown>) {
+  void _stage; void _data;
+}
+
 export async function GET(request: NextRequest) {
+  const reqId = Math.random().toString(36).slice(2, 8);
+  const t0 = performance.now();
+  const memBefore = process.memoryUsage();
+  const fileIdRaw = request.nextUrl.searchParams.get("fileId");
+  logMetrics("request_start", { reqId, fileIdRaw, memBefore });
   try {
-    const fileIdStr = request.nextUrl.searchParams.get("fileId");
+    const fileIdStr = fileIdRaw;
     if (!fileIdStr) {
+      logMetrics("bad_request", { reqId, reason: "missing fileId", totalMs: Math.round(performance.now() - t0) });
       return NextResponse.json(
         { error: "fileId query parameter is required" },
         { status: 400 }
@@ -13,39 +23,56 @@ export async function GET(request: NextRequest) {
     }
     const fileId = parseInt(fileIdStr, 10);
     if (isNaN(fileId)) {
+      logMetrics("bad_request", { reqId, reason: "invalid fileId", fileIdStr, totalMs: Math.round(performance.now() - t0) });
       return NextResponse.json({ error: "invalid fileId" }, { status: 400 });
     }
 
+    const tFileStart = performance.now();
     const fileRecord = await prisma.file.findUnique({ where: { id: fileId } });
+    const fileLookupMs = Math.round(performance.now() - tFileStart);
     if (!fileRecord) {
+      logMetrics("not_found", { reqId, fileId, fileLookupMs, totalMs: Math.round(performance.now() - t0) });
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    const [tenderMerged, allAssociations] = await Promise.all([
-      prisma.tenderMerged.findMany({
-        where: { fileId },
-        include: {
-          tenderAssociations: { include: { association: true } },
-          reportings: true,
-          evaluations: true,
-          tenderFiles: true,
-          CostingSheetDetails: { select: { id: true, itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true, bomType: true, bomCode: true } },
-        },
-      }),
-      prisma.association.findMany({ select: { id: true, name: true, email: true } }),
-    ]);
+    const tDbStart = performance.now();
+    let dbTenderMs = 0;
+    let dbAssocMs = 0;
+    const p1Start = performance.now();
+    const pTenders = prisma.tenderMerged.findMany({
+      where: { fileId },
+      include: {
+        tenderAssociations: { include: { association: true } },
+        reportings: true,
+        evaluations: true,
+        tenderFiles: true,
+        CostingSheetDetails: { select: { id: true, itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true, bomType: true, bomCode: true } },
+      },
+    }).then((r) => { dbTenderMs = performance.now() - p1Start; return r; });
+    const p2Start = performance.now();
+    const pAssoc = prisma.association.findMany({ select: { id: true, name: true, email: true } }).then((r) => { dbAssocMs = performance.now() - p2Start; return r; });
+    const [tenderMerged, allAssociations] = await Promise.all([pTenders, pAssoc]);
+    const dbTotalMs = Math.round(performance.now() - tDbStart);
 
+    logMetrics("db_complete", {
+      reqId, fileId, fileName: fileRecord.fileName,
+      totalRows: tenderMerged.length, associationsCount: allAssociations.length,
+      fileLookupMs, dbTenderMs: Math.round(dbTenderMs), dbAssocMs: Math.round(dbAssocMs), dbTotalMs,
+      memAfterDb: process.memoryUsage(),
+      heapUsedDeltaMb: ((process.memoryUsage().heapUsed - memBefore.heapUsed) / 1024 / 1024).toFixed(2),
+    });
+
+    const tFlatStart = performance.now();
     const rows = [];
-
     let totalGem = 0;
     let totalNonGem = 0;
-
+    let flattenMsTotal = 0;
     for (const t of tenderMerged) {
       const type: "Gem" | "Non-Gem" = t.tenderType === "GEM" ? "Gem" : "Non-Gem";
       if (type === "Gem") totalGem++;
       else totalNonGem++;
-
-      rows.push(flattenTender(
+      const fStart = performance.now();
+      const flat = flattenTender(
         t as unknown as Record<string, unknown>,
         type,
         t.id,
@@ -53,12 +80,29 @@ export async function GET(request: NextRequest) {
         t.reportings,
         t.evaluations,
         t.tenderFiles,
-      ));
+      );
+      flattenMsTotal += performance.now() - fStart;
+      rows.push(flat);
     }
+    const flatMs = Math.round(performance.now() - tFlatStart);
 
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const payloadBytes = Buffer.byteLength(JSON.stringify({ columns, rows: rows.slice(0, 1) }), "utf8");
+    const estimatedPayloadBytes = rows.length * (payloadBytes || 0);
+    // actual payload size (expensive for large N, so sample)
+    let actualPayloadBytes: number | null = null;
+    try { actualPayloadBytes = Buffer.byteLength(JSON.stringify(rows), "utf8"); } catch {}
 
-    return NextResponse.json({
+    const totalMs = Math.round(performance.now() - t0);
+    logMetrics("serialize_complete", {
+      reqId, fileId, totalRows: rows.length, columnsCount: columns.length, totalGem, totalNonGem,
+      flattenMsTotal: Math.round(flattenMsTotal), flatMs, avgFlattenMsPerRow: rows.length ? (flattenMsTotal / rows.length).toFixed(3) : 0,
+      estimatedPayloadBytes, actualPayloadBytes, actualPayloadMb: actualPayloadBytes ? (actualPayloadBytes / 1024 / 1024).toFixed(2) : null,
+      totalMs, throughputRowsPerSec: totalMs ? Math.round((rows.length / totalMs) * 1000) : 0,
+      memAfter: process.memoryUsage(),
+    });
+
+    const res = NextResponse.json({
       fileName: fileRecord.fileName,
       columns,
       rows,
@@ -66,7 +110,13 @@ export async function GET(request: NextRequest) {
       totalGem,
       totalNonGem,
     });
+    res.headers.set("X-Req-Id", reqId);
+    res.headers.set("Server-Timing", `db;dur=${dbTotalMs}, flatten;dur=${flatMs}, total;dur=${totalMs}`);
+    logMetrics("response_complete", { reqId, fileId, totalRows: rows.length, totalMs, status: 200 });
+    return res;
   } catch (error) {
+    const totalMs = Math.round(performance.now() - t0);
+    logMetrics("error", { reqId, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined, totalMs });
     console.error("Tenders fetch error:", error);
     return NextResponse.json(
       {
