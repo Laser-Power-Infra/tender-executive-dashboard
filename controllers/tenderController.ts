@@ -21,6 +21,7 @@ export class TenderController {
       "REVERSE_AUCTION_PENDING",
       "COUNTER_OFFER_YES",
       "COUNTER_OFFER_NO",
+      "BID_VALIDITY_NOT_ACCEPTED",
       null
     ];
     if (nextAction !== undefined && !validActions.includes(nextAction as string | null)) {

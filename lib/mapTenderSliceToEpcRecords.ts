@@ -1,5 +1,5 @@
 import { TenderData } from "@/lib/slices/tendersSlice";
-import { EpcTenderRecord, ManagementDecision, NextAction, StatusCategory, EMDExchangeMode } from "@/types/tender";
+import { EpcTenderRecord, ManagementDecision, NextAction, StatusCategory, EMDExchangeMode, TenderUpdateStatus } from "@/types/tender";
 
 function parseFloatOrNull(val: string | undefined | null): number | null {
   if (val == null || val === "") return null;
@@ -114,6 +114,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     statusCategory: row.statusCategory as StatusCategory | undefined,
     itemCategory: row.itemCategory || null,
     itemSchedules: parseItemSchedules(row.itemSchedules),
+    costingDetails: (row as any).costingDetails || undefined,
     competitors: row.competitors || null,
     fileCount: undefined,
     hasBoqChart: undefined,
@@ -125,7 +126,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     bgDate: row.bgDate || null,
     bgExpiryDate: row.bgExpiryDate || null,
     claimDate: row.claimDate || null,
-    tenderUpdateStatus: undefined,
+    tenderUpdateStatus: (row.tenderUpdateStatus || "OPEN") as TenderUpdateStatus,
     nextAction: (row.nextAction || null) as NextAction | null,
     quotationNo: row.quotationNo || null,
     contractNo: row.contractNo || null,
@@ -150,5 +151,6 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     differenceBetweenRank2: row.differenceBetweenRank2 || null,
     publishedDate: row.publishedDate ? new Date(row.publishedDate) : null,
     assignedDate: row.assignedDate ? new Date(row.assignedDate) : null,
+    assignedTo: (row.assignedTo as string) || "",
   }));
 }

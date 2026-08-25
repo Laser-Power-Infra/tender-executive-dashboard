@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { ParticipationCards } from "@/components/tender-viewer/participation-cards";
 import { ParticipationFlowChart } from "@/components/ParticipationFlowChart";
+import { useAppSelector } from "@/lib/hooks";
 import "./FilterSidebar.css";
 
 interface FilterSidebarProps {
@@ -23,6 +24,10 @@ interface FilterSidebarProps {
   copperMax: string;
   setCopperMax: (val: string) => void;
   rows?: Record<string, unknown>[];
+  filteredRows?: Record<string, unknown>[];
+  associationFilter?: string | null;
+  onAssociationFilterChange?: (val: string | null) => void;
+  showFlowChart?: boolean;
 }
 
 export const FilterSidebar: React.FC<FilterSidebarProps> = ({
@@ -30,10 +35,32 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
   aluminiumMin, setAluminiumMin, aluminiumMax, setAluminiumMax,
   copperMin, setCopperMin, copperMax, setCopperMax,
   rows = [],
+  filteredRows,
+  associationFilter = null,
+  onAssociationFilterChange,
+  showFlowChart = false,
 }) => {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
+  const associations = useAppSelector((s) => s.tenders.data?.associations ?? []);
+
+  const personCounts = useMemo(() => {
+    if (associations.length === 0) return [];
+    const sourceRows = filteredRows ?? rows;
+    return associations
+      .map((a) => ({
+        ...a,
+        count: sourceRows.filter((r) => {
+          const assignedIds = String(r.assignedTo ?? "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          return assignedIds.includes(String(a.id));
+        }).length,
+      }))
+      .filter((p) => p.count > 0);
+  }, [rows, filteredRows, associations]);
 
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -62,8 +89,72 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
     <div className="filter-sidebar-container" style={{ width: sidebarWidth }}>
       <div className="sidebar-header">Participation Filters</div>
       <div className="sidebar-content">
-        <ParticipationCards variant="dark" rows={rows} />
-        <ParticipationFlowChart rows={rows} />
+        <ParticipationCards variant="dark" rows={rows} onClearAssociation={() => onAssociationFilterChange?.(null)} />
+        {showFlowChart ? (
+          <ParticipationFlowChart rows={rows} />
+        ) : (
+          <>
+            {/* Assigned To filter - replaces flow chart on executive pages */}
+            <div className="filter-section">
+              <label className="filter-label">Assigned To</label>
+              <Select
+                value={associationFilter ?? "all"}
+                onValueChange={(v) => onAssociationFilterChange?.(v === "all" ? null : v)}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-full justify-start gap-2 px-3 py-2 h-auto text-xs font-normal rounded-md bg-white/10 text-white/80 border-white/20 hover:bg-white/20 hover:text-white [&_svg]:text-white/70"
+                >
+                  <SelectValue placeholder="All People" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All People</SelectItem>
+                  {associations.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {personCounts.length > 0 && (
+              <div className="filter-section">
+                <label className="filter-label">Assigned Tenders by Person</label>
+                <div className="space-y-1.5">
+                  {personCounts.map((p) => {
+                    const isActive = associationFilter === String(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => onAssociationFilterChange?.(isActive ? null : String(p.id))}
+                        className={`w-full flex items-center justify-between py-2 px-2.5 rounded-lg transition-colors cursor-pointer border text-left ${
+                          isActive
+                            ? "bg-blue-500/20 border-blue-400/50"
+                            : "bg-white/10 border-white/10 hover:bg-white/20"
+                        }`}
+                      >
+                        <span className="text-xs text-white/70 truncate pr-2">{p.name}</span>
+                        <span className="text-xs font-semibold text-white tabular-nums shrink-0">{p.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {associationFilter && (
+                  <button
+                    type="button"
+                    onClick={() => onAssociationFilterChange?.(null)}
+                    className="mt-2 text-[10px] font-medium text-white/50 hover:text-white/80 cursor-pointer"
+                  >
+                    Clear assignment filter
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
         <div className="filter-section">
           <label className="filter-label">Price</label>
           <Select value={priceBasisFilter} onValueChange={(v) => setPriceBasisFilter(v ?? "All")}>

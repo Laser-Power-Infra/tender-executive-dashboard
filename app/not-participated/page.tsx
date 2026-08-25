@@ -48,12 +48,13 @@ export default function NotParticipated() {
   const [aluminiumMax, setAluminiumMax] = useState<string>("");
   const [copperMin, setCopperMin] = useState<string>("");
   const [copperMax, setCopperMax] = useState<string>("");
+  const [associationFilter, setAssociationFilter] = useState<string | null>(null);
 
   const calculations = useMemo(() => new TenderCalculations(mappedRecords, referenceDate), [mappedRecords, referenceDate]);
   const primaryDataset = useMemo(() => calculations.getPrimaryDataset(), [calculations]);
 
-  const activeDataset = useMemo(() => {
-    const filtered = primaryDataset.filter(record => {
+  const baseFiltered = useMemo(() => {
+    let filtered = primaryDataset.filter(record => {
       if (priceBasisFilter !== "All") {
         const basis = (record.price || "Firm").toString().toLowerCase();
         if (basis !== priceBasisFilter.toLowerCase()) return false;
@@ -61,16 +62,32 @@ export default function NotParticipated() {
       if (!matchesRawMaterialRange(record, { aluMin: aluminiumMin, aluMax: aluminiumMax, cuMin: copperMin, cuMax: copperMax })) return false;
       return true;
     });
-    if (participationFilters.length === 0) return filtered;
-    return filtered.filter((record) =>
-      matchesEpcParticipationFilter(record, participationFilters),
-    );
+    if (participationFilters.length > 0) {
+      filtered = filtered.filter((record) =>
+        matchesEpcParticipationFilter(record, participationFilters),
+      );
+    }
+    return filtered;
   }, [primaryDataset, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax, participationFilters]);
+
+  const filteredRowsForSidebar = useMemo(() => baseFiltered as unknown as Record<string, unknown>[], [baseFiltered]);
+
+  const activeDataset = useMemo(() => {
+    if (!associationFilter) return baseFiltered;
+    return baseFiltered.filter((record) => {
+      const ids = String((record as unknown as Record<string, unknown>).assignedTo ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return ids.includes(associationFilter);
+    });
+  }, [baseFiltered, associationFilter]);
 
   const handleClearAllFilters = () => {
     setPriceBasisFilter("All");
     setAluminiumMin(""); setAluminiumMax("");
     setCopperMin(""); setCopperMax("");
+    setAssociationFilter(null);
     setClearTrigger(prev => prev + 1);
   };
 
@@ -82,6 +99,8 @@ export default function NotParticipated() {
           aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
           copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
           rows={tenderSliceData?.rows ?? []}
+          filteredRows={filteredRowsForSidebar}
+          associationFilter={associationFilter} onAssociationFilterChange={setAssociationFilter}
         />
       </div>
       <div className="dashboard-workspace">
@@ -111,7 +130,7 @@ export default function NotParticipated() {
             </div>
           ) : (
             <>
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated"]} showPostParticipationColumns={true} showDeadlineOverBadge
+              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated", "reason"]} showPostParticipationColumns={true} showDeadlineOverBadge showReasonColumn
                 aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
                 copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
                 defaultEndDate={todayStr}

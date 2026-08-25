@@ -23,6 +23,7 @@ const links = [
   },
   { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/emd-details-cash", label: "EMD Cash" },
+  { href: "/emd-details-bg", label: "EMD BG" },
   { href: "http://192.168.1.190:6008", label: "EMD", isExternal: true },
   { href: "/activity", label: "Activity" },
   { href: "/sop", label: "SOP" },

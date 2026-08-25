@@ -85,6 +85,7 @@ export interface EpcTenderRecord {
   statusCategory?: StatusCategory;
   itemCategory?: string | null;
   itemSchedules?: string[];
+  costingDetails?: string;
   competitors?: string | null;
   fileCount?: number;
   hasBoqChart?: boolean;
@@ -122,6 +123,7 @@ export interface EpcTenderRecord {
   differenceBetweenRank2?: string | null;
   publishedDate?: Date | null;
   assignedDate?: Date | null;
+  assignedTo?: string;
 }
 
 export enum TenderUpdateStatus {
@@ -135,6 +137,7 @@ export const CURRENT_STATUS_OPTIONS = [
   "TENDER CANCELLED",
   "TECHNICAL BID OPENED",
   "NOT EVALUATED",
+  "DISQUALIFIED",
 ] as const;
 
 export enum NextAction {
@@ -143,5 +146,6 @@ export enum NextAction {
   FOLLOW_UP_FOR_FINANCIAL_STATUS = "FOLLOW_UP_FOR_FINANCIAL_STATUS",
   REVERSE_AUCTION_PENDING = "REVERSE_AUCTION_PENDING",
   COUNTER_OFFER_YES = "COUNTER_OFFER_YES",
-  COUNTER_OFFER_NO = "COUNTER_OFFER_NO"
+  COUNTER_OFFER_NO = "COUNTER_OFFER_NO",
+  BID_VALIDITY_NOT_ACCEPTED = "BID_VALIDITY_NOT_ACCEPTED"
 }

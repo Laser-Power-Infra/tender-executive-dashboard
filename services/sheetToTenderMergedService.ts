@@ -478,128 +478,128 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   summary.created = costingCount;
 
   // ── Network folder scan → TenderFile entries (parallel with concurrency) ──
-  try {
-    const folderIndex = await getNetworkFolderIndex();
-    const networkTenders = await prisma.tenderMerged.findMany({
-      where: {
-        docketNo: { not: null },
-        NOT: {
-          tenderFiles: {
-            some: { tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT } },
-          },
-        },
-      },
-      select: { id: true, docketNo: true, referenceNo: true },
-    });
+  // try {
+  //   const folderIndex = await getNetworkFolderIndex();
+  //   const networkTenders = await prisma.tenderMerged.findMany({
+  //     where: {
+  //       docketNo: { not: null },
+  //       NOT: {
+  //         tenderFiles: {
+  //           some: { tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT } },
+  //         },
+  //       },
+  //     },
+  //     select: { id: true, docketNo: true, referenceNo: true },
+  //   });
 
-    const matchedTenders = networkTenders.filter((tm) => {
-      const numericDocket = extractNumericDocket(tm.docketNo);
-      return numericDocket && folderIndex.has(numericDocket);
-    });
+  //   const matchedTenders = networkTenders.filter((tm) => {
+  //     const numericDocket = extractNumericDocket(tm.docketNo);
+  //     return numericDocket && folderIndex.has(numericDocket);
+  //   });
 
-    const CONCURRENCY = 6;
-    for (let i = 0; i < matchedTenders.length; i += CONCURRENCY) {
-      const chunk = matchedTenders.slice(i, i + CONCURRENCY);
-      await Promise.all(
-        chunk.map(async (tm) => {
-          const numericDocket = extractNumericDocket(tm.docketNo)!;
-          const { folderPath } = folderIndex.get(numericDocket)!;
-          const files = await scanFolderFiles(folderPath);
+  //   const CONCURRENCY = 6;
+  //   for (let i = 0; i < matchedTenders.length; i += CONCURRENCY) {
+  //     const chunk = matchedTenders.slice(i, i + CONCURRENCY);
+  //     await Promise.all(
+  //       chunk.map(async (tm) => {
+  //         const numericDocket = extractNumericDocket(tm.docketNo)!;
+  //         const { folderPath } = folderIndex.get(numericDocket)!;
+  //         const files = await scanFolderFiles(folderPath);
 
-          await prisma.tenderFile.deleteMany({
-            where: {
-              tenderMergedId: tm.id,
-              tags: { has: TENDER_FILE_TYPES.NETWORK_FILES },
-            },
-          });
+  //         await prisma.tenderFile.deleteMany({
+  //           where: {
+  //             tenderMergedId: tm.id,
+  //             tags: { has: TENDER_FILE_TYPES.NETWORK_FILES },
+  //           },
+  //         });
 
-          const networkRoot = resolveRootPath();
-          const docketParts = tm.docketNo?.split("-") ?? [];
-          const docketSegment = docketParts.length > 1 ? docketParts[1] : null;
+  //         const networkRoot = resolveRootPath();
+  //         const docketParts = tm.docketNo?.split("-") ?? [];
+  //         const docketSegment = docketParts.length > 1 ? docketParts[1] : null;
 
-          let costingDeleted = false;
-          const fetchedNetworkFiles: SyncResult["networkFetched"][number]["files"] = [];
+  //         let costingDeleted = false;
+  //         const fetchedNetworkFiles: SyncResult["networkFetched"][number]["files"] = [];
 
-          for (const f of files) {
-            const relativePath = path.relative(networkRoot, f.absolutePath);
+  //         for (const f of files) {
+  //           const relativePath = path.relative(networkRoot, f.absolutePath);
 
-            const isCostingFile =
-              docketSegment !== null &&
-              f.name.toLowerCase().includes("costing") &&
-              f.name.includes(docketSegment) &&
-              (f.extension === ".xlsx" || f.extension === ".xls");
+  //           const isCostingFile =
+  //             docketSegment !== null &&
+  //             f.name.toLowerCase().includes("costing") &&
+  //             f.name.includes(docketSegment) &&
+  //             (f.extension === ".xlsx" || f.extension === ".xls");
 
-            if (isCostingFile && !costingDeleted) {
-              await prisma.tenderFile.deleteMany({
-                where: {
-                  tenderMergedId: tm.id,
-                  tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT },
-                },
-              });
-              costingDeleted = true;
-            }
+  //           if (isCostingFile && !costingDeleted) {
+  //             await prisma.tenderFile.deleteMany({
+  //               where: {
+  //                 tenderMergedId: tm.id,
+  //                 tags: { has: TENDER_FILE_TYPES.COSTING_ATTACHMENT },
+  //               },
+  //             });
+  //             costingDeleted = true;
+  //           }
 
-            const tag = isCostingFile
-              ? TENDER_FILE_TYPES.COSTING_ATTACHMENT
-              : TENDER_FILE_TYPES.NETWORK_FILES;
+  //           const tag = isCostingFile
+  //             ? TENDER_FILE_TYPES.COSTING_ATTACHMENT
+  //             : TENDER_FILE_TYPES.NETWORK_FILES;
 
-            await prisma.tenderFile.create({
-              data: {
-                name: f.name,
-                extension: f.extension,
-                url: relativePath,
-                source: encryptRelativePath(isCostingFile ? "costing" : "network", relativePath),
-                tags: [tag],
-                tenderMergedId: tm.id,
-              },
-            });
+  //           await prisma.tenderFile.create({
+  //             data: {
+  //               name: f.name,
+  //               extension: f.extension,
+  //               url: relativePath,
+  //               source: encryptRelativePath(isCostingFile ? "costing" : "network", relativePath),
+  //               tags: [tag],
+  //               tenderMergedId: tm.id,
+  //             },
+  //           });
 
-            fetchedNetworkFiles.push({
-              name: f.name,
-              extension: f.extension,
-              url: relativePath,
-            });
+  //           fetchedNetworkFiles.push({
+  //             name: f.name,
+  //             extension: f.extension,
+  //             url: relativePath,
+  //           });
 
-            if (isCostingFile) {
-              costingFetched.push({
-                referenceNo: tm.referenceNo ?? "",
-                fileName: f.name,
-                url: relativePath,
-              });
-              await publishCostingParsingJob({
-                tenderMergedId: tm.id,
-                referenceNo: tm.referenceNo ?? undefined,
-                file: {
-                  source: encryptRelativePath("costing", relativePath),
-                  url: relativePath,
-                },
-              });
-            }
-          }
+  //           if (isCostingFile) {
+  //             costingFetched.push({
+  //               referenceNo: tm.referenceNo ?? "",
+  //               fileName: f.name,
+  //               url: relativePath,
+  //             });
+  //             await publishCostingParsingJob({
+  //               tenderMergedId: tm.id,
+  //               referenceNo: tm.referenceNo ?? undefined,
+  //               file: {
+  //                 source: encryptRelativePath("costing", relativePath),
+  //                 url: relativePath,
+  //               },
+  //             });
+  //           }
+  //         }
 
-          if (fetchedNetworkFiles.length > 0) {
-            networkFetched.push({
-              referenceNo: tm.referenceNo ?? "",
-              docketNo: tm.docketNo ?? "",
-              folderPath,
-              files: fetchedNetworkFiles,
-            });
-          }
-        }),
-      );
-    }
+  //         if (fetchedNetworkFiles.length > 0) {
+  //           networkFetched.push({
+  //             referenceNo: tm.referenceNo ?? "",
+  //             docketNo: tm.docketNo ?? "",
+  //             folderPath,
+  //             files: fetchedNetworkFiles,
+  //           });
+  //         }
+  //       }),
+  //     );
+  //   }
 
-    if (matchedTenders.length > 0) {
-      console.log(
-        `[SheetSync] Network files synced for ${matchedTenders.length} tenders (${Math.ceil(matchedTenders.length / CONCURRENCY)} batches)`,
-      );
-    }
-  } catch (e) {
-    console.warn(
-      "[SheetSync] Network folder scan failed:",
-      (e as Error).message,
-    );
-  }
+  //   if (matchedTenders.length > 0) {
+  //     console.log(
+  //       `[SheetSync] Network files synced for ${matchedTenders.length} tenders (${Math.ceil(matchedTenders.length / CONCURRENCY)} batches)`,
+  //     );
+  //   }
+  // } catch (e) {
+  //   console.warn(
+  //     "[SheetSync] Network folder scan failed:",
+  //     (e as Error).message,
+  //   );
+  // }
 
   // ── Condutor BoQ comparative chart files ──
   try {

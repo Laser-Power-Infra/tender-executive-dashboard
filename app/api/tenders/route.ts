@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
           reportings: true,
           evaluations: true,
           tenderFiles: true,
-          CostingSheetDetails: { select: { itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true } },
+          CostingSheetDetails: { select: { id: true, itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true, bomType: true, bomCode: true } },
         },
       }),
       prisma.association.findMany({ select: { id: true, name: true, email: true } }),

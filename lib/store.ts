@@ -3,6 +3,7 @@ import filesReducer from "@/lib/slices/filesSlice";
 import tendersReducer from "@/lib/slices/tendersSlice";
 import uploadReducer from "@/lib/slices/uploadSlice";
 import filtersReducer from "@/lib/slices/filtersSlice";
+import utilityReducer from "@/lib/slices/utilitySlice";
 
 export const makeStore = () =>
   configureStore({
@@ -11,6 +12,7 @@ export const makeStore = () =>
       tenders: tendersReducer,
       upload: uploadReducer,
       filters: filtersReducer,
+      utility: utilityReducer,
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({

@@ -602,7 +602,11 @@ export const saveFeedbackAndReanalyze = createAsyncThunk(
 export const syncSheetToMerged = createAsyncThunk(
   "tenders/syncSheetToMerged",
   async (_, { rejectWithValue }) => {
-    const res = await fetch("/api/sync-to-merged", { method: "POST" });
+    console.log("EXTERNAL_API_KEY: ", process.env.EXTERNAL_API_KEY)
+    const res = await fetch("/api/sync-to-merged", { method: "POST", headers: {
+      "authorization": `Bearer ${process.env.EXTERNAL_API_KEY}`,
+      "x-api-key":process.env.EXTERNAL_API_KEY!
+    } });
     if (!res.ok) {
       const body = await res.json();
       return rejectWithValue(body.error || "Sync failed");

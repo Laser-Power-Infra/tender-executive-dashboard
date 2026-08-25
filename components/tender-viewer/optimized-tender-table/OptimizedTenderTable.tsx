@@ -24,14 +24,12 @@ import {
   isCu,
 } from "@/lib/rawMaterials";
 import {
-  format,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-} from "date-fns";
+  formatDateISTLong,
+  toISTDateKey,
+  getISTWeekRange,
+  getISTMonthRange,
+  getISTYearRange,
+} from "@/lib/format-ist";
 import {
   Select,
   SelectContent,
@@ -357,31 +355,23 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
 
       if (accessorStr === "deadline" && filterState.select?.length) {
         const now = new Date();
-        let from: Date | null = null;
-        let to: Date | null = null;
         const preset = filterState.select[0];
+        let fromKey: string | null = null;
+        let toKey: string | null = null;
         if (preset === "thisWeek") {
-          from = startOfWeek(now, { weekStartsOn: 1 });
-          to = endOfWeek(now, { weekStartsOn: 1 });
+          const r = getISTWeekRange(now);
+          fromKey = r.fromKey;
+          toKey = r.toKey;
         } else if (preset === "thisMonth") {
-          from = startOfMonth(now);
-          to = endOfMonth(now);
+          const r = getISTMonthRange(now);
+          fromKey = r.fromKey;
+          toKey = r.toKey;
         } else if (preset === "thisYear") {
-          from = startOfYear(now);
-          to = endOfYear(now);
+          const r = getISTYearRange(now);
+          fromKey = r.fromKey;
+          toKey = r.toKey;
         }
-        if (from) {
-          const toEnd = to
-            ? new Date(
-                to.getFullYear(),
-                to.getMonth(),
-                to.getDate(),
-                23,
-                59,
-                59,
-                999,
-              )
-            : null;
+        if (fromKey) {
           result = result.filter((row) => {
             const val = row[col.accessor as keyof T];
             if (
@@ -390,10 +380,10 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
               typeof val !== "number"
             )
               return true;
-            const dateVal = val instanceof Date ? val : new Date(String(val));
-            if (isNaN(dateVal.getTime())) return true;
-            if (dateVal < from) return false;
-            if (toEnd && dateVal > toEnd) return false;
+            const key = toISTDateKey(val as any);
+            if (!key) return true;
+            if (key < fromKey!) return false;
+            if (toKey && key > toKey) return false;
             return true;
           });
         }
@@ -412,20 +402,16 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
             )
               return true;
 
-            const dateVal = val instanceof Date ? val : new Date(String(val));
-            if (isNaN(dateVal.getTime())) return true;
+            const key = toISTDateKey(val as any);
+            if (!key) return true;
 
-            if (startDate) {
-              const start = new Date(startDate);
-              start.setHours(0, 0, 0, 0);
-              if (dateVal < start) return false;
-            }
-
-            if (endDate) {
-              const end = new Date(endDate);
-              end.setHours(23, 59, 59, 999);
-              if (dateVal > end) return false;
-            }
+            const fromKey = startDate ? toISTDateKey(startDate) : null;
+            const toKey = endDate ? toISTDateKey(endDate) : null;
+            // If filter keys are YYYY-MM-DD strings, toISTDateKey handles them; fallback to raw string
+            const effectiveFrom = fromKey ?? (startDate ? String(startDate) : null);
+            const effectiveTo = toKey ?? (endDate ? String(endDate) : null);
+            if (effectiveFrom && key < effectiveFrom) return false;
+            if (effectiveTo && key > effectiveTo) return false;
 
             return true;
           });
@@ -594,8 +580,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
       columnFilters["deadline"]?.select?.length ||
       columnFilters["deadline"]?.dateRange;
     if (!hasDeadlineFilter && !disableDefaultDeadlineFilter) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayKey = toISTDateKey(new Date());
       result = result.filter((row) => {
         const val = row["deadline" as keyof T];
         if (val == null || val === "") return true;
@@ -605,9 +590,9 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           typeof val !== "number"
         )
           return true;
-        const dateVal = val instanceof Date ? val : new Date(String(val));
-        if (isNaN(dateVal.getTime())) return true;
-        return dateVal >= today;
+        const key = toISTDateKey(val as any);
+        if (!key) return true;
+        return key >= (todayKey ?? "");
       });
     }
 
@@ -882,10 +867,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
 
   const formatDate = useCallback(
     (val: Date | string | number | null | undefined): string => {
-      if (!val) return "-";
-      const d = new Date(val);
-      if (isNaN(d.getTime())) return "-";
-      return format(d, "do MMM, yyyy");
+      return formatDateISTLong(val);
     },
     [],
   );
@@ -1273,7 +1255,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
         const statusClass =
           statusVal === "WON"
             ? "won"
-            : statusVal === "LOST"
+            : statusVal === "LOST" || statusVal === "DISQUALIFIED"
               ? "lost"
               : statusVal === "UNDER_EVALUATION" || statusVal === "EVAL"
                 ? "eval"

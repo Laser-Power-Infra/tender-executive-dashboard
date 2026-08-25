@@ -71,6 +71,7 @@ export default function PostParticipation() {
     <div className="dashboard-layout-container">
       <div className="dashboard-sidebar-wrapper">
         <FilterSidebar
+          showFlowChart
           priceBasisFilter={priceBasisFilter} setPriceBasisFilter={setPriceBasisFilter}
           aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
           copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}

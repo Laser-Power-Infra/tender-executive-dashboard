@@ -33,15 +33,12 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { format } from "date-fns";
 import {
-  format,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-} from "date-fns";
+  getISTWeekRange,
+  getISTMonthRange,
+  getISTYearRange,
+} from "@/lib/format-ist";
 import * as XLSX from "xlsx";
 import type { DateRange } from "react-day-picker";
 import type { ReverseAuctionWebhookData } from "@/lib/integrations/n8n";
@@ -59,6 +56,7 @@ import {
 import { countRawMaterials } from "@/lib/rawMaterials";
 import { parseDate } from "@/lib/parse-date";
 import { normalizeDocketKey } from "@/lib/docket";
+import { formatDateISTShort, formatDateTimeIST, toISTDateKey, isBeforeTodayIST } from "@/lib/format-ist";
 import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 import {
   Select,
@@ -737,6 +735,7 @@ interface TenderTableProps {
   editableColumns?: string[];
   defaultEndDate?: string;
   showDeadlineOverBadge?: boolean;
+  showReasonColumn?: boolean;
 }
 
 interface ColumnDef {
@@ -775,6 +774,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   editableColumns = [],
   defaultEndDate,
   showDeadlineOverBadge = false,
+  showReasonColumn = false,
 }) => {
   // 1. Column Definitions
   const columns: ColumnDef[] = [
@@ -978,7 +978,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       type: "string",
     },
     {
-      header: "Reason for not participation",
+      header: "Reason for not Participated",
       accessor: "reason",
       defaultWidth: 250,
       align: "left",
@@ -1240,7 +1240,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "participated",
   ]);
   const visibleColumns = showPostParticipationColumns
-    ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor) && !postParticipationHiddenAccessors.has(col.accessor))
+    ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor) && !(postParticipationHiddenAccessors.has(col.accessor) && !(showReasonColumn && col.accessor === "reason")))
     : columns.filter((col) => !postParticipationAccessors.has(col.accessor));
 
   // 2. States
@@ -1269,6 +1269,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const dispatch = useAppDispatch();
   const tenderData = useAppSelector((s) => s.tenders.data);
   const updatingCells = useAppSelector((s) => s.tenders.updatingCells);
+  const bomByItemName = useAppSelector((s) => (s as any).utility?.bomByItemName ?? {});
+  const bomTypesByItemName = useAppSelector((s) => (s as any).utility?.bomTypesByItemName ?? {});
+  const utilityLoading = useAppSelector((s) => (s as any).utility?.loading ?? false);
+  const [costingOverrides, setCostingOverrides] = useState<Record<string, { bomType?: string | null; bomCode?: string | null }>>({});
+  const [savingBom, setSavingBom] = useState<Record<string, boolean>>({});
 
   const saveCell = useCallback(
     (record: EpcTenderRecord, accessor: string, draft: string) => {
@@ -1312,6 +1317,82 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         });
     },
     [dispatch],
+  );
+
+  const handleCostingBomUpdate = useCallback(
+    async (costingId: number, field: "bomType" | "bomCode", value: string, itemName: string, currentBomType?: string | null, currentBomCode?: string | null) => {
+      const normalized = value.trim() === "" ? null : value.trim();
+      const key = `${costingId}-${field}`;
+      setSavingBom((prev) => ({ ...prev, [key]: true }));
+      // optimistic update
+      setCostingOverrides((prev) => {
+        const cur = prev[costingId] ?? {};
+        if (field === "bomType") {
+          const prevBomType = cur.bomType ?? currentBomType ?? null;
+          if (normalized !== prevBomType) {
+            // when type changes, validate current bomCode still valid for new type
+            const opts = (bomByItemName[itemName] ?? []) as Array<{ bomType: string | null; bomId: string }>;
+            const filteredIds = normalized ? opts.filter((o) => (o.bomType ?? "") === normalized).map((o) => o.bomId) : opts.map((o) => o.bomId);
+            const existingCode = cur.bomCode ?? currentBomCode ?? null;
+            const shouldKeep = existingCode && filteredIds.includes(existingCode);
+            return { ...prev, [costingId]: { ...cur, bomType: normalized, bomCode: shouldKeep ? existingCode : null } };
+          }
+          return { ...prev, [costingId]: { ...cur, bomType: normalized } };
+        }
+        return { ...prev, [costingId]: { ...cur, bomCode: normalized } };
+      });
+      try {
+        const curOverride = costingOverrides[costingId] ?? {};
+        let body: Record<string, string | null> = {};
+        if (field === "bomType") {
+          const opts = (bomByItemName[itemName] ?? []) as Array<{ bomType: string | null; bomId: string }>;
+          const filteredIds = normalized ? opts.filter((o) => (o.bomType ?? "") === normalized).map((o) => o.bomId) : opts.map((o) => o.bomId);
+          const existingCode = curOverride.bomCode ?? currentBomCode ?? null;
+          const shouldKeep = existingCode && filteredIds.includes(existingCode);
+          body = { bomType: normalized, bomCode: shouldKeep ? existingCode : normalized == null ? null : null };
+          // if we cleared, we need to send bomCode null explicitly
+          if (!shouldKeep) body.bomCode = null;
+          else delete (body as any).bomCode;
+          // if body only has bomType and we kept code, don't send bomCode to preserve
+          if (shouldKeep) delete body.bomCode;
+        } else {
+          body = { bomCode: normalized };
+        }
+        // if body empty (kept code case), ensure at least bomType sent
+        if (Object.keys(body).length === 0) body = { [field]: normalized } as any;
+        const res = await fetch(`/api/costing-sheet-details/${costingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to update");
+        setCostingOverrides((prev) => ({
+          ...prev,
+          [costingId]: {
+            bomType: data.data?.bomType ?? normalized ?? prev[costingId]?.bomType ?? currentBomType ?? null,
+            bomCode: data.data?.bomCode ?? (field === "bomType" && body.bomCode === null ? null : field === "bomCode" ? normalized : prev[costingId]?.bomCode ?? currentBomCode ?? null),
+          },
+        }));
+        toast.success(`${field} updated`);
+      } catch (err: any) {
+        toast.error(err?.message || `Failed to update ${field}`);
+        setCostingOverrides((prev) => {
+          const copy = { ...prev };
+          const cur = copy[costingId] ?? {};
+          if (field === "bomType") copy[costingId] = { ...cur, bomType: currentBomType ?? null };
+          else copy[costingId] = { ...cur, bomCode: currentBomCode ?? null };
+          return copy;
+        });
+      } finally {
+        setSavingBom((prev) => {
+          const copy = { ...prev };
+          delete copy[key];
+          return copy;
+        });
+      }
+    },
+    [bomByItemName, costingOverrides]
   );
 
   const handleMergedFieldSave = useCallback(
@@ -1672,6 +1753,20 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "reverseAuctionStartDate",
   ]);
 
+  const TENDER_UPDATE_STATUS_FILTER_OPTIONS: Array<[string, string]> = [
+    ["OPEN", "Open"],
+    ["CLOSED", "Closed"],
+  ];
+  const NEXT_ACTION_FILTER_OPTIONS: Array<[string, string]> = [
+    ["UPDATE_FROM_AB_LETTER", "Update from AB letter"],
+    ["BG_REFUND_LETTER_TO_BE_SENT", "BG refund letter to be sent"],
+    ["FOLLOW_UP_FOR_FINANCIAL_STATUS", "Follow up for financial status"],
+    ["REVERSE_AUCTION_PENDING", "Reverse auction pending"],
+    ["COUNTER_OFFER_YES", "Counter Offer Yes"],
+    ["COUNTER_OFFER_NO", "Counter Offer No"],
+    ["BID_VALIDITY_NOT_ACCEPTED", "Bid Validity Not Accepted"],
+  ];
+
   const [multiSelectFilters, setMultiSelectFilters] = useState<
     Record<string, string[]>
   >({});
@@ -1754,21 +1849,23 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const getDateRange = useCallback(() => {
     if (datePreset) {
       const now = new Date();
-      let from: Date;
-      let to: Date;
+      let fromKey: string;
+      let toKey: string;
       if (datePreset === "thisWeek") {
-        from = startOfWeek(now, { weekStartsOn: 1 });
-        to = endOfWeek(now, { weekStartsOn: 1 });
+        const r = getISTWeekRange(now);
+        fromKey = r.fromKey;
+        toKey = r.toKey;
       } else if (datePreset === "thisMonth") {
-        from = startOfMonth(now);
-        to = endOfMonth(now);
+        const r = getISTMonthRange(now);
+        fromKey = r.fromKey;
+        toKey = r.toKey;
       } else {
-        from = startOfYear(now);
-        to = endOfYear(now);
+        const r = getISTYearRange(now);
+        fromKey = r.fromKey;
+        toKey = r.toKey;
       }
-      from.setHours(0, 0, 0, 0);
-      to.setHours(23, 59, 59, 999);
-      return { from, to };
+      // Create Dates whose IST key equals the desired boundaries (for isBeforeTodayIST/ filtering)
+      return { from: new Date(fromKey), to: new Date(toKey) };
     }
     return {
       from: startDate ? new Date(startDate) : undefined,
@@ -1787,11 +1884,17 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     if (datePreset === "thisMonth") return "This Month";
     if (datePreset === "thisYear") return "This Year";
     const { from, to } = getDateRange();
+    const istFmt = (d: Date) =>
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+      }).format(d);
     if (from && to) {
-      return `${format(from, "dd MMM")} - ${format(to, "dd MMM")}`;
+      return `${istFmt(from)} - ${istFmt(to)}`;
     }
-    if (from) return `${format(from, "dd MMM")} onwards`;
-    if (to) return `Upto ${format(to, "dd MMM")}`;
+    if (from) return `${istFmt(from)} onwards`;
+    if (to) return `Upto ${istFmt(to)}`;
     return "All dates";
   }, [datePreset, getDateRange]);
 
@@ -1839,9 +1942,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   const formatRangeLabel = useCallback((fromStr: string, toStr: string) => {
     const { from, to } = buildDateRange(fromStr, toStr);
-    if (from && to) return `${format(from, "dd MMM")} - ${format(to, "dd MMM")}`;
-    if (from) return `from ${format(from, "dd MMM")}`;
-    if (to) return `upto ${format(to, "dd MMM")}`;
+    const istFmt = (d: Date) =>
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+      }).format(d);
+    if (from && to) return `${istFmt(from)} - ${istFmt(to)}`;
+    if (from) return `from ${istFmt(from)}`;
+    if (to) return `upto ${istFmt(to)}`;
     return "All";
   }, [buildDateRange]);
 
@@ -1933,8 +2042,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         if (!(dateVal instanceof Date) || isNaN(dateVal.getTime())) {
           return false;
         }
-        if (dateFrom && dateVal < dateFrom) return false;
-        if (dateTo && dateVal > dateTo) return false;
+        const dateKey = toISTDateKey(dateVal);
+        const fromKey = dateFrom ? toISTDateKey(dateFrom) : null;
+        const toKey = dateTo ? toISTDateKey(dateTo) : null;
+        if (!dateKey) return false;
+        if (fromKey && dateKey < fromKey) return false;
+        if (toKey && dateKey > toKey) return false;
         return true;
       });
     }
@@ -2023,6 +2136,60 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       cache[col.accessor] = Array.from(new Set(values)).sort();
     }
     return cache;
+  }, [
+    records,
+    globalSearch,
+    startDate,
+    endDate,
+    datePreset,
+    raStartFrom,
+    raStartTo,
+    raEndFrom,
+    raEndTo,
+    multiSelectFilters,
+    columnSearchText,
+    remarksDropdownFilter,
+    proposedErpItemTextFilter,
+    proposedErpItemCategoryFilter,
+  ]);
+
+  const tenderStatusOptions = useMemo(() => {
+    const filtered = getFilteredRecordsExcept("tenderUpdateStatus");
+    const codes = new Set(
+      filtered
+        .map((r) => r.tenderUpdateStatus)
+        .map((v) => (v ? String(v) : ""))
+        .filter((s) => s !== ""),
+    );
+    return TENDER_UPDATE_STATUS_FILTER_OPTIONS.filter(([code]) =>
+      codes.has(code),
+    );
+  }, [
+    records,
+    globalSearch,
+    startDate,
+    endDate,
+    datePreset,
+    raStartFrom,
+    raStartTo,
+    raEndFrom,
+    raEndTo,
+    multiSelectFilters,
+    columnSearchText,
+    remarksDropdownFilter,
+    proposedErpItemTextFilter,
+    proposedErpItemCategoryFilter,
+  ]);
+
+  const nextActionOptions = useMemo(() => {
+    const filtered = getFilteredRecordsExcept("nextAction");
+    const codes = new Set(
+      filtered
+        .map((r) => r.nextAction)
+        .map((v) => (v ? String(v) : ""))
+        .filter((s) => s !== ""),
+    );
+    return NEXT_ACTION_FILTER_OPTIONS.filter(([code]) => codes.has(code));
   }, [
     records,
     globalSearch,
@@ -2196,8 +2363,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           return false;
         }
 
-        if (dateFrom && dateVal < dateFrom) return false;
-        if (dateTo && dateVal > dateTo) return false;
+        const dateKey = toISTDateKey(dateVal);
+        const fromKey = dateFrom ? toISTDateKey(dateFrom) : null;
+        const toKey = dateTo ? toISTDateKey(dateTo) : null;
+        if (!dateKey) return false;
+        if (fromKey && dateKey < fromKey) return false;
+        if (toKey && dateKey > toKey) return false;
 
         return true;
       });
@@ -2470,7 +2641,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
             val = rec[col.accessor as keyof EpcTenderRecord];
           }
           if (val === null || val === undefined) return "";
-          if (val instanceof Date) return val.toLocaleDateString("en-GB");
+          if (val instanceof Date) return formatDateISTShort(val);
 
           // Escape quotes
           let strVal = String(val);
@@ -2535,7 +2706,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         if (val === null || val === undefined) {
           obj[col.header] = "";
         } else if (val instanceof Date) {
-          obj[col.header] = val.toLocaleDateString("en-GB");
+          obj[col.header] = formatDateISTShort(val);
         } else if (col.type === "percentage") {
           obj[col.header] = `${((val as number) * 100).toFixed(1)}%`;
         } else {
@@ -2560,27 +2731,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     );
   };
 
-  const formatDate = (val: Date | null): string => {
-    if (!val) return "-";
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-    const d = new Date(val);
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = months[d.getMonth()];
-    const year = String(d.getFullYear()).slice(-2);
-    return `${day}-${month}-${year}`;
+  const formatDate = (val: Date | string | number | null | undefined): string => {
+    return formatDateISTShort(val as any);
   };
 
   const formatPercentage = (val: number | null): string => {
@@ -2604,6 +2756,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     if (
       lower.includes("not in our favour") ||
       lower.includes("lost") ||
+      lower.includes("disqualified") ||
       lower.includes("l2") ||
       lower.includes("l3") ||
       lower.includes("rejected") ||
@@ -2893,6 +3046,192 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         </div>
                       </div>
                     )}
+                    {col.accessor === "tenderUpdateStatus" && (
+                      <div
+                        className="custom-multiselect-container"
+                        ref={(el) => {
+                          dropdownRefs.current[col.accessor] = el;
+                        }}
+                      >
+                        <button
+                          className="multiselect-trigger-btn"
+                          onClick={() =>
+                            setOpenDropdown(
+                              openDropdown === col.accessor ? null : col.accessor,
+                            )
+                          }
+                        >
+                          {(!multiSelectFilters[col.accessor] ||
+                            multiSelectFilters[col.accessor].length === 0)
+                            ? `All ${col.header}`
+                            : `${multiSelectFilters[col.accessor].length} Selected`}
+                          <span
+                            className="dropdown-arrow"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            <ChevronDown size={12} />
+                          </span>
+                        </button>
+                        {openDropdown === col.accessor && (
+                          <div className="multiselect-dropdown-panel">
+                            <div className="multiselect-actions">
+                              <button
+                                className="multiselect-action-btn"
+                                onClick={() => clearFilter(col.accessor)}
+                              >
+                                Clear All
+                              </button>
+                              <button
+                                className="multiselect-action-btn"
+                                onClick={() => {
+                                  setMultiSelectFilters((prev) => ({
+                                    ...prev,
+                                    [col.accessor]: tenderStatusOptions
+                                      .map(([code]) => code)
+                                      .concat("(Blank)"),
+                                  }));
+                                  setCurrentPage(1);
+                                }}
+                              >
+                                Select All
+                              </button>
+                            </div>
+                            <div className="multiselect-options-list">
+                              {tenderStatusOptions.map(([code, label]) => (
+                                  <label
+                                    key={code}
+                                    className="multiselect-option-label"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        multiSelectFilters[col.accessor]?.includes(
+                                          code,
+                                        ) ?? false
+                                      }
+                                      onChange={() =>
+                                        toggleFilter(col.accessor, code)
+                                      }
+                                    />
+                                    <span>{label}</span>
+                                  </label>
+                                ),
+                              )}
+                              <label className="multiselect-option-label">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    multiSelectFilters[col.accessor]?.includes(
+                                      "(Blank)",
+                                    ) ?? false
+                                  }
+                                  onChange={() =>
+                                    toggleFilter(col.accessor, "(Blank)")
+                                  }
+                                />
+                                <span>(Blank)</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {col.accessor === "nextAction" && (
+                      <div
+                        className="custom-multiselect-container"
+                        ref={(el) => {
+                          dropdownRefs.current[col.accessor] = el;
+                        }}
+                      >
+                        <button
+                          className="multiselect-trigger-btn"
+                          onClick={() =>
+                            setOpenDropdown(
+                              openDropdown === col.accessor ? null : col.accessor,
+                            )
+                          }
+                        >
+                          {(!multiSelectFilters[col.accessor] ||
+                            multiSelectFilters[col.accessor].length === 0)
+                            ? `All ${col.header}`
+                            : `${multiSelectFilters[col.accessor].length} Selected`}
+                          <span
+                            className="dropdown-arrow"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            <ChevronDown size={12} />
+                          </span>
+                        </button>
+                        {openDropdown === col.accessor && (
+                          <div className="multiselect-dropdown-panel">
+                            <div className="multiselect-actions">
+                              <button
+                                className="multiselect-action-btn"
+                                onClick={() => clearFilter(col.accessor)}
+                              >
+                                Clear All
+                              </button>
+                              <button
+                                className="multiselect-action-btn"
+                                onClick={() => {
+                                  setMultiSelectFilters((prev) => ({
+                                    ...prev,
+                                    [col.accessor]: nextActionOptions
+                                      .map(([code]) => code)
+                                      .concat("(Blank)"),
+                                  }));
+                                  setCurrentPage(1);
+                                }}
+                              >
+                                Select All
+                              </button>
+                            </div>
+                            <div className="multiselect-options-list">
+                              {nextActionOptions.map(([code, label]) => (
+                                  <label
+                                    key={code}
+                                    className="multiselect-option-label"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        multiSelectFilters[col.accessor]?.includes(
+                                          code,
+                                        ) ?? false
+                                      }
+                                      onChange={() =>
+                                        toggleFilter(col.accessor, code)
+                                      }
+                                    />
+                                    <span>{label}</span>
+                                  </label>
+                                ),
+                              )}
+                              <label className="multiselect-option-label">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    multiSelectFilters[col.accessor]?.includes(
+                                      "(Blank)",
+                                    ) ?? false
+                                  }
+                                  onChange={() =>
+                                    toggleFilter(col.accessor, "(Blank)")
+                                  }
+                                />
+                                <span>(Blank)</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {!SKIP_FILTER_COLUMNS.has(col.accessor) && (
                       <div
                         className="custom-multiselect-container"
@@ -3003,7 +3342,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         )}
                       </div>
                     )}
-                    {col.accessor !== "lastDateOfSubmission" && col.accessor !== "rawMaterials" && col.accessor !== "proposedErpItemName" && col.accessor !== "remarks" && (
+                    {col.accessor !== "lastDateOfSubmission" && col.accessor !== "rawMaterials" && col.accessor !== "proposedErpItemName" && col.accessor !== "remarks" &&  (
                       <input
                         type="text"
                         className="column-search-input"
@@ -3373,36 +3712,133 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                           );
                           cellClass = "col-center";
                         } else if (col.accessor === "proposedErpItemName") {
-                          const raw: unknown = record[col.accessor as keyof EpcTenderRecord];
-                          let parts: string[] = [];
-                          if (raw != null && raw !== "") {
-                            if (typeof raw === "object" && !(raw instanceof Date)) {
-                              if (Array.isArray(raw)) {
-                                parts = (raw as any[]).map(String);
-                              } else {
-                                parts = Object.keys(raw as Record<string, unknown>).map(String);
-                              }
-                            } else if (typeof raw === "string") {
-                              try {
-                                const parsed = JSON.parse(raw);
-                                if (Array.isArray(parsed)) {
-                                  parts = parsed.map(String);
-                                } else if (typeof parsed === "object" && parsed !== null) {
-                                  parts = Object.keys(parsed).map(String);
-                                }
-                              } catch {
-                                parts = raw.split(/\n+/).map(p => p.trim()).filter(Boolean);
+                          // Prefer full CostingSheetDetails rows (with id/bomType/bomCode) for card rendering; fallback to string parts
+                          type CostingRow = { id: number; proposedErpItemName: string | null; bomType?: string | null; bomCode?: string | null };
+                          let costingRows: CostingRow[] = [];
+                          try {
+                            const rawCosting = (record as any).costingDetails as string | undefined;
+                            if (rawCosting) {
+                              const parsed = JSON.parse(rawCosting);
+                              if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "object") {
+                                costingRows = parsed
+                                  .map((c: any) => ({
+                                    id: Number(c.id),
+                                    proposedErpItemName: c.proposedErpItemName ?? null,
+                                    bomType: c.bomType ?? null,
+                                    bomCode: c.bomCode ?? null,
+                                  }))
+                                  .filter((r: CostingRow) => r.proposedErpItemName && String(r.proposedErpItemName).trim() !== "");
                               }
                             }
+                          } catch {}
+                          // fallback to legacy string list if costingDetails missing
+                          if (costingRows.length === 0) {
+                            const raw: unknown = record[col.accessor as keyof EpcTenderRecord];
+                            let parts: string[] = [];
+                            if (raw != null && raw !== "") {
+                              if (typeof raw === "object" && !(raw instanceof Date)) {
+                                if (Array.isArray(raw)) parts = (raw as any[]).map(String);
+                                else parts = Object.keys(raw as Record<string, unknown>).map(String);
+                              } else if (typeof raw === "string") {
+                                try {
+                                  const parsed = JSON.parse(raw);
+                                  if (Array.isArray(parsed)) parts = parsed.map(String);
+                                  else if (typeof parsed === "object" && parsed !== null) parts = Object.keys(parsed as Record<string, unknown>).map(String);
+                                } catch {
+                                  parts = raw.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+                                }
+                              }
+                            }
+                            costingRows = parts.map((p, idx) => ({ id: -idx - 1, proposedErpItemName: p, bomType: null, bomCode: null }));
                           }
-                          cellContent = parts.length > 0 ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                              {parts.map((part, i) => <div key={i} style={{ background: "#f1f3f4", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", border: "1px solid #dadce0", width: "fit-content", color: "#202124" }}>{part}</div>)}
-                            </div>
-                          ) : (
-                            <span>-</span>
-                          );
-                          cellClass = "col-left";
+                          if (costingRows.length === 0) {
+                            cellContent = <span>-</span>;
+                            cellClass = "col-left";
+                          } else {
+                            cellContent = (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 220 }}>
+                                {costingRows.map((row) => {
+                                  const costingId = row.id;
+                                  const isPlaceholder = costingId < 0;
+                                  const itemName = String(row.proposedErpItemName ?? "").trim();
+                                  const override = costingOverrides[String(costingId)] ?? {};
+                                  const displayBomType = (override.bomType !== undefined ? override.bomType : row.bomType) ?? "";
+                                  const displayBomCode = (override.bomCode !== undefined ? override.bomCode : row.bomCode) ?? "";
+                                  const bomOptions: Array<{ bomType: string | null; bomId: string }> = (bomByItemName[itemName] ?? bomByItemName[itemName?.trim()] ?? []) as any;
+                                  // also fallback case-insensitive lookup
+                                  let opts = bomOptions;
+                                  if ((!opts || opts.length === 0) && itemName) {
+                                    const lower = itemName.toLowerCase();
+                                    for (const [k, v] of Object.entries(bomByItemName as Record<string, any[]>)) {
+                                      if (k.toLowerCase() === lower) { opts = v as any; break; }
+                                    }
+                                  }
+                                  const typeOptions = Array.from(new Set(opts.map((o) => (o.bomType ?? "").trim()).filter(Boolean))).sort();
+                                  const filteredBomIds = displayBomType
+                                    ? opts.filter((o) => (o.bomType ?? "").trim() === displayBomType).map((o) => o.bomId)
+                                    : opts.map((o) => o.bomId);
+                                  const uniqueBomIds = Array.from(new Set(filteredBomIds.filter(Boolean))).sort();
+                                  const isSavingType = !!savingBom[`${costingId}-bomType`];
+                                  const isSavingCode = !!savingBom[`${costingId}-bomCode`];
+                                  return (
+                                    <div key={costingId} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: "6px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
+                                      <div style={{ fontSize: 11, fontWeight: 600, color: "#1e293b", lineHeight: "1.3", wordBreak: "break-word" }}>{itemName || "-"}</div>
+                                      <div style={{ display: "flex", gap: 6 }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 9, color: "#64748b", marginBottom: 2, fontWeight: 600 }}>BOM Type</div>
+                                          <Select
+                                            value={displayBomType}
+                                            disabled={isPlaceholder || utilityLoading || isSavingType}
+                                            onValueChange={(v) => {
+                                              if (isPlaceholder) return;
+                                              handleCostingBomUpdate(costingId, "bomType", v ?? "", itemName, row.bomType ?? null, row.bomCode ?? null);
+                                            }}
+                                          >
+                                            <SelectTrigger size="sm" className="w-full h-7 text-[11px] bg-white">
+                                              <SelectValue placeholder={utilityLoading ? "Loading..." : "Select type"} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="">(Blank)</SelectItem>
+                                              {typeOptions.map((t) => (
+                                                <SelectItem key={t} value={t}>{t || "(Blank)"}</SelectItem>
+                                              ))}
+                                              {typeOptions.length === 0 && !utilityLoading && <SelectItem value="__no_options" disabled>No options</SelectItem>}
+                                            </SelectContent>
+                                          </Select>
+                                          {isSavingType && <span style={{ fontSize: 9, color: "#64748b" }}>Saving...</span>}
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 9, color: "#64748b", marginBottom: 2, fontWeight: 600 }}>BOM Code</div>
+                                          <Select
+                                            value={displayBomCode}
+                                            disabled={isPlaceholder || isSavingCode || (!displayBomType && uniqueBomIds.length === 0)}
+                                            onValueChange={(v) => {
+                                              if (isPlaceholder) return;
+                                              handleCostingBomUpdate(costingId, "bomCode", v ?? "", itemName, row.bomType ?? null, row.bomCode ?? null);
+                                            }}
+                                          >
+                                            <SelectTrigger size="sm" className="w-full h-7 text-[11px] bg-white">
+                                              <SelectValue placeholder={displayBomType ? "Select code" : "Select type first"} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="">(Blank)</SelectItem>
+                                              {uniqueBomIds.map((code) => (
+                                                <SelectItem key={code} value={code}>{code}</SelectItem>
+                                              ))}
+                                              {uniqueBomIds.length === 0 && <SelectItem value="__no_options" disabled>{displayBomType ? "No codes for type" : "No codes"}</SelectItem>}
+                                            </SelectContent>
+                                          </Select>
+                                          {isSavingCode && <span style={{ fontSize: 9, color: "#64748b" }}>Saving...</span>}
+                                        </div>
+                                      </div>
+                                      {isPlaceholder && <span style={{ fontSize: 9, color: "#ef4444" }}>No CostingSheetDetails ID — cannot save</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                            cellClass = "col-left";
+                          }
                         } else if (col.accessor === "proposedErpQuantity") {
                           const raw: unknown = record[col.accessor as keyof EpcTenderRecord];
                           let parts: string[] = [];
@@ -3562,7 +3998,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               ? raStartDate
                               : null;
                           const raStartDisplay = raStartValid
-                            ? format(raStartValid, "dd-MM-yyyy HH:mm")
+                            ? formatDateTimeIST(raStartValid)
                             : "";
                           const raEndDate = record.reverseAuctionEndDate;
                           const raEndValid =
@@ -3570,7 +4006,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               ? raEndDate
                               : null;
                           const raEndDisplay = raEndValid
-                            ? format(raEndValid, "dd-MM-yyyy HH:mm")
+                            ? formatDateTimeIST(raEndValid)
                             : "";
 
                           const saveRaDate = (
@@ -3909,9 +4345,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               dateVal &&
                               !isNaN(dateVal.getTime())
                             ) {
-                              const today = new Date();
-                              today.setHours(0, 0, 0, 0);
-                              if (dateVal.getTime() < today.getTime()) {
+                              if (isBeforeTodayIST(dateVal)) {
                                 cellContent = (
                                   <div
                                     className="flex flex-col items-center gap-1"

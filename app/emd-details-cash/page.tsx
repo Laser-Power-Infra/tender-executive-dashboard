@@ -225,6 +225,22 @@ export default function EmdDetailsCashPage() {
         defaultWidth: 220,
         filter: { type: "text", placeholder: "Search remarks" },
       },
+      {
+        header: "Certificate By Party",
+        accessor: "certificateByParty",
+        defaultWidth: 200,
+        filter: { type: "select", placeholder: "Filter certificate", searchable: true },
+        sortable: true,
+        searchable: true,
+      },
+      {
+        header: "Certificate By Utility",
+        accessor: "certificateByUtility",
+        defaultWidth: 200,
+        filter: { type: "select", placeholder: "Filter certificate", searchable: true },
+        sortable: true,
+        searchable: true,
+      },
     ],
     []
   );

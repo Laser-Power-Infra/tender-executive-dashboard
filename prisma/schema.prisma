@@ -24,6 +24,7 @@ enum NextAction {
   REVERSE_AUCTION_PENDING
   COUNTER_OFFER_YES
   COUNTER_OFFER_NO
+  BID_VALIDITY_NOT_ACCEPTED
 }
 
 enum TenderType {
@@ -637,6 +638,71 @@ model UtilityMapping {
   @@map("utility_mappings")
 }
 
+
+
+model CostingSheetDetails {
+  id Int @id @default(autoincrement())
+
+  itemCode            String
+  itemSchedule        String?
+  proposedErpItemName String?
+  proposedErpQuantity String?
+  priceOfFullQuantity String?
+  cva                 String?
+  location            String?
+  bomType             String?
+  bomCode             String?
+
+  tenderMergedId Int?
+  TenderMerged   TenderMerged? @relation(fields: [tenderMergedId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- TENDER FILES ----------
+model TenderFile {
+  id        Int      @id @default(autoincrement())
+  name      String
+  extension String
+  url       String
+  source    String
+  tags      String[] @default([])
+
+  tenderMergedId Int?
+  tenderMerged   TenderMerged? @relation(fields: [tenderMergedId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenderMergedId])
+  @@map("tender_files")
+}
+
+model SupplyDoc {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  saleBillNumber String
+  fileName       String
+  extension      String
+  filePath       String // raw absolute network path, encrypted at response time
+  fileSize       Int?
+  lastModified   DateTime?
+
+  @@index([saleBillNumber])
+  @@map("supply_docs")
+}
+
+model Items {
+  id           Int      @id @default(autoincrement())
+  itemcode     String   @unique
+  itemName     String
+  itemSchedule String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
 // ---------- TENDER MERGED ----------
 model TenderMerged {
   id         Int        @id @default(autoincrement())
@@ -811,66 +877,37 @@ model TenderMerged {
   @@map("tender_merged")
 }
 
-model CostingSheetDetails {
-  id Int @id @default(autoincrement())
-
-  itemCode            String
-  itemSchedule        String?
-  proposedErpItemName String?
-  proposedErpQuantity String?
-  priceOfFullQuantity String?
-  cva                 String?
-  location            String?
-
-  tenderMergedId Int?
-  TenderMerged   TenderMerged? @relation(fields: [tenderMergedId], references: [id], onDelete: Cascade)
+model EmdDetailsBG {
+  id                 String    @id @db.VarChar(100)
+  trantype           String?   
+  bankName           String?   
+  partyCode          String?   
+  partyName          String?   
+  staffName          String?   
+  bgNo               String?   
+  bgDate             String?   
+  bgAmtLocal         String?   
+  bgAmtFc            String?   
+  expiryDate         String?   
+  claimDate          String?   
+  remark             String?   
+  status             String?   
+  remarks            String?   
+  contactNo          String?   
+  contactEmailId     String?   
+  address            String?   
+  tenderNo1          String?   
+  tenderNo           String?   
+  tenderNo2          String?   
+  match              String?   
+  bgMatch            String?   
+  statusPriceAssDone String?   
+  tmNo               String?   
+  docketNo           String?   
+  lastEmailSent      String?   
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// ---------- TENDER FILES ----------
-model TenderFile {
-  id        Int      @id @default(autoincrement())
-  name      String
-  extension String
-  url       String
-  source    String
-  tags      String[] @default([])
-
-  tenderMergedId Int?
-  tenderMerged   TenderMerged? @relation(fields: [tenderMergedId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenderMergedId])
-  @@map("tender_files")
-}
-
-model SupplyDoc {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  saleBillNumber String
-  fileName       String
-  extension      String
-  filePath       String // raw absolute network path, encrypted at response time
-  fileSize       Int?
-  lastModified   DateTime?
-
-  @@index([saleBillNumber])
-  @@map("supply_docs")
-}
-
-model Items {
-  id           Int      @id @default(autoincrement())
-  itemcode     String   @unique
-  itemName     String
-  itemSchedule String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt DateTime @updatedAt 
 }
 
 model EmdDetailsCash {
@@ -897,9 +934,68 @@ model EmdDetailsCash {
   statusOfTender                   String?
   conditionsForRefund              String?
   remarks                          String?
+  certificateByParty               String?
+  certificateByUtility             String?
 
-  @@index([tenderNo])
-  @@index([tmNo])
+  // @@index([tenderNo])
+  // @@index([tmNo])
   @@index([customerName])
   @@map("emd_details_cash")
+}
+
+model Bom {
+  id                        Int      @id @default(autoincrement())
+  itemCode                  String
+  itemScheduleName          String
+  itemName                  String?
+  sheetTotalDiff            String?
+  bomType                   String?
+  bomId                     String
+  // option2                   String?
+  option2Diff               String?
+  ccvSioplas                String?
+  ccvSioplasDiff            String?
+  cuTape                    String?
+  cuTapePlusMinus           String?
+  cuTapeDiff                String?
+  alCu                      String?
+  alCuPlusMinus             String?
+  alCuDiff                  String?
+  alloy                     String?
+  alloyPlusMinus            String?
+  alloyDiff                 String?
+  armour                    String?
+  armourPlusMinus           String?
+  armourDiff                String?
+  semicon                   String?
+  semiconPlusMinus          String?
+  semiconDiff               String?
+  insulation                String?
+  insulationPlusMinus       String?
+  insulationDiff            String?
+  pvcInner                  String?
+  pvcInnerPlusMinus         String?
+  pvcInnerDiff              String?
+  pvcOuter                  String?
+  pvcOuterPlusMinus         String?
+  pvcOuterDiff              String?
+  pvcOuterInnerDiff         String?
+  filler                    String?
+  fillerPlusMinus           String?
+  fillerDiff                String?
+  polyt                     String?
+  polytPlusMinus            String?
+  polytDiff                 String?
+  rubberCottonTape          String?
+  rubberCottonTapePlusMinus String?
+  rubberCottonTapeDiff      String?
+  spclConstruction          String?
+  spclConstructionPlusMinus String?
+  spclConstructionDiff      String?
+  finalOutput               String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@unique([itemCode, bomId])
+  @@index([itemName])
 }

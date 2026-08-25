@@ -17,10 +17,28 @@ function ordinalSuffix(n: number): string {
 
 export function formatDate(dateStr: string): string {
   if (!dateStr) return ""
-  const date = new Date(dateStr + "T00:00:00")
-  if (isNaN(date.getTime())) return dateStr
-  const day = date.getDate()
-  const month = date.toLocaleDateString("en-GB", { month: "short" })
-  const year = date.getFullYear()
-  return `${day}${ordinalSuffix(day)} ${month}, ${year}`
+  // Interpret dateStr as IST calendar date (YYYY-MM-DD) and format in IST
+  // Avoid local timezone shift: use IST-specific formatting
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) {
+    // Try treating as date-only string in IST (append IST midnight)
+    // Fallback to raw
+    return dateStr
+  }
+  const key = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d)
+  // key is YYYY-MM-DD in IST, now format as ordinal
+  const [y, m, dayStr] = key.split("-")
+  const dayNum = Number(dayStr)
+  // Get month short in IST
+  const monthShort = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    month: "short",
+  }).format(d)
+  const year = Number(y)
+  return `${dayNum}${ordinalSuffix(dayNum)} ${monthShort}, ${year}`
 }

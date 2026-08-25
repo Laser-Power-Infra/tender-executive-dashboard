@@ -70,14 +70,60 @@ function pivotTwoDigitYear(date: Date): Date {
   return date;
 }
 
+const IST_OFFSET_MS = 5.5 * 3600 * 1000; // 19800000
+
+function toISTMidnightFromLocal(localDate: Date): Date {
+  const y = localDate.getFullYear();
+  const m = localDate.getMonth();
+  const d = localDate.getDate();
+  return new Date(Date.UTC(y, m, d) - IST_OFFSET_MS);
+}
+
+function toISTMidnightFromUTC(utcDate: Date): Date {
+  const y = utcDate.getUTCFullYear();
+  const m = utcDate.getUTCMonth();
+  const d = utcDate.getUTCDate();
+  return new Date(Date.UTC(y, m, d) - IST_OFFSET_MS);
+}
+
+function isDateOnlyString(str: string): boolean {
+  return !str.includes(":") && !/[ap]m/i.test(str);
+}
+
 export function parseDate(value: unknown): Date | null {
   if (value == null) return null;
 
   if (value instanceof Date && !isNaN(value.getTime())) {
+    // Snap 18:29:50 drift to 18:30:00
+    if (
+      value.getUTCHours() === 18 &&
+      value.getUTCMinutes() === 29 &&
+      value.getUTCSeconds() === 50
+    ) {
+      const y = value.getUTCFullYear();
+      const m = value.getUTCMonth();
+      const d = value.getUTCDate();
+      return new Date(Date.UTC(y, m, d, 18, 30, 0, 0));
+    }
+    // Date-only (midnight) → store as IST midnight
+    if (
+      value.getHours() === 0 &&
+      value.getMinutes() === 0 &&
+      value.getSeconds() === 0 &&
+      value.getMilliseconds() === 0
+    ) {
+      return toISTMidnightFromLocal(value);
+    }
     return value;
   }
 
   if (typeof value === "number") {
+    const intPart = Math.round(value);
+    const isDateOnly = Math.abs(value - intPart) < 0.00012; // ~10 sec tolerance
+    if (isDateOnly) {
+      const utcMidnight = new Date(Math.round((intPart - 25569) * 86400 * 1000));
+      if (!isNaN(utcMidnight.getTime())) return toISTMidnightFromUTC(utcMidnight);
+    }
     const date = new Date(Math.round((value - 25569) * 86400 * 1000));
     if (!isNaN(date.getTime())) return date;
   }
@@ -90,14 +136,22 @@ export function parseDate(value: unknown): Date | null {
   for (const fmt of DATE_FORMATS) {
     try {
       const parsed = parse(str, fmt, reference);
-      if (!isNaN(parsed.getTime())) return pivotTwoDigitYear(parsed);
+      if (!isNaN(parsed.getTime())) {
+        const fixed = pivotTwoDigitYear(parsed);
+        if (isDateOnlyString(str)) return toISTMidnightFromLocal(fixed);
+        return fixed;
+      }
     } catch {
       continue;
     }
   }
 
   const native = /^\d{4}-\d{2}-\d{2}([T ]|$)/.test(str) ? new Date(str) : new Date(NaN);
-  if (!isNaN(native.getTime())) return pivotTwoDigitYear(native);
+  if (!isNaN(native.getTime())) {
+    const fixed = pivotTwoDigitYear(native);
+    if (isDateOnlyString(str)) return toISTMidnightFromLocal(fixed);
+    return fixed;
+  }
 
   return null;
 }

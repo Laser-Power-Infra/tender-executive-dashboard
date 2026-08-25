@@ -1,42 +1,47 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export interface EmdDetailsCashRecord {
-  id: number;
+export interface EmdDetailsBgRecord {
+  id: string;
+  trantype: string | null;
+  bankName: string | null;
+  partyCode: string | null;
+  partyName: string | null;
+  staffName: string | null;
+  bgNo: string | null;
+  bgDate: string | null;
+  bgAmtLocal: string | null;
+  bgAmtFc: string | null;
+  expiryDate: string | null;
+  claimDate: string | null;
+  remark: string | null;
+  status: string | null;
+  remarks: string | null;
+  contactNo: string | null;
+  contactEmailId: string | null;
+  address: string | null;
+  tenderNo1: string | null;
+  tenderNo: string | null;
+  tenderNo2: string | null;
+  match: string | null;
+  bgMatch: string | null;
+  statusPriceAssDone: string | null;
+  tmNo: string | null;
+  docketNo: string | null;
+  lastEmailSent: string | null;
   createdAt: string;
   updatedAt: string;
-  customerName: string | null;
-  issueDt: string | null;
-  emdAmt: string | null;
-  permanent: string | null;
-  tenderNo: string | null;
-  chDdNo: string | null;
-  acHolder: string | null;
-  statusAsPerSujibDaAndOther: string | null;
-  canBeRefunded: string | null;
-  tmNo: string | null;
-  rank: string | null;
-  poIssueStatus: string | null;
-  aocAwardOfContractStatus: string | null;
-  refundableOrNot: string | null;
-  statusRefundedPending: string | null;
-  expectedRefundDateOrRefundedDate: string | null;
-  statusOfTender: string | null;
-  conditionsForRefund: string | null;
-  remarks: string | null;
-  certificateByParty: string | null;
-  certificateByUtility: string | null;
 }
 
-interface UseEmdDetailsCashResult {
-  data: EmdDetailsCashRecord[];
+interface UseEmdDetailsBgResult {
+  data: EmdDetailsBgRecord[];
   loading: boolean;
   error: Error | null;
   refresh: () => Promise<void>;
 }
 
-export const useEmdDetailsCash = (): UseEmdDetailsCashResult => {
-  const [data, setData] = useState<EmdDetailsCashRecord[]>([]);
+export const useEmdDetailsBg = (): UseEmdDetailsBgResult => {
+  const [data, setData] = useState<EmdDetailsBgRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
   const hasData = useRef(false);
@@ -53,18 +58,18 @@ export const useEmdDetailsCash = (): UseEmdDetailsCashResult => {
     setError(null);
 
     try {
-      const response = await fetch(`/api/emd-details-cash`, { signal: controller.signal });
+      const response = await fetch(`/api/emd-details-bg`, { signal: controller.signal });
       const json = await response.json();
       if (!response.ok || !json.success) {
         const msg = json.error || `Server error (${response.status})`;
         throw new Error(msg);
       }
-      const records: EmdDetailsCashRecord[] = json.data || [];
+      const records: EmdDetailsBgRecord[] = json.data || [];
       hasData.current = true;
       setData(records);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setError(err instanceof Error ? err : new Error("Unexpected error fetching EMD cash data"));
+      setError(err instanceof Error ? err : new Error("Unexpected error fetching EMD BG data"));
     } finally {
       setLoading(false);
     }
@@ -82,4 +87,4 @@ export const useEmdDetailsCash = (): UseEmdDetailsCashResult => {
   return { data, loading, error, refresh };
 };
 
-export default useEmdDetailsCash;
+export default useEmdDetailsBg;

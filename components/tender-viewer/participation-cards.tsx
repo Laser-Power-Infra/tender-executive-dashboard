@@ -13,6 +13,7 @@ import {
 } from "@/lib/slices/filtersSlice";
 import { resetSelectedDateRange } from "@/lib/slices/filesSlice";
 import { CheckCircle2, X } from "lucide-react";
+import { toISTDateKey } from "@/lib/format-ist";
 import { dedupeByDocketNo } from "@/lib/docket";
 
 export function isParticipatedRow(row: Record<string, unknown>): boolean {
@@ -133,10 +134,10 @@ export function isNotParticipatedWithUpcomingDeadline(
   if (row.participated === "true" || row.participated === "false") return false;
   const deadline = String(row.deadline ?? "");
   if (!deadline) return false;
-  const date = new Date(deadline);
-  if (isNaN(date.getTime())) return false;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return date >= today;
+  const key = toISTDateKey(deadline);
+  const todayKey = toISTDateKey(now);
+  if (!key || !todayKey) return false;
+  return key >= todayKey;
 }
 
 export function deadlineMatchesRange(
@@ -147,18 +148,14 @@ export function deadlineMatchesRange(
   if (!from && !to) return true;
   const deadline = String(row.deadline ?? "");
   if (!deadline) return false;
-  const date = new Date(deadline);
-  if (isNaN(date.getTime())) return false;
-  if (from) {
-    const start = new Date(from);
-    start.setHours(0, 0, 0, 0);
-    if (date < start) return false;
-  }
-  if (to) {
-    const end = new Date(to);
-    end.setHours(23, 59, 59, 999);
-    if (date > end) return false;
-  }
+  const key = toISTDateKey(deadline);
+  if (!key) return false;
+  const fromKey = from ? toISTDateKey(from) : null;
+  const toKey = to ? toISTDateKey(to) : null;
+  const effectiveFrom = fromKey ?? (from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : null);
+  const effectiveTo = toKey ?? (to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : null);
+  if (effectiveFrom && key < effectiveFrom) return false;
+  if (effectiveTo && key > effectiveTo) return false;
   return true;
 }
 
