@@ -16,7 +16,10 @@ export const makeStore = () =>
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
+        // Both checks walk the entire state tree on every dispatch. With ~34k
+        // tender rows that is millions of nodes per action in development.
         serializableCheck: false,
+        immutableCheck: false,
       }),
   });
 

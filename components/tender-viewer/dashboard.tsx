@@ -1996,9 +1996,9 @@ export default function Dashboard() {
             </div>
           )}
 
-          {loadingTenders && !tenderData && <DashboardSkeleton />}
+          {loadingTenders && <DashboardSkeleton />}
 
-          {tenderData && (
+          {!loadingTenders && tenderData && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <OptimizedTenderTable
                 onFilteredRowsChange={handleFilteredRowsChange}

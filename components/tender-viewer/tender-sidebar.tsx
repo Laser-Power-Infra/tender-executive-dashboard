@@ -46,27 +46,51 @@ export default function TenderSidebar({
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadDialogMode, setUploadDialogMode] = useState<"parse" | "result">("parse");
 
+  // Single pass. This previously ran four full .filter() scans plus one more
+  // scan per association — O(associations x rows) with a split/filter chain
+  // allocated per row per association.
   const analytics = useMemo(() => {
     if (rows.length === 0) return null;
+
+    let aiYes = 0;
+    let aiYesUnallocated = 0;
+    let apmYesAllocated = 0;
+    let apmYesUnallocated = 0;
+    const countsById = new Map<string, number>();
+    const seenIds = new Set<string>();
+
+    for (const r of rows) {
+      const assigned = String(r.assignedTo ?? "");
+      const hasAssignee = !!r.assignedTo;
+
+      if (r.aiRelevanceValid === "true") {
+        aiYes++;
+        if (!hasAssignee) aiYesUnallocated++;
+      }
+      if (r.apm === "YES") {
+        if (hasAssignee) apmYesAllocated++;
+        else apmYesUnallocated++;
+      }
+      if (assigned) {
+        seenIds.clear();
+        for (const id of assigned.split(",")) {
+          // Dedupe within the row — the old includes() check counted a row once
+          // even if it listed the same association twice. Note: no trim(), to
+          // match the previous split(",").filter(Boolean) behaviour exactly.
+          if (!id || seenIds.has(id)) continue;
+          seenIds.add(id);
+          countsById.set(id, (countsById.get(id) ?? 0) + 1);
+        }
+      }
+    }
+
     return {
-      aiYes: rows.filter((r) => r.aiRelevanceValid === "true").length,
-      aiYesUnallocated: rows.filter(
-        (r) => r.aiRelevanceValid === "true" && !r.assignedTo,
-      ).length,
-      apmYesAllocated: rows.filter((r) => r.apm === "YES" && r.assignedTo)
-        .length,
-      apmYesUnallocated: rows.filter((r) => r.apm === "YES" && !r.assignedTo)
-        .length,
+      aiYes,
+      aiYesUnallocated,
+      apmYesAllocated,
+      apmYesUnallocated,
       personCounts: associations
-        .map((a) => ({
-          ...a,
-          count: rows.filter((r) => {
-            const assignedIds = String(r.assignedTo ?? "")
-              .split(",")
-              .filter(Boolean);
-            return assignedIds.includes(String(a.id));
-          }).length,
-        }))
+        .map((a) => ({ ...a, count: countsById.get(String(a.id)) ?? 0 }))
         .filter((p) => p.count > 0),
     };
   }, [rows, associations]);
