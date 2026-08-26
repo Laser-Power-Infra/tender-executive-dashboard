@@ -1,19 +1,21 @@
 "use client";
 
-import { BadgeCheck, Clock, ShieldCheck, Users, IndianRupee, Hash, AlertTriangle } from "lucide-react";
+import { BadgeCheck, Clock, ShieldCheck, Users, IndianRupee, Hash, AlertTriangle, Mail } from "lucide-react";
 
-export type EmdBgStatus = "ACTIVE" | "EXPIRED" | "CLAIMED" | "OTHER";
+export type EmdBgStatus = "RUNNING" | "EXPIRED" | "CLOSED" | "OTHER";
 
 export interface EmdBgStats {
   count: number;
   totalBgAmt: number;
   partyCount: number;
+  emailAvailableCount: number;
+  emailAvailablePartyCount: number;
 }
 
 const STATUS_META: Record<EmdBgStatus, { label: string; icon: React.ElementType; color: string; bg: string; border: string }> = {
-  ACTIVE: { label: "Active", icon: ShieldCheck, color: "#137333", bg: "#e6f4ea", border: "#a8d5b5" },
+  RUNNING: { label: "Running", icon: ShieldCheck, color: "#137333", bg: "#e6f4ea", border: "#a8d5b5" },
   EXPIRED: { label: "Expired", icon: Clock, color: "#b06000", bg: "#fef7e0", border: "#f5d76e" },
-  CLAIMED: { label: "Claimed", icon: BadgeCheck, color: "#1a73e8", bg: "#e8f0fe", border: "#a8c7fa" },
+  CLOSED: { label: "Closed", icon: BadgeCheck, color: "#1a73e8", bg: "#e8f0fe", border: "#a8c7fa" },
   OTHER: { label: "Other", icon: AlertTriangle, color: "#5f6368", bg: "#f1f3f4", border: "#dadce0" },
 };
 
@@ -27,11 +29,15 @@ interface Props {
   selected: EmdBgStatus | "ALL";
   onSelect: (s: EmdBgStatus | "ALL") => void;
   totalRows: number;
+  totalEmailCustomers?: number;
+  totalEmailRecords?: number;
 }
 
-export function EmdBgSidebar({ stats, selected, onSelect, totalRows }: Props) {
+export function EmdBgSidebar({ stats, selected, onSelect, totalRows, totalEmailCustomers, totalEmailRecords }: Props) {
   const allBgAmt = (Object.values(stats) as EmdBgStats[]).reduce((a, b) => a + b.totalBgAmt, 0);
-  const statuses: EmdBgStatus[] = ["ACTIVE", "EXPIRED", "CLAIMED", "OTHER"];
+  const allEmailCustomers = totalEmailCustomers ?? (Object.values(stats) as EmdBgStats[]).reduce((a, b) => a + b.emailAvailablePartyCount, 0);
+  const allEmailRecords = totalEmailRecords ?? (Object.values(stats) as EmdBgStats[]).reduce((a, b) => a + b.emailAvailableCount, 0);
+  const statuses: EmdBgStatus[] = ["RUNNING", "EXPIRED", "CLOSED", "OTHER"];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -57,6 +63,10 @@ export function EmdBgSidebar({ stats, selected, onSelect, totalRows }: Props) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: selected === "ALL" ? "#5f6368" : "rgba(255,255,255,0.6)" }}>
             <IndianRupee size={12} /> Total BG Amt: <strong style={{ color: selected === "ALL" ? "#0a2540" : "#fff" }}>{formatCurrency(allBgAmt)}</strong>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: selected === "ALL" ? "#5f6368" : "rgba(255,255,255,0.6)" }}>
+            <Mail size={12} /> Email Available: <strong style={{ color: selected === "ALL" ? "#0a2540" : "#fff" }}>{allEmailRecords}</strong>
+            <span style={{ opacity: 0.7 }}>({allEmailCustomers} customers)</span>
           </div>
         </div>
       </button>
@@ -100,6 +110,10 @@ export function EmdBgSidebar({ stats, selected, onSelect, totalRows }: Props) {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "11px" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", color: isSelected ? "#5f6368" : "rgba(255,255,255,0.6)" }}><Hash size={12} /> Records</span>
                 <strong style={{ color: isSelected ? "#0a2540" : "#fff", fontSize: "12px" }}>{s.count}</strong>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "11px" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", color: isSelected ? "#5f6368" : "rgba(255,255,255,0.6)" }}><Mail size={12} /> Email Available</span>
+                <strong style={{ color: isSelected ? "#0a2540" : "#fff", fontSize: "12px" }}>{s.emailAvailableCount} <span style={{ fontWeight: 400, opacity: 0.7, fontSize: "10px" }}>({s.emailAvailablePartyCount} cust)</span></strong>
               </div>
             </div>
           </button>

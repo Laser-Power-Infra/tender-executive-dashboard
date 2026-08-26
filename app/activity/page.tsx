@@ -137,7 +137,7 @@ export default function ActivityPage() {
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
           <Input
-            placeholder="Search by user name or email..."
+            placeholder="Search by user, email or reference no..."
             className="pl-8 h-8"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}

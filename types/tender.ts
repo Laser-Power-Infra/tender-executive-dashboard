@@ -81,6 +81,7 @@ export interface EpcTenderRecord {
   fillerPrice?: number | null;
   proposedErpItemName?: string;
   proposedErpQuantity?: string;
+  typetest?: string | null;
   rawMaterials?: string;
   statusCategory?: StatusCategory;
   itemCategory?: string | null;

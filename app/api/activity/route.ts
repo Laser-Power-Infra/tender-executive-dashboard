@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
       where.OR = [
         { userName: { contains: userFilter, mode: "insensitive" } },
         { userEmail: { contains: userFilter, mode: "insensitive" } },
+        { referenceNo: { contains: userFilter, mode: "insensitive" } },
       ]
     }
     if (tableFilter) {

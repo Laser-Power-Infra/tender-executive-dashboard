@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useCallback } from "react";
+import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { useEmdDetailsBg, EmdDetailsBgRecord } from "@/hooks/useEmdDetailsBg";
 import { EmdBgSidebar, EmdBgStatus, EmdBgStats } from "@/components/emd-bg/EmdBgSidebar";
-import { RefreshCw, Eraser, Search, Download, FileSpreadsheet, ChevronUp, ChevronDown, RotateCcw, X, Mail, Loader2, Check } from "lucide-react";
+import { RefreshCw, Eraser, Search, Download, FileSpreadsheet, ChevronUp, ChevronDown, RotateCcw, X, Mail, Loader2, Check, Eye } from "lucide-react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
 import { EmdBgEmailDialog } from "@/components/emd/EmdBgEmailDialog";
+import { EmailDraftDialog } from "@/components/emd/EmailDraftDialog";
 import { formatDateTimeIST } from "@/lib/format-ist";
 import "@/app/SupplyHistory.css";
 import "@/components/TenderTable.css";
@@ -16,8 +17,8 @@ function normalizeStatus(v: string | null | undefined): EmdBgStatus {
   if (!v) return "OTHER";
   const u = v.trim().toUpperCase();
   if (u.includes("EXPIRED") || u === "EXPIRE") return "EXPIRED";
-  if (u.includes("CLAIM")) return "CLAIMED";
-  if (u.includes("ACTIVE") || u.includes("VALID") || u.includes("LIVE") || u === "OK" || u === "APPROVED") return "ACTIVE";
+  if (u.includes("CLOSED") || u === "CLOSE" || u === "CLOSED ") return "CLOSED";
+  if (u.includes("RUNNING")) return "RUNNING";
   return "OTHER";
 }
 
@@ -82,6 +83,8 @@ const BG_COLUMNS: BgColumn[] = [
   { header: "Action", accessor: "action", defaultWidth: 140, align: "center", sortable: false },
 ];
 
+const SKIP_FILTER_COLUMNS_BG = new Set<string>(["action", "emailDraft"]);
+
 export default function EmdDetailsBgPage() {
   const { data, loading, error, refresh } = useEmdDetailsBg();
   const [selectedStatus, setSelectedStatus] = useState<EmdBgStatus | "ALL">("ALL");
@@ -99,12 +102,16 @@ export default function EmdDetailsBgPage() {
     return m;
   });
 
+  // Multiselect dropdown filters (optimized for 34k)
+  const [multiSelectFilters, setMultiSelectFilters] = useState<Record<string, string[]>>({});
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   const [localReasonMap, setLocalReasonMap] = useState<Record<string, string | null>>({});
   const [localContactEmailMap, setLocalContactEmailMap] = useState<Record<string, string | null>>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [updatingContactEmailId, setUpdatingContactEmailId] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
-  const [reasonFilter, setReasonFilter] = useState<string>("");
   const [editingContactEmailId, setEditingContactEmailId] = useState<string | null>(null);
   const [draftContactEmail, setDraftContactEmail] = useState<string>("");
 
@@ -162,20 +169,6 @@ export default function EmdDetailsBgPage() {
     return offsets;
   }, [columnWidths]);
 
-  const sidebarStats: Record<EmdBgStatus, EmdBgStats> = useMemo(() => {
-    const init = (): EmdBgStats => ({ count: 0, totalBgAmt: 0, partyCount: 0 });
-    const map: Record<EmdBgStatus, EmdBgStats> = { ACTIVE: init(), EXPIRED: init(), CLAIMED: init(), OTHER: init() };
-    const partySets: Record<EmdBgStatus, Set<string>> = { ACTIVE: new Set(), EXPIRED: new Set(), CLAIMED: new Set(), OTHER: new Set() } as any;
-    for (const r of data) {
-      const k = normalizeStatus(r.status);
-      map[k].count += 1;
-      map[k].totalBgAmt += parseAmt(r.bgAmtLocal);
-      if (r.partyName) partySets[k].add(r.partyName.trim().toLowerCase());
-    }
-    for (const k of Object.keys(map) as EmdBgStatus[]) map[k].partyCount = partySets[k].size;
-    return map;
-  }, [data]);
-
   const mergedData = useMemo(() => {
     return data.map((r) => {
       let n = r;
@@ -184,6 +177,46 @@ export default function EmdDetailsBgPage() {
       return n;
     });
   }, [data, localReasonMap, localContactEmailMap]);
+
+  const sidebarStats: Record<EmdBgStatus, EmdBgStats> = useMemo(() => {
+    const init = (): EmdBgStats => ({ count: 0, totalBgAmt: 0, partyCount: 0, emailAvailableCount: 0, emailAvailablePartyCount: 0 });
+    const map: Record<EmdBgStatus, EmdBgStats> = { RUNNING: init(), EXPIRED: init(), CLOSED: init(), OTHER: init() };
+    const partySets: Record<EmdBgStatus, Set<string>> = { RUNNING: new Set(), EXPIRED: new Set(), CLOSED: new Set(), OTHER: new Set() } as any;
+    const emailPartySets: Record<EmdBgStatus, Set<string>> = { RUNNING: new Set(), EXPIRED: new Set(), CLOSED: new Set(), OTHER: new Set() } as any;
+    const source = mergedData.length ? mergedData : data;
+    for (const r of source) {
+      const k = normalizeStatus(r.status);
+      map[k].count += 1;
+      map[k].totalBgAmt += parseAmt(r.bgAmtLocal);
+      if (r.partyName) partySets[k].add(r.partyName.trim().toLowerCase());
+      const email = (r as any).contactEmailId;
+      if (email && String(email).trim() !== "") {
+        map[k].emailAvailableCount += 1;
+        if (r.partyName) emailPartySets[k].add(r.partyName.trim().toLowerCase());
+        else emailPartySets[k].add(String(email).trim().toLowerCase());
+      }
+    }
+    for (const k of Object.keys(map) as EmdBgStatus[]) {
+      map[k].partyCount = partySets[k].size;
+      map[k].emailAvailablePartyCount = emailPartySets[k].size;
+    }
+    return map;
+  }, [data, mergedData]);
+
+  const totalEmailStats = useMemo(() => {
+    const source = mergedData.length ? mergedData : data;
+    const set = new Set<string>();
+    let records = 0;
+    for (const r of source) {
+      const email = (r as any).contactEmailId;
+      if (email && String(email).trim() !== "") {
+        records += 1;
+        if (r.partyName) set.add(r.partyName.trim().toLowerCase());
+        else set.add(String(email).trim().toLowerCase());
+      }
+    }
+    return { customers: set.size, records };
+  }, [data, mergedData]);
 
   const statusFiltered = useMemo(() => {
     if (selectedStatus === "ALL") return mergedData;
@@ -246,6 +279,9 @@ export default function EmdDetailsBgPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogRow, setDialogRow] = useState<EmdDetailsBgRecord | null>(null);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftHtml, setDraftHtml] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
 
   const handleSendEmail = useCallback(async (row: EmdDetailsBgRecord) => {
     if (!row.reason) {
@@ -254,6 +290,12 @@ export default function EmdDetailsBgPage() {
     }
     setDialogRow(row);
     setDialogOpen(true);
+  }, []);
+
+  const handleViewDraft = useCallback((row: EmdDetailsBgRecord) => {
+    setDraftHtml(row.emailDraft ?? null);
+    setDraftTitle(row.bgNo || row.tenderNo || row.partyName || row.id.slice(0, 8));
+    setDraftOpen(true);
   }, []);
 
   const handleDialogConfirm = useCallback(async (payload: { to: string; subject: string; body: string; html: string }) => {
@@ -278,9 +320,44 @@ export default function EmdDetailsBgPage() {
     }
   }, [dialogRow, refresh]);
 
-  const processedRecords = useMemo(() => {
-    let result = [...statusFiltered];
+  // ---- Multiselect helpers (TenderTable optimized pattern) ----
+  const toggleFilter = useCallback((accessor: string, value: string) => {
+    setMultiSelectFilters((prev) => {
+      const cur = prev[accessor] ?? [];
+      const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+      return { ...prev, [accessor]: next };
+    });
+    setCurrentPage(1);
+  }, []);
 
+  const clearFilter = useCallback((accessor: string) => {
+    setMultiSelectFilters((prev) => {
+      const nxt = { ...prev };
+      delete nxt[accessor];
+      return nxt;
+    });
+    setCurrentPage(1);
+  }, []);
+
+  const selectAllFilter = useCallback((accessor: string, allValues: string[]) => {
+    const all = [...allValues, "(Blank)"];
+    setMultiSelectFilters((prev) => ({ ...prev, [accessor]: all }));
+    setCurrentPage(1);
+  }, []);
+
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handler = (e: MouseEvent) => {
+      const el = dropdownRefs.current[openDropdown];
+      if (el && !el.contains(e.target as Node)) setOpenDropdown(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openDropdown]);
+
+  // ---- Optimized filtering pipeline (base + column predicates + getFilteredRecordsExcept) ----
+  const baseStageFiltered = useMemo(() => {
+    let result: EmdDetailsBgRecord[] = statusFiltered;
     if (globalSearch.trim() !== "") {
       const q = globalSearch.toLowerCase().trim();
       result = result.filter((r) =>
@@ -292,28 +369,68 @@ export default function EmdDetailsBgPage() {
         })
       );
     }
+    return result;
+  }, [statusFiltered, globalSearch]);
 
+  type BgPredicate = { key: string; test: (r: EmdDetailsBgRecord) => boolean };
+  const columnPredicates = useMemo<BgPredicate[]>(() => {
+    const preds: BgPredicate[] = [];
+    for (const [accessor, selected] of Object.entries(multiSelectFilters)) {
+      if (selected.length === 0) continue;
+      preds.push({
+        key: accessor,
+        test: (r) => {
+          const cellStr = String((r as any)[accessor as keyof EmdDetailsBgRecord] ?? "");
+          if (!cellStr.trim()) return selected.includes("(Blank)");
+          return selected.includes(cellStr);
+        },
+      });
+    }
     for (const [accessor, searchVal] of Object.entries(columnSearchText)) {
       if (!searchVal.trim()) continue;
       const q = searchVal.toLowerCase().trim();
-      result = result.filter((r) => {
-        if (accessor === "reason" || accessor === "action") return true;
-        const v = (r as any)[accessor as keyof EmdDetailsBgRecord];
-        if (v == null) return false;
-        return String(v).toLowerCase().includes(q);
+      preds.push({
+        key: accessor,
+        test: (r) => {
+          const v = (r as any)[accessor as keyof EmdDetailsBgRecord];
+          if (v == null) return false;
+          return String(v).toLowerCase().includes(q);
+        },
       });
     }
+    return preds;
+  }, [multiSelectFilters, columnSearchText]);
 
-    if (reasonFilter) {
-      if (reasonFilter === "__blank__") {
-        result = result.filter((r) => !r.reason || String(r.reason).trim() === "");
-      } else {
-        result = result.filter((r) => r.reason === reasonFilter);
-      }
+  const getFilteredRecordsExcept = useCallback(
+    (excludeAccessor: string | null): EmdDetailsBgRecord[] => {
+      if (columnPredicates.length === 0) return baseStageFiltered;
+      return baseStageFiltered.filter((r) => {
+        for (const p of columnPredicates) {
+          if (p.key === excludeAccessor) continue;
+          if (!p.test(r)) return false;
+        }
+        return true;
+      });
+    },
+    [baseStageFiltered, columnPredicates]
+  );
+
+  const uniqueValueCache = useMemo(() => {
+    const cache: Record<string, string[]> = {};
+    if (!openDropdown || SKIP_FILTER_COLUMNS_BG.has(openDropdown)) return cache;
+    const set = new Set<string>();
+    for (const r of getFilteredRecordsExcept(openDropdown)) {
+      const v = String((r as any)[openDropdown as keyof EmdDetailsBgRecord] ?? "");
+      if (v.trim() !== "") set.add(v);
     }
+    cache[openDropdown] = Array.from(set).sort((a, b) => a.localeCompare(b));
+    return cache;
+  }, [openDropdown, getFilteredRecordsExcept]);
 
+  const processedRecords = useMemo(() => {
+    let result = getFilteredRecordsExcept(null);
     if (sortColumn) {
-      result.sort((a, b) => {
+      result = [...result].sort((a, b) => {
         const va = (a as any)[sortColumn];
         const vb = (b as any)[sortColumn];
         if (sortColumn === "bgAmtLocal" || sortColumn === "bgAmtFc") {
@@ -333,9 +450,8 @@ export default function EmdDetailsBgPage() {
         return sortDirection === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
       });
     }
-
     return result;
-  }, [statusFiltered, globalSearch, columnSearchText, reasonFilter, sortColumn, sortDirection]);
+  }, [getFilteredRecordsExcept, sortColumn, sortDirection]);
 
   const totalRecords = processedRecords.length;
   const totalPages = Math.ceil(totalRecords / rowsPerPage) || 1;
@@ -414,13 +530,10 @@ export default function EmdDetailsBgPage() {
           <span style={{ fontSize: "10px", background: "rgba(255,255,255,0.12)", padding: "2px 6px", borderRadius: "10px" }}>{data.length} rows</span>
         </div>
         <div className="supply-sidebar-body">
-          <EmdBgSidebar stats={sidebarStats} selected={selectedStatus} onSelect={setSelectedStatus} totalRows={data.length} />
+          <EmdBgSidebar stats={sidebarStats} selected={selectedStatus} onSelect={setSelectedStatus} totalRows={data.length} totalEmailCustomers={totalEmailStats.customers} totalEmailRecords={totalEmailStats.records} />
         </div>
         <div className="supply-sidebar-footer">
-          <button className="supply-refresh-sidebar-btn" onClick={refresh}>
-            <RefreshCw size={14} /> Refresh
-          </button>
-          <button className="supply-refresh-sidebar-btn" onClick={() => { setSelectedStatus("ALL"); setGlobalSearch(""); setColumnSearchText({}); setReasonFilter(""); setCurrentPage(1); }} style={{ marginTop: "8px" }}>
+          <button className="supply-refresh-sidebar-btn" onClick={() => { setSelectedStatus("ALL"); setGlobalSearch(""); setColumnSearchText({}); setMultiSelectFilters({}); setOpenDropdown(null); setCurrentPage(1); }}>
             <Eraser size={14} /> Clear Filter
           </button>
         </div>
@@ -477,7 +590,8 @@ export default function EmdDetailsBgPage() {
                           style={{
                             width: `${columnWidths[String(col.accessor)]}px`,
                             minWidth: `${columnWidths[String(col.accessor)]}px`,
-                            ...(col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], zIndex: 3 } : {}),
+                            ...(col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], zIndex: openDropdown === String(col.accessor) ? 100 : 3 } : {}),
+                            ...(openDropdown === String(col.accessor) ? { zIndex: 100 } : {}),
                           }}
                         >
                           <div className="header-content" onClick={() => handleSort(col.accessor as any)} style={{ cursor: col.sortable ? "pointer" : "default" }}>
@@ -488,20 +602,51 @@ export default function EmdDetailsBgPage() {
                               </span>
                             )}
                           </div>
-                          {col.accessor === "reason" ? (
-                            <select
-                              className="column-search-input"
-                              value={reasonFilter}
-                              onChange={(e) => { setReasonFilter(e.target.value); setCurrentPage(1); }}
-                              onClick={(e) => e.stopPropagation()}
+                          {!SKIP_FILTER_COLUMNS_BG.has(String(col.accessor)) && (
+                            <div
+                              className="custom-multiselect-container"
+                              ref={(el) => { dropdownRefs.current[String(col.accessor)] = el; }}
                             >
-                              <option value="">All Reasons</option>
-                              {TENDER_REASON_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                              <option value="__blank__">Blank</option>
-                            </select>
-                          ) : col.accessor === "action" ? null : (
+                              <button
+                                className="multiselect-trigger-btn"
+                                onClick={() => setOpenDropdown(openDropdown === String(col.accessor) ? null : String(col.accessor))}
+                              >
+                                {(!multiSelectFilters[String(col.accessor)] || multiSelectFilters[String(col.accessor)].length === 0)
+                                  ? `All ${col.header}`
+                                  : `${multiSelectFilters[String(col.accessor)].length} Selected`}
+                                <span className="dropdown-arrow" style={{ display: "inline-flex", alignItems: "center" }}><ChevronDown size={12} /></span>
+                              </button>
+                              {openDropdown === String(col.accessor) && (
+                                <div className="multiselect-dropdown-panel">
+                                  <div className="multiselect-actions">
+                                    <button className="multiselect-action-btn" onClick={() => clearFilter(String(col.accessor))}>Clear All</button>
+                                    <button className="multiselect-action-btn" onClick={() => selectAllFilter(String(col.accessor), uniqueValueCache[String(col.accessor)] ?? [])}>Select All</button>
+                                  </div>
+                                  <div className="multiselect-options-list">
+                                    {(uniqueValueCache[String(col.accessor)] ?? []).map((val) => (
+                                      <label key={val} className="multiselect-option-label">
+                                        <input
+                                          type="checkbox"
+                                          checked={multiSelectFilters[String(col.accessor)]?.includes(val) ?? false}
+                                          onChange={() => toggleFilter(String(col.accessor), val)}
+                                        />
+                                        <span>{val}</span>
+                                      </label>
+                                    ))}
+                                    <label className="multiselect-option-label">
+                                      <input
+                                        type="checkbox"
+                                        checked={multiSelectFilters[String(col.accessor)]?.includes("(Blank)") ?? false}
+                                        onChange={() => toggleFilter(String(col.accessor), "(Blank)")}
+                                      />
+                                      <span>(Blank)</span>
+                                    </label>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {String(col.accessor) !== "action" && (
                             <input
                               type="text"
                               className="column-search-input"
@@ -622,6 +767,28 @@ export default function EmdDetailsBgPage() {
                                 </td>
                               );
                             }
+                            if (col.accessor === "emailDraft") {
+                              const hasDraft = Boolean((row as any).emailDraft && String((row as any).emailDraft).trim() !== "");
+                              return (
+                                <td
+                                  key={String(col.accessor)}
+                                  className={`${col.sticky ? "sticky-col" : ""}`}
+                                  style={col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], background: "#fff" } : {}}
+                                >
+                                  {hasDraft ? (
+                                    <button
+                                      onClick={() => handleViewDraft(row)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 border border-gray-200 rounded text-xs font-medium hover:bg-gray-50"
+                                      title="View email draft"
+                                    >
+                                      <Eye size={12} /> View
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: "#b0b8c1" }}>-</span>
+                                  )}
+                                </td>
+                              );
+                            }
                             const raw = (row as any)[col.accessor as keyof EmdDetailsBgRecord];
                             const display = raw == null || String(raw).trim() === "" ? "-" : String(raw);
                             const alignClass = col.align === "right" ? "col-currency" : col.align === "center" ? "col-center" : "";
@@ -688,6 +855,7 @@ export default function EmdDetailsBgPage() {
         </main>
       </div>
       <EmdBgEmailDialog open={dialogOpen} onOpenChange={setDialogOpen} row={dialogRow} onConfirm={handleDialogConfirm} />
+      <EmailDraftDialog open={draftOpen} onOpenChange={setDraftOpen} html={draftHtml} title={draftTitle} />
     </div>
   );
 }

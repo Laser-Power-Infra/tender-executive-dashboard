@@ -580,6 +580,7 @@ const EDITABLE_FIELDS: Record<string, EditableFieldConfig> = {
   bgDate: textFieldConfig("bgDate", "text", "col-editable"),
   bgExpiryDate: textFieldConfig("bgExpiryDate", "text", "col-editable"),
   claimDate: textFieldConfig("claimDate", "text", "col-editable"),
+  typetest: textFieldConfig("typetest", "text", "col-left col-editable", "col-left"),
 };
 
 const InlineEditor: React.FC<{
@@ -882,6 +883,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       defaultWidth: 280,
       align: "left",
       type: "custom",
+    },
+    {
+      header: "Type Test",
+      accessor: "typetest",
+      defaultWidth: 180,
+      align: "left",
+      type: "string",
     },
     {
       header: "Costing File",

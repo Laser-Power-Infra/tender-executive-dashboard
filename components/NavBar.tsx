@@ -13,7 +13,7 @@ import {
   NavigationMenuLink,
 } from "@/components/ui/navigation-menu";
 
-const links = [
+const links: Array<{ href: string; label: string; isExternal?: boolean }> = [
   { href: "/tenders", label: "Tenders" },
   { href: "/", label: "Pre Participation" },
   { href: "/post-participation", label: "Post Participation" },
@@ -24,10 +24,9 @@ const links = [
   { href: "/supply-history", label: "Supply History Dashboard" },
   { href: "/emd-details-cash", label: "EMD Cash" },
   { href: "/emd-details-bg", label: "EMD BG" },
-  { href: "http://192.168.1.190:6008", label: "EMD", isExternal: true },
   { href: "/activity", label: "Activity" },
   { href: "/sop", label: "SOP" },
-  { href: "/merge-conflict", label: "Merge Conflict" },
+  // { href: "/merge-conflict", label: "Merge Conflict" },
 ];
 
 const adminLinks = [

@@ -110,6 +110,7 @@ export function mapTenderSliceToEpcRecords(tenderData: TenderData | null): EpcTe
     fillerPrice: null,
     proposedErpItemName: row.proposedErpItemName || undefined,
     proposedErpQuantity: row.proposedErpQuantity || undefined,
+    typetest: row.typetest || null,
     rawMaterials: row.rawMaterials || undefined,
     statusCategory: row.statusCategory as StatusCategory | undefined,
     itemCategory: row.itemCategory || null,
