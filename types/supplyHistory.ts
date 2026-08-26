@@ -19,6 +19,9 @@ export interface SupplyHistoryRecord {
   invoiceAmt: number | null;
   hasDocuments?: boolean;
   attachmentUrl?: string | null;
+  documentUrls?: string | null;
   email?: string | null;
   contactNo?: string | null;
+  certificateUrl?: string | null;
+  certificateFileName?: string | null;
 }

@@ -58,6 +58,8 @@ import {
   Check,
   Circle,
   Loader2,
+  X,
+  CheckCheck,
 } from "lucide-react";
 import type {
   ColumnFilterType,
@@ -253,6 +255,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
 
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
   const [isDownloadingPdfs, setIsDownloadingPdfs] = useState(false);
   const [isParsingPdfs, setIsParsingPdfs] = useState(false);
   const [isParsingCva, setIsParsingCva] = useState(false);
@@ -1391,7 +1394,12 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           <div className="column-picker-container">
             <button
               className="column-picker-btn"
-              onClick={() => setShowColumnPicker((v) => !v)}
+              onClick={() => {
+                setShowColumnPicker((v) => {
+                  if (v) setPickerSearch("");
+                  return !v;
+                });
+              }}
             >
               <Columns3 size={14} /> Columns
             </button>
@@ -1399,37 +1407,141 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
               <>
                 <div
                   className="column-picker-overlay"
-                  onClick={() => setShowColumnPicker(false)}
+                  onClick={() => {
+                    setShowColumnPicker(false);
+                    setPickerSearch("");
+                  }}
                 />
-                <div className="column-picker-dropdown">
-                  <p className="column-picker-header">Toggle Columns</p>
-                  {columns
-                    .filter((col) => !col.hidden)
-                    .map((col) => (
-                      <label
-                        key={String(col.accessor)}
-                        className="column-picker-item"
+                <div className="column-picker-dropdown column-picker-dropdown--enhanced">
+                  <p className="column-picker-header">
+                    <span>Toggle Columns</span>
+                    {(() => {
+                      const togglable = columns.filter((c) => !c.hidden);
+                      const visibleCount = togglable.filter(
+                        (c) => columnVisibility[String(c.accessor)] !== false,
+                      ).length;
+                      return (
+                        <span className="column-picker-count">
+                          {visibleCount}/{togglable.length}
+                        </span>
+                      );
+                    })()}
+                  </p>
+                  {/* Search */}
+                  <div className="column-picker-search">
+                    <Search size={14} className="column-picker-search-icon" />
+                    <input
+                      type="text"
+                      className="column-picker-search-input"
+                      placeholder="Search columns..."
+                      value={pickerSearch}
+                      onChange={(e) => setPickerSearch(e.target.value)}
+                      autoFocus
+                    />
+                    {pickerSearch && (
+                      <button
+                        type="button"
+                        className="column-picker-search-clear"
+                        onClick={() => setPickerSearch("")}
+                        aria-label="Clear search"
                       >
-                        <input
-                          type="checkbox"
-                          className="column-picker-checkbox"
-                          checked={
-                            columnVisibility[String(col.accessor)] !== false
-                          }
-                          onChange={() =>
-                            dispatch(
-                              setColumnVisibility({
-                                ...columnVisibility,
-                                [String(col.accessor)]: !(
-                                  columnVisibility[String(col.accessor)] ?? true
-                                ),
-                              }),
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                  {/* Select All / Clear */}
+                  <div className="column-picker-actions">
+                    <button
+                      type="button"
+                      className="column-picker-action-btn"
+                      onClick={() => {
+                        const togglable = columns.filter((c) => !c.hidden);
+                        const q = pickerSearch.trim().toLowerCase();
+                        const filtered = q
+                          ? togglable.filter(
+                              (c) =>
+                                String(c.header).toLowerCase().includes(q) ||
+                                String(c.accessor).toLowerCase().includes(q),
                             )
-                          }
-                        />
-                        {col.header}
-                      </label>
-                    ))}
+                          : togglable;
+                        const next = { ...columnVisibility };
+                        filtered.forEach((c) => {
+                          delete next[String(c.accessor)];
+                        });
+                        dispatch(setColumnVisibility(next));
+                      }}
+                    >
+                      <CheckCheck size={12} /> Select All
+                    </button>
+                    <button
+                      type="button"
+                      className="column-picker-action-btn"
+                      onClick={() => {
+                        const togglable = columns.filter((c) => !c.hidden);
+                        const q = pickerSearch.trim().toLowerCase();
+                        const filtered = q
+                          ? togglable.filter(
+                              (c) =>
+                                String(c.header).toLowerCase().includes(q) ||
+                                String(c.accessor).toLowerCase().includes(q),
+                            )
+                          : togglable;
+                        const next: Record<string, boolean> = { ...columnVisibility };
+                        filtered.forEach((c) => {
+                          next[String(c.accessor)] = false;
+                        });
+                        // guard: keep at least one visible
+                        const remaining = togglable.filter((c) => next[String(c.accessor)] !== false).length;
+                        if (remaining === 0 && filtered.length > 0) {
+                          delete next[String(filtered[0].accessor)];
+                        }
+                        dispatch(setColumnVisibility(next));
+                      }}
+                    >
+                      <X size={12} /> Clear
+                    </button>
+                  </div>
+                  <div className="column-picker-list">
+                    {(() => {
+                      const togglable = columns.filter((c) => !c.hidden);
+                      const q = pickerSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? togglable.filter(
+                            (c) =>
+                              String(c.header).toLowerCase().includes(q) ||
+                              String(c.accessor).toLowerCase().includes(q),
+                          )
+                        : togglable;
+                      if (filtered.length === 0) {
+                        return <p className="column-picker-empty">No columns found</p>;
+                      }
+                      return filtered.map((col) => (
+                        <label
+                          key={String(col.accessor)}
+                          className="column-picker-item"
+                        >
+                          <input
+                            type="checkbox"
+                            className="column-picker-checkbox"
+                            checked={
+                              columnVisibility[String(col.accessor)] !== false
+                            }
+                            onChange={() =>
+                              dispatch(
+                                setColumnVisibility({
+                                  ...columnVisibility,
+                                  [String(col.accessor)]: !(
+                                    columnVisibility[String(col.accessor)] ?? true
+                                  ),
+                                }),
+                              )
+                            }
+                          />
+                          {col.header}
+                        </label>
+                      ));
+                    })()}
+                  </div>
                 </div>
               </>
             )}

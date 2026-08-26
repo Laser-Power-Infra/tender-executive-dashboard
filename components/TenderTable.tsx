@@ -30,6 +30,8 @@ import {
   RotateCcw,
   CalendarIcon,
   Eye,
+  Columns3,
+  CheckCheck,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -1272,9 +1274,17 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "catalogueDone",
     "participated",
   ]);
-  const visibleColumns = showPostParticipationColumns
+  const baseVisibleColumns = showPostParticipationColumns
     ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor) && !(postParticipationHiddenAccessors.has(col.accessor) && !(showReasonColumn && col.accessor === "reason")))
     : columns.filter((col) => !postParticipationAccessors.has(col.accessor));
+
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [columnPickerSearch, setColumnPickerSearch] = useState("");
+
+  const visibleColumns = useMemo(() => {
+    return baseVisibleColumns.filter((col) => columnVisibility[col.accessor] !== false);
+  }, [baseVisibleColumns, columnVisibility]);
 
   // 2. States
   const [overrides, setOverrides] = useState<
@@ -2842,6 +2852,227 @@ export const TenderTable: React.FC<TenderTableProps> = ({
               <RotateCcw size={14} /> Clear Sort
             </button>
           )}
+          <div className="column-picker-container" style={{ position: "relative" }}>
+            <button
+              className="export-btn"
+              onClick={() => {
+                setShowColumnPicker((v) => {
+                  if (v) setColumnPickerSearch("");
+                  return !v;
+                });
+              }}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <Columns3 size={14} /> Columns
+            </button>
+            {showColumnPicker && (
+              <>
+                <div
+                  className="column-picker-overlay"
+                  onClick={() => {
+                    setShowColumnPicker(false);
+                    setColumnPickerSearch("");
+                  }}
+                  style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                />
+                <div
+                  className="column-picker-dropdown column-picker-dropdown--enhanced"
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 4px)",
+                    zIndex: 50,
+                    width: 280,
+                    background: "#fff",
+                    borderRadius: 6,
+                    boxShadow: "0 4px 12px rgba(10,37,64,0.15)",
+                    border: "1px solid #e1e6eb",
+                    padding: 8,
+                    maxHeight: 400,
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: "rgba(0,0,0,0.5)",
+                      padding: "4px 6px 8px",
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      borderBottom: "1px solid #e1e6eb",
+                      marginBottom: 4,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <span>Toggle Columns</span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: "#0070f3",
+                        textTransform: "none",
+                        letterSpacing: 0,
+                        background: "#e8f0fe",
+                        padding: "2px 6px",
+                        borderRadius: 10,
+                        border: "1px solid #d2e3fc",
+                      }}
+                    >
+                      {baseVisibleColumns.filter((c) => columnVisibility[c.accessor] !== false).length}/{baseVisibleColumns.length}
+                    </span>
+                  </p>
+                  <div style={{ position: "relative", display: "flex", alignItems: "center", marginBottom: 8 }}>
+                    <Search size={14} style={{ position: "absolute", left: 8, color: "#94a3b8", pointerEvents: "none" }} />
+                    <input
+                      type="text"
+                      placeholder="Search columns..."
+                      value={columnPickerSearch}
+                      onChange={(e) => setColumnPickerSearch(e.target.value)}
+                      autoFocus
+                      style={{
+                        width: "100%",
+                        padding: "6px 28px",
+                        border: "1px solid #e1e6eb",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        outline: "none",
+                      }}
+                    />
+                    {columnPickerSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setColumnPickerSearch("")}
+                        style={{
+                          position: "absolute",
+                          right: 6,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 20,
+                          height: 20,
+                          border: "none",
+                          background: "transparent",
+                          color: "#64748b",
+                          cursor: "pointer",
+                        }}
+                        aria-label="Clear search"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const q = columnPickerSearch.trim().toLowerCase();
+                        const filtered = q
+                          ? baseVisibleColumns.filter(
+                              (c) => c.header.toLowerCase().includes(q) || String(c.accessor).toLowerCase().includes(q),
+                            )
+                          : baseVisibleColumns;
+                        const next = { ...columnVisibility };
+                        filtered.forEach((c) => delete next[c.accessor]);
+                        setColumnVisibility(next);
+                      }}
+                      style={{
+                        flex: 1,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                        padding: "6px 8px",
+                        background: "#fff",
+                        border: "1px solid #e1e6eb",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <CheckCheck size={12} /> Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const q = columnPickerSearch.trim().toLowerCase();
+                        const filtered = q
+                          ? baseVisibleColumns.filter(
+                              (c) => c.header.toLowerCase().includes(q) || String(c.accessor).toLowerCase().includes(q),
+                            )
+                          : baseVisibleColumns;
+                        const next: Record<string, boolean> = { ...columnVisibility };
+                        filtered.forEach((c) => (next[c.accessor] = false));
+                        const remaining = baseVisibleColumns.filter((c) => next[c.accessor] !== false).length;
+                        if (remaining === 0 && filtered.length > 0) delete next[filtered[0].accessor];
+                        setColumnVisibility(next);
+                      }}
+                      style={{
+                        flex: 1,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                        padding: "6px 8px",
+                        background: "#fff",
+                        border: "1px solid #e1e6eb",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <X size={12} /> Clear
+                    </button>
+                  </div>
+                  <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+                    {(() => {
+                      const q = columnPickerSearch.trim().toLowerCase();
+                      const filtered = q
+                        ? baseVisibleColumns.filter(
+                            (c) => c.header.toLowerCase().includes(q) || String(c.accessor).toLowerCase().includes(q),
+                          )
+                        : baseVisibleColumns;
+                      if (filtered.length === 0) return <p style={{ textAlign: "center", padding: 16, color: "#94a3b8", fontSize: 12 }}>No columns found</p>;
+                      return filtered.map((col) => (
+                        <label
+                          key={col.accessor}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 6px",
+                            borderRadius: 4,
+                            cursor: "pointer",
+                            fontSize: 12,
+                            color: "#0a2540",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={columnVisibility[col.accessor] !== false}
+                            onChange={() =>
+                              setColumnVisibility((prev) => ({
+                                ...prev,
+                                [col.accessor]: !(prev[col.accessor] ?? true),
+                              }))
+                            }
+                            style={{ width: 14, height: 14, accentColor: "#0070f3" }}
+                          />
+                          {col.header}
+                        </label>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <button
             className="export-btn"
             onClick={handleExportCSV}
