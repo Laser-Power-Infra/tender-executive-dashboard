@@ -45,20 +45,28 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
   const startWidthRef = useRef<number>(0);
   const associations = useAppSelector((s) => s.tenders.data?.associations ?? []);
 
+  // Single pass over the rows. This used to scan the whole array once per
+  // association, allocating a split/map/filter chain per row per association.
   const personCounts = useMemo(() => {
     if (associations.length === 0) return [];
     const sourceRows = filteredRows ?? rows;
+    const countsById = new Map<string, number>();
+    const seen = new Set<string>();
+    for (const r of sourceRows) {
+      const assigned = String(r.assignedTo ?? "");
+      if (!assigned) continue;
+      seen.clear();
+      for (const raw of assigned.split(",")) {
+        const id = raw.trim();
+        // Dedupe within the row — the old includes() check counted a row once
+        // even if it listed the same association twice.
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        countsById.set(id, (countsById.get(id) ?? 0) + 1);
+      }
+    }
     return associations
-      .map((a) => ({
-        ...a,
-        count: sourceRows.filter((r) => {
-          const assignedIds = String(r.assignedTo ?? "")
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          return assignedIds.includes(String(a.id));
-        }).length,
-      }))
+      .map((a) => ({ ...a, count: countsById.get(String(a.id)) ?? 0 }))
       .filter((p) => p.count > 0);
   }, [rows, filteredRows, associations]);
 

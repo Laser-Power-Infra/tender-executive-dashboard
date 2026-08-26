@@ -1,26 +1,60 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import { fetchFiles } from "@/lib/slices/filesSlice";
 import { fetchAllTenders } from "@/lib/slices/tendersSlice";
 import { fetchAllBomOptions } from "@/lib/slices/utilitySlice";
 
+/**
+ * Routes that actually read `state.tenders.data` / `state.utility.bomByItemName`.
+ *
+ * This component is mounted from the root layout, so without this gate every
+ * route — including `/auth/login`, `/sop`, `/activity` and `/admin/*` — paid for
+ * streaming the entire tender table into Redux without ever reading it.
+ */
+const TENDER_DATA_ROUTES = [
+  "/",
+  "/tenders",
+  "/post-participation",
+  "/not-participated",
+  "/merge-conflict",
+];
+
+function needsTenderData(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return TENDER_DATA_ROUTES.some(
+    (route) =>
+      route === "/" ? pathname === "/" : pathname.startsWith(route),
+  );
+}
+
 export function DataLoader({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
-  const files = useAppSelector((s) => s.files.items);
+  const hasFiles = useAppSelector((s) => s.files.items.length > 0);
+  const pathname = usePathname();
+  const enabled = needsTenderData(pathname);
+
+  // The tender stream is expensive enough that it must run at most once per
+  // mount. `state.files.items` gets a fresh array identity on every
+  // fetchFiles.fulfilled, so keying the effect on it re-downloaded the whole
+  // dataset whenever the file list refreshed.
+  const tendersRequestedRef = useRef(false);
 
   useEffect(() => {
+    if (!enabled) return;
     dispatch(fetchFiles());
-  }, [dispatch]);
+  }, [dispatch, enabled]);
 
   useEffect(() => {
-    if (files.length > 0) {
-      // run Bom options fetch in parallel with tenders fetch — populates utilitySlice for O(1) dropdown lookup
-      dispatch(fetchAllTenders());
-      dispatch(fetchAllBomOptions());
-    }
-  }, [files, dispatch]);
+    if (!enabled || !hasFiles || tendersRequestedRef.current) return;
+    tendersRequestedRef.current = true;
+    // Bom options fetch runs in parallel with tenders — populates utilitySlice
+    // for O(1) dropdown lookup.
+    dispatch(fetchAllTenders());
+    dispatch(fetchAllBomOptions());
+  }, [hasFiles, dispatch, enabled]);
 
   return <>{children}</>;
 }

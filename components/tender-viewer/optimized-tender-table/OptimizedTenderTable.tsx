@@ -321,6 +321,12 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     }));
   }, []);
 
+  // Stable fallback keys for rows without an id. Math.random() used to be
+  // returned here, which produced a different key on every render and forced
+  // React to unmount and remount those rows (and discard their DOM) each time.
+  const fallbackRowKeys = useRef(new WeakMap<object, string>());
+  const fallbackRowSeq = useRef(0);
+
   const getRowKey = useCallback(
     (row: T): string => {
       const type = row["type" as keyof T];
@@ -328,7 +334,13 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
       if (id !== undefined) {
         return type !== undefined ? `${String(type)}-${String(id)}` : String(id);
       }
-      return Math.random().toString();
+      const obj = row as unknown as object;
+      let key = fallbackRowKeys.current.get(obj);
+      if (key === undefined) {
+        key = `__row_${fallbackRowSeq.current++}`;
+        fallbackRowKeys.current.set(obj, key);
+      }
+      return key;
     },
     [rowKey],
   );
@@ -688,38 +700,59 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
 
   const uniqueSelectOptions = useMemo(() => {
     const map: Record<string, FilterOption[]> = {};
+
+    // Collect the eligible select columns up front so the dataset is walked once
+    // instead of once per column.
+    const selectCols: { accessorStr: string; accessor: keyof T }[] = [];
     for (const col of columns) {
       if (col.filter?.type !== "select") continue;
       const accessorStr = String(col.accessor);
       if (UNIQUE_OPTION_SKIP.has(accessorStr)) continue;
+      selectCols.push({ accessorStr, accessor: col.accessor as keyof T });
+    }
+    if (selectCols.length === 0) return map;
 
-      const seen = new Set<string>();
-      const opts: FilterOption[] = [];
-      const addOption = (value: string, label?: string) => {
-        if (!value || seen.has(value)) return;
-        seen.add(value);
-        opts.push({ value, label: label ?? value });
-      };
+    // O(1) association lookup — this used to be an associations.find() per id,
+    // per row, per column.
+    const assocById = new Map<number, (typeof associations)[number]>();
+    for (const a of associations) assocById.set(a.id, a);
 
-      for (const row of processedRows) {
-        const raw = row[col.accessor as keyof T];
+    const seenByCol = new Map<string, Set<string>>();
+    const optsByCol = new Map<string, FilterOption[]>();
+    for (const c of selectCols) {
+      seenByCol.set(c.accessorStr, new Set());
+      optsByCol.set(c.accessorStr, []);
+    }
+
+    for (const row of processedRows) {
+      for (const c of selectCols) {
+        const raw = row[c.accessor];
         if (raw === null || raw === undefined || raw === "") continue;
-        if (accessorStr === "assignedTo") {
+        const seen = seenByCol.get(c.accessorStr)!;
+        const opts = optsByCol.get(c.accessorStr)!;
+        const addOption = (value: string, label?: string) => {
+          if (!value || seen.has(value)) return;
+          seen.add(value);
+          opts.push({ value, label: label ?? value });
+        };
+        if (c.accessorStr === "assignedTo") {
           for (const id of String(raw)
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean)) {
-            const assoc = associations.find((a) => a.id === parseInt(id, 10));
-            addOption(id, assoc?.name);
+            addOption(id, assocById.get(parseInt(id, 10))?.name);
           }
         } else {
           addOption(String(raw));
         }
       }
+    }
 
+    for (const c of selectCols) {
+      const opts = optsByCol.get(c.accessorStr)!;
       if (opts.length > 0) {
         opts.sort((a, b) => a.label.localeCompare(b.label));
-        map[accessorStr] = opts;
+        map[c.accessorStr] = opts;
       }
     }
     return map;

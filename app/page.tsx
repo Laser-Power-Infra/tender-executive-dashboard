@@ -21,6 +21,9 @@ export default function Home() {
   const canSync = session?.user?.role === "admin" || session?.user?.role === "developer";
   const tenderSliceData = useAppSelector((s) => s.tenders.data);
   const loadingTenders = useAppSelector((s) => s.tenders.loading);
+  // Progress counter lives outside `tenders.data`, so ticking it does not
+  // invalidate the derived-state chain below.
+  const streamedCount = useAppSelector((s) => s.tenders.streamedCount);
   const participationFilters = useAppSelector(
     (s) => s.filters.participationFilters,
   );
@@ -152,10 +155,12 @@ export default function Home() {
           </div>
         </header>
         <main className="dashboard-body">
-          {loadingTenders && !tenderSliceData ? (
+          {loadingTenders || !tenderSliceData ? (
             <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", minHeight: "500px", color: "#0a2540", fontWeight: 700, flexDirection: "column", gap: "15px" }}>
               <div style={{ width: "40px", height: "40px", border: "4px solid #e1e6eb", borderTopColor: "#1a73e8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }}></div>
-              <span style={{ fontSize: "16px", letterSpacing: "0.5px" }}>Loading tender data...</span>
+              <span style={{ fontSize: "16px", letterSpacing: "0.5px" }}>
+                Loading tender data{streamedCount > 0 ? ` (${streamedCount.toLocaleString()} rows)` : ""}...
+              </span>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : (

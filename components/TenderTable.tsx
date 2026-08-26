@@ -67,6 +67,31 @@ import {
 } from "@/components/ui/select";
 import "./TenderTable.css";
 
+// Static filter metadata. Hoisted to module scope so it keeps a stable identity
+// across renders and can be used safely in useMemo dependency arrays.
+const BOOLEAN_COLUMNS = new Set(["participated", "reverseAuctionApplicable"]);
+const SKIP_FILTER_COLUMNS = new Set([
+  "lastDateOfSubmission", "attachmentUrl", "files", "boqChart",
+  "rawMaterials",
+  "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
+  "itemCategory", "publishedDate", "assignedDate", "itemSchedules",
+  "reverseAuctionStartDate",
+]);
+
+const TENDER_UPDATE_STATUS_FILTER_OPTIONS: Array<[string, string]> = [
+  ["OPEN", "Open"],
+  ["CLOSED", "Closed"],
+];
+const NEXT_ACTION_FILTER_OPTIONS: Array<[string, string]> = [
+  ["UPDATE_FROM_AB_LETTER", "Update from AB letter"],
+  ["BG_REFUND_LETTER_TO_BE_SENT", "BG refund letter to be sent"],
+  ["FOLLOW_UP_FOR_FINANCIAL_STATUS", "Follow up for financial status"],
+  ["REVERSE_AUCTION_PENDING", "Reverse auction pending"],
+  ["COUNTER_OFFER_YES", "Counter Offer Yes"],
+  ["COUNTER_OFFER_NO", "Counter Offer No"],
+  ["BID_VALIDITY_NOT_ACCEPTED", "Bid Validity Not Accepted"],
+];
+
 const filesCache = new Map<string, any[]>();
 const filesPromiseCache = new Map<string, Promise<any[]>>();
 
@@ -1744,29 +1769,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] =
     useState<boolean>(false);
-  const BOOLEAN_COLUMNS = new Set(["participated", "reverseAuctionApplicable"]);
-  const SKIP_FILTER_COLUMNS = new Set([
-    "lastDateOfSubmission", "attachmentUrl", "files", "boqChart",
-    "rawMaterials",
-    "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
-    "itemCategory", "publishedDate", "assignedDate", "itemSchedules",
-    "reverseAuctionStartDate",
-  ]);
-
-  const TENDER_UPDATE_STATUS_FILTER_OPTIONS: Array<[string, string]> = [
-    ["OPEN", "Open"],
-    ["CLOSED", "Closed"],
-  ];
-  const NEXT_ACTION_FILTER_OPTIONS: Array<[string, string]> = [
-    ["UPDATE_FROM_AB_LETTER", "Update from AB letter"],
-    ["BG_REFUND_LETTER_TO_BE_SENT", "BG refund letter to be sent"],
-    ["FOLLOW_UP_FOR_FINANCIAL_STATUS", "Follow up for financial status"],
-    ["REVERSE_AUCTION_PENDING", "Reverse auction pending"],
-    ["COUNTER_OFFER_YES", "Counter Offer Yes"],
-    ["COUNTER_OFFER_NO", "Counter Offer No"],
-    ["BID_VALIDITY_NOT_ACCEPTED", "Bid Validity Not Accepted"],
-  ];
-
   const [multiSelectFilters, setMultiSelectFilters] = useState<
     Record<string, string[]>
   >({});
@@ -2010,9 +2012,23 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     [buildDateRange],
   );
 
-  // Helper for cascading dependent filters
-  const getFilteredRecordsExcept = (excludeAccessor: string | null) => {
-    let result = [...records];
+  // ---------------------------------------------------------------------------
+  // Filtering pipeline
+  //
+  // Split into two stages so filter-option derivation no longer has to re-run the
+  // whole chain once per column:
+  //   * baseStageFiltered - filters not tied to any single column (global search,
+  //     deadline range, RA start/end ranges). Computed once per render.
+  //   * columnPredicates  - filters that *are* tied to a column, each tagged with
+  //     its accessor so a caller can exclude that column's own predicate.
+  //
+  // getFilteredRecordsExcept(x) is then stage 1 plus every stage-2 predicate whose
+  // key !== x - the same result the old monolithic function produced, without the
+  // unconditional `[...records]` copy it used to open with.
+  // ---------------------------------------------------------------------------
+
+  const baseStageFiltered = useMemo(() => {
+    let result: EpcTenderRecord[] = records;
 
     if (globalSearch.trim() !== "") {
       const searchLower = globalSearch.toLowerCase().trim();
@@ -2036,15 +2052,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
     const { from: dateFrom, to: dateTo } = getDateRange();
     if (dateFrom || dateTo) {
+      // Hoisted out of the row callback - these were recomputed once per row.
+      const fromKey = dateFrom ? toISTDateKey(dateFrom) : null;
+      const toKey = dateTo ? toISTDateKey(dateTo) : null;
       result = result.filter((record) => {
-        if (!record.lastDateOfSubmission) return false;
         const dateVal = record.lastDateOfSubmission;
-        if (!(dateVal instanceof Date) || isNaN(dateVal.getTime())) {
-          return false;
-        }
+        if (!(dateVal instanceof Date) || isNaN(dateVal.getTime())) return false;
         const dateKey = toISTDateKey(dateVal);
-        const fromKey = dateFrom ? toISTDateKey(dateFrom) : null;
-        const toKey = dateTo ? toISTDateKey(dateTo) : null;
         if (!dateKey) return false;
         if (fromKey && dateKey < fromKey) return false;
         if (toKey && dateKey > toKey) return false;
@@ -2063,178 +2077,160 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     }
     if (raEndFrom || raEndTo) {
       result = result.filter((record) =>
-        matchesRaDateRange(
-          record.reverseAuctionEndDate,
-          raEndFrom,
-          raEndTo,
-        ),
+        matchesRaDateRange(record.reverseAuctionEndDate, raEndFrom, raEndTo),
       );
     }
 
+    return result;
+    // getDateRange() reads datePreset/startDate/endDate, all listed below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    records,
+    globalSearch,
+    startDate,
+    endDate,
+    datePreset,
+    raStartFrom,
+    raStartTo,
+    raEndFrom,
+    raEndTo,
+  ]);
+
+  type ColumnPredicate = { key: string; test: (r: EpcTenderRecord) => boolean };
+
+  const columnPredicates = useMemo<ColumnPredicate[]>(() => {
+    const preds: ColumnPredicate[] = [];
+
     for (const [accessor, selected] of Object.entries(multiSelectFilters)) {
-      if (accessor === excludeAccessor || selected.length === 0) continue;
-      result = result.filter((r) => {
-        if (BOOLEAN_COLUMNS.has(accessor)) {
-          const val = r[accessor as keyof EpcTenderRecord];
-          if (selected.includes("Yes") && val === true) return true;
-          if (selected.includes("No") && val === false) return true;
-          if (selected.includes("(Blank)") && (val == null)) return true;
-          return false;
-        }
-        const cellStr = String(r[accessor as keyof EpcTenderRecord] ?? "");
-        if (!cellStr.trim()) return selected.includes("(Blank)");
-        return selected.includes(cellStr);
+      if (selected.length === 0) continue;
+      preds.push({
+        key: accessor,
+        test: (r) => {
+          if (BOOLEAN_COLUMNS.has(accessor)) {
+            const val = r[accessor as keyof EpcTenderRecord];
+            if (selected.includes("Yes") && val === true) return true;
+            if (selected.includes("No") && val === false) return true;
+            if (selected.includes("(Blank)") && val == null) return true;
+            return false;
+          }
+          const cellStr = String(r[accessor as keyof EpcTenderRecord] ?? "");
+          if (!cellStr.trim()) return selected.includes("(Blank)");
+          return selected.includes(cellStr);
+        },
       });
     }
 
     for (const [accessor, searchVal] of Object.entries(columnSearchText)) {
-      if (accessor === excludeAccessor || !searchVal.trim()) continue;
+      if (!searchVal.trim()) continue;
       const searchLower = searchVal.toLowerCase().trim();
-      result = result.filter((r) => {
-        const cellVal = String(
-          r[accessor as keyof EpcTenderRecord] ?? "",
-        ).toLowerCase();
-        return cellVal.includes(searchLower);
+      preds.push({
+        key: accessor,
+        test: (r) =>
+          String(r[accessor as keyof EpcTenderRecord] ?? "")
+            .toLowerCase()
+            .includes(searchLower),
       });
     }
 
-    if (excludeAccessor !== "remarks" && remarksDropdownFilter !== "All") {
-      result = result.filter(
-        (record) => record.remarks === remarksDropdownFilter,
-      );
+    if (remarksDropdownFilter !== "All") {
+      preds.push({
+        key: "remarks",
+        test: (r) => r.remarks === remarksDropdownFilter,
+      });
     }
-    if (excludeAccessor !== "proposedErpItemName") {
-      if (proposedErpItemCategoryFilter !== "All") {
-        result = result.filter((record) =>
+
+    if (proposedErpItemCategoryFilter !== "All") {
+      preds.push({
+        key: "proposedErpItemName",
+        test: (r) =>
           matchesErpItemCategory(
-            record.proposedErpItemName,
+            r.proposedErpItemName,
             proposedErpItemCategoryFilter,
           ),
-        );
-      }
-      if (proposedErpItemTextFilter.trim() !== "") {
-        const searchLower = proposedErpItemTextFilter.toLowerCase().trim();
-        result = result.filter(
-          (record) =>
-            record.proposedErpItemName &&
-            record.proposedErpItemName.toLowerCase().includes(searchLower),
-        );
-      }
+      });
+    }
+    if (proposedErpItemTextFilter.trim() !== "") {
+      const searchLower = proposedErpItemTextFilter.toLowerCase().trim();
+      preds.push({
+        key: "proposedErpItemName",
+        test: (r) =>
+          !!r.proposedErpItemName &&
+          r.proposedErpItemName.toLowerCase().includes(searchLower),
+      });
     }
 
-    return result;
-  };
-
-  const uniqueValueCache = useMemo(() => {
-    const cache: Record<string, string[]> = {};
-    for (const col of columns) {
-      if (SKIP_FILTER_COLUMNS.has(col.accessor)) continue;
-      const filtered = getFilteredRecordsExcept(col.accessor);
-      const values = filtered
-        .map((r) => String(r[col.accessor as keyof EpcTenderRecord] ?? ""))
-        .filter((v) => v.trim() !== "");
-      cache[col.accessor] = Array.from(new Set(values)).sort();
-    }
-    return cache;
+    return preds;
   }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    datePreset,
-    raStartFrom,
-    raStartTo,
-    raEndFrom,
-    raEndTo,
     multiSelectFilters,
     columnSearchText,
     remarksDropdownFilter,
-    proposedErpItemTextFilter,
     proposedErpItemCategoryFilter,
+    proposedErpItemTextFilter,
   ]);
 
+  const getFilteredRecordsExcept = useCallback(
+    (excludeAccessor: string | null): EpcTenderRecord[] => {
+      if (columnPredicates.length === 0) return baseStageFiltered;
+      return baseStageFiltered.filter((r) => {
+        for (const p of columnPredicates) {
+          if (p.key === excludeAccessor) continue;
+          if (!p.test(r)) return false;
+        }
+        return true;
+      });
+    },
+    [baseStageFiltered, columnPredicates],
+  );
+
+  /**
+   * Option list for the *currently open* filter dropdown only.
+   *
+   * This previously built option lists for all ~47 filterable columns on every
+   * render, each via its own full re-filter of the dataset - O(columns x rows)
+   * with ~50 array copies per render. Nothing reads an entry unless that column
+   * has its dropdown open, so it is now derived on demand: zero passes while
+   * browsing, one while a dropdown is open.
+   */
+  const uniqueValueCache = useMemo(() => {
+    const cache: Record<string, string[]> = {};
+    if (!openDropdown || SKIP_FILTER_COLUMNS.has(openDropdown)) return cache;
+    const values = new Set<string>();
+    for (const r of getFilteredRecordsExcept(openDropdown)) {
+      const v = String(r[openDropdown as keyof EpcTenderRecord] ?? "");
+      if (v.trim() !== "") values.add(v);
+    }
+    cache[openDropdown] = Array.from(values).sort();
+    return cache;
+  }, [openDropdown, getFilteredRecordsExcept]);
+
   const tenderStatusOptions = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("tenderUpdateStatus");
-    const codes = new Set(
-      filtered
-        .map((r) => r.tenderUpdateStatus)
-        .map((v) => (v ? String(v) : ""))
-        .filter((s) => s !== ""),
-    );
+    const codes = new Set<string>();
+    for (const r of getFilteredRecordsExcept("tenderUpdateStatus")) {
+      if (r.tenderUpdateStatus) codes.add(String(r.tenderUpdateStatus));
+    }
     return TENDER_UPDATE_STATUS_FILTER_OPTIONS.filter(([code]) =>
       codes.has(code),
     );
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    datePreset,
-    raStartFrom,
-    raStartTo,
-    raEndFrom,
-    raEndTo,
-    multiSelectFilters,
-    columnSearchText,
-    remarksDropdownFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
+  }, [getFilteredRecordsExcept]);
 
   const nextActionOptions = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("nextAction");
-    const codes = new Set(
-      filtered
-        .map((r) => r.nextAction)
-        .map((v) => (v ? String(v) : ""))
-        .filter((s) => s !== ""),
-    );
+    const codes = new Set<string>();
+    for (const r of getFilteredRecordsExcept("nextAction")) {
+      if (r.nextAction) codes.add(String(r.nextAction));
+    }
     return NEXT_ACTION_FILTER_OPTIONS.filter(([code]) => codes.has(code));
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    datePreset,
-    raStartFrom,
-    raStartTo,
-    raEndFrom,
-    raEndTo,
-    multiSelectFilters,
-    columnSearchText,
-    remarksDropdownFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
+  }, [getFilteredRecordsExcept]);
 
   const uniqueRemarks = useMemo(() => {
-    const filtered = getFilteredRecordsExcept("remarks");
     const counts: Record<string, number> = {};
-    filtered.forEach((r) => {
+    for (const r of getFilteredRecordsExcept("remarks")) {
       const val = r.remarks ? r.remarks.trim() : "";
-      if (val) {
-        counts[val] = (counts[val] || 0) + 1;
-      }
-    });
+      if (val) counts[val] = (counts[val] || 0) + 1;
+    }
     return Object.keys(counts)
       .filter((key) => counts[key] > 1)
       .sort();
-  }, [
-    records,
-    globalSearch,
-    startDate,
-    endDate,
-    datePreset,
-    raStartFrom,
-    raStartTo,
-    raEndFrom,
-    raEndTo,
-    multiSelectFilters,
-    columnSearchText,
-    remarksDropdownFilter,
-    proposedErpItemTextFilter,
-    proposedErpItemCategoryFilter,
-  ]);
+  }, [getFilteredRecordsExcept]);
 
   const handleOpenAttachmentModal = (files: any[]) => {
     setSelectedFiles(files);
@@ -2326,7 +2322,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   // 5. Processing Data (Filtering & Sorting)
   const processedRecords = useMemo(() => {
-    let result = [...records];
+    // Start from the prop; every .filter() below already returns a fresh array.
+    // A copy is only needed if nothing filtered, since the sort below is in-place.
+    let result: EpcTenderRecord[] = records;
 
     // Global Text Search
     if (globalSearch.trim() !== "") {
@@ -2456,6 +2454,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
     // Sorting — applied last on the fully filtered set so order is definitive
     if (sortColumn) {
+      if (result === records) result = [...records];
       result.sort((a, b) => {
         let valA: any;
         let valB: any;
@@ -2574,6 +2573,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   };
 
   const processedGroups = useMemo((): DocketGroup[] => {
+    // Map preserves insertion order, so a single pass yields the same
+    // first-seen group ordering the old two-pass version produced — with half
+    // the getDocketGroupKey()/normalizeDocketKey() calls.
     const groupMap = new Map<string, EpcTenderRecord[]>();
     for (const record of processedRecords) {
       const key = getDocketGroupKey(record);
@@ -2581,14 +2583,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       if (existing) existing.push(record);
       else groupMap.set(key, [record]);
     }
-    const seen = new Set<string>();
     const groups: DocketGroup[] = [];
-    for (const record of processedRecords) {
-      const key = getDocketGroupKey(record);
-      if (!seen.has(key)) {
-        seen.add(key);
-        groups.push({ docketNo: key, records: groupMap.get(key)! });
-      }
+    for (const [docketNo, records] of groupMap) {
+      groups.push({ docketNo, records });
     }
     return groups;
   }, [processedRecords]);
@@ -2672,6 +2669,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    // Without this the blob stays pinned for the lifetime of the tab.
+    URL.revokeObjectURL(url);
   };
 
   const handleExportExcel = () => {

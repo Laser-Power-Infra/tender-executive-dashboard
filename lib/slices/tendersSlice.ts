@@ -56,6 +56,12 @@ export interface TenderData {
 interface TendersState {
   data: TenderData | null;
   loading: boolean;
+  /**
+   * Rows decoded so far during a /api/tenders-all stream. Deliberately kept
+   * separate from `data.rows` so progress UI can subscribe to it without
+   * invalidating the derived-state chains that read `data`.
+   */
+  streamedCount: number;
   totalFiles: number;
   completedFiles: number;
   updatingCells: Record<string, boolean>;
@@ -67,6 +73,7 @@ interface TendersState {
 const initialState: TendersState = {
   data: null,
   loading: false,
+  streamedCount: 0,
   totalFiles: 0,
   completedFiles: 0,
   updatingCells: {},
@@ -419,16 +426,13 @@ export const fetchAllTenders = createAsyncThunk(
       const decoder = new TextDecoder();
       let buffer = "";
       let columns: string[] = [];
-      let batch: TenderMergedRow[] = [];
+      // Rows accumulate locally and are committed in a single dispatch once the
+      // stream drains. Dispatching per batch used to give `state.data` a new
+      // identity ~340 times, re-running every dashboard memo over a growing array.
+      const rows: TenderMergedRow[] = [];
       let headerReceivedAt: number | null = null;
-
-      const flush = () => {
-        if (batch.length === 0) return;
-        const dStart = performance.now();
-        dispatch(appendStreamBatch({ rows: batch }));
-        decodeMsTotal += performance.now() - dStart;
-        batch = [];
-      };
+      let lastProgressAt = 0;
+      let trailerPayload: { totalGem?: number; totalNonGem?: number } = {};
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -459,12 +463,19 @@ export const fetchAllTenders = createAsyncThunk(
             const row: TenderMergedRow = { type: "", id: "" };
             for (let i = 0; i < columns.length; i++) {
               const v = parsed[i];
-              row[columns[i]] = v == null ? "" : String(v);
+              // Skip absent values instead of writing "". Assigning all ~150
+              // columns on every row pushes these objects into V8 dictionary
+              // mode, costing several KB each instead of ~1 KB.
+              if (v == null || v === "") continue;
+              row[columns[i]] = String(v);
             }
-            batch.push(row);
+            rows.push(row);
             rowsDecoded++;
             decodeMsTotal += performance.now() - rowStart;
-            if (batch.length >= 100) flush();
+            if (rowsDecoded - lastProgressAt >= 2000) {
+              lastProgressAt = rowsDecoded;
+              dispatch(setStreamProgress(rowsDecoded));
+            }
           } else if (
             parsed &&
             typeof parsed === "object" &&
@@ -485,14 +496,15 @@ export const fetchAllTenders = createAsyncThunk(
             typeof parsed === "object" &&
             (parsed as Record<string, unknown>).done
           ) {
-            const trailer = parsed as { totalGem?: number; totalNonGem?: number };
-            dispatch(finishStream(trailer));
+            // Hold the trailer — finishStream must run *after* setStreamRows,
+            // otherwise loading flips false while rows are still uncommitted.
+            trailerPayload = parsed as { totalGem?: number; totalNonGem?: number };
           }
         }
       }
 
-      flush();
-      dispatch(finishStream({}));
+      dispatch(setStreamRows({ rows }));
+      dispatch(finishStream(trailerPayload));
       const totalMs = Math.round(performance.now() - t0);
       clientLog("client_complete", {
         totalMs, ttfbMs, headerMs, chunks, totalBytes, totalBytesMb: (totalBytes / 1024 / 1024).toFixed(2),
@@ -713,6 +725,7 @@ export const tendersSlice = createSlice({
     startFetch(state, action: PayloadAction<number>) {
       state.loading = true;
       state.data = null;
+      state.streamedCount = 0;
       state.totalFiles = action.payload;
       state.completedFiles = 0;
     },
@@ -792,12 +805,23 @@ export const tendersSlice = createSlice({
       }
       state.completedFiles = 1;
     },
-    appendStreamBatch(
-      state,
-      action: PayloadAction<{ rows: TenderMergedRow[] }>,
-    ) {
+    /**
+     * Progress ticks during a stream. Touches only `streamedCount`, so it does
+     * not give `state.data` a new identity and therefore does not re-run the
+     * dashboard memo chains.
+     */
+    setStreamProgress(state, action: PayloadAction<number>) {
+      state.streamedCount = action.payload;
+    },
+    /**
+     * Commits an entire decoded stream in one dispatch. Replaces the old
+     * append-every-100-rows path, which gave `state.data` ~340 new identities
+     * per load and made every derived-state chain re-run over a growing array.
+     */
+    setStreamRows(state, action: PayloadAction<{ rows: TenderMergedRow[] }>) {
       if (!state.data) return;
-      state.data.rows.push(...action.payload.rows);
+      state.data.rows = action.payload.rows;
+      state.streamedCount = action.payload.rows.length;
       state.completedFiles = 1;
     },
     finishStream(
@@ -1303,7 +1327,8 @@ export const {
   finishFetch,
   updateAnalysisResult,
   setStreamMeta,
-  appendStreamBatch,
+  setStreamProgress,
+  setStreamRows,
   finishStream,
 } =
   tendersSlice.actions;
