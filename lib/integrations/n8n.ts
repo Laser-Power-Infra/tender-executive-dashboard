@@ -308,6 +308,52 @@ export interface ReverseAuctionWebhookPayload {
   associateEmail: string | null
 }
 
+export interface EmdEmailWebhookPayload {
+  to: string;
+  subject: string;
+  body: string;
+  html: string;
+  reason?: string | null;
+  tenderNo?: string | null;
+  bgNo?: string | null;
+  id: string;
+}
+
+export async function triggerEmdEmailWebhook(payload: EmdEmailWebhookPayload): Promise<MailWebhookResult> {
+  const url = process.env.N8N_EMD_WEBHOOK_URL;
+  if (!url) {
+    return { success: false, message: "N8N_EMD_WEBHOOK_URL not configured" };
+  }
+
+  console.log(`[n8n] EMD email webhook triggered for id ${payload.id} to ${payload.to}`);
+
+  if (process.env.ENVIRONMENT !== "PROD") {
+    console.log("[n8n] EMD email webhook payload:", JSON.stringify({ to: payload.to, subject: payload.subject, reason: payload.reason, tenderNo: payload.tenderNo, bgNo: payload.bgNo }, null, 2));
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    console.log(`[n8n] EMD email webhook response status: ${response.status}`);
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`[n8n] EMD email webhook returned ${response.status}: ${text}`);
+      return { success: false, message: `Webhook returned ${response.status}: ${text}` };
+    }
+
+    return { success: true, message: "EMD email webhook triggered successfully" };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("[n8n] EMD email webhook failed:", error);
+    return { success: false, message: `Webhook failed: ${msg}` };
+  }
+}
+
 export async function triggerReverseAuctionWebhook(
   data: ReverseAuctionWebhookData,
 ): Promise<boolean> {

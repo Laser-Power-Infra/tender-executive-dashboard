@@ -638,8 +638,6 @@ model UtilityMapping {
   @@map("utility_mappings")
 }
 
-
-
 model CostingSheetDetails {
   id Int @id @default(autoincrement())
 
@@ -703,6 +701,7 @@ model Items {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
 // ---------- TENDER MERGED ----------
 model TenderMerged {
   id         Int        @id @default(autoincrement())
@@ -879,35 +878,38 @@ model TenderMerged {
 
 model EmdDetailsBG {
   id                 String    @id @db.VarChar(100)
-  trantype           String?   
-  bankName           String?   
-  partyCode          String?   
-  partyName          String?   
-  staffName          String?   
-  bgNo               String?   
-  bgDate             String?   
-  bgAmtLocal         String?   
-  bgAmtFc            String?   
-  expiryDate         String?   
-  claimDate          String?   
-  remark             String?   
-  status             String?   
-  remarks            String?   
-  contactNo          String?   
-  contactEmailId     String?   
-  address            String?   
-  tenderNo1          String?   
-  tenderNo           String?   
-  tenderNo2          String?   
-  match              String?   
-  bgMatch            String?   
-  statusPriceAssDone String?   
-  tmNo               String?   
-  docketNo           String?   
-  lastEmailSent      String?   
+  trantype           String?
+  bankName           String?
+  partyCode          String?
+  partyName          String?
+  staffName          String?
+  bgNo               String?
+  bgDate             String?
+  bgAmtLocal         String?
+  bgAmtFc            String?
+  expiryDate         String?
+  claimDate          String?
+  remark             String?
+  status             String?
+  remarks            String?
+  contactNo          String?
+  contactEmailId     String?
+  address            String?
+  tenderNo1          String?
+  tenderNo           String?
+  tenderNo2          String?
+  match              String?
+  bgMatch            String?
+  statusPriceAssDone String?
+  tmNo               String?
+  docketNo           String?
+  lastEmailSent      String?
+  emailDraft         String?   @db.Text
+  lastEmailSentAt    DateTime?
+  reason             String?   @db.Text
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt 
+  updatedAt DateTime @updatedAt
 }
 
 model EmdDetailsCash {
@@ -936,6 +938,9 @@ model EmdDetailsCash {
   remarks                          String?
   certificateByParty               String?
   certificateByUtility             String?
+  emailDraft                       String?   @db.Text
+  lastEmailSentAt                  DateTime?
+  reason                           String?   @db.Text
 
   // @@index([tenderNo])
   // @@index([tmNo])

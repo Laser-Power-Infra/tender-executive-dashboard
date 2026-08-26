@@ -29,6 +29,9 @@ export interface EmdDetailsBgRecord {
   tmNo: string | null;
   docketNo: string | null;
   lastEmailSent: string | null;
+  emailDraft: string | null;
+  lastEmailSentAt: string | null;
+  reason: string | null;
   createdAt: string;
   updatedAt: string;
 }
