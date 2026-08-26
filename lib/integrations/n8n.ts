@@ -354,6 +354,74 @@ export async function triggerEmdEmailWebhook(payload: EmdEmailWebhookPayload): P
   }
 }
 
+export interface CertificateEmailPayload {
+  to: string
+  cc: string[]
+  partyRefNo: string
+  partyName: string
+  fy: string
+  invoiceAmt: string
+  fileName: string
+  driveUrl: string
+  itemCount: number
+}
+
+export async function triggerCertificateEmailWebhook(
+  payload: CertificateEmailPayload,
+  pdfBuffer: Buffer,
+): Promise<MailWebhookResult> {
+  const url = process.env.N8N_CERTIFICATE_EMAIL_WEBHOOK_URL || process.env.N8N_CERTIFICATE_WEBHOOK_URL
+  if (!url) {
+    return { success: false, message: "N8N_CERTIFICATE_EMAIL_WEBHOOK_URL not configured" }
+  }
+
+  console.log(`[n8n] Certificate email webhook triggered for partyRefNo ${payload.partyRefNo} to ${payload.to} cc ${payload.cc.length}`)
+
+  if (process.env.ENVIRONMENT !== "PROD") {
+    console.log("[n8n] Certificate email payload:", JSON.stringify({ ...payload, pdfSize: pdfBuffer.length }, null, 2))
+  }
+
+  try {
+    // Reuse Emd pattern: FormData with file attachment
+    const formData = new FormData()
+    appendFormField(formData, "to", payload.to)
+    formData.append("cc", JSON.stringify(payload.cc))
+    appendFormField(formData, "partyRefNo", payload.partyRefNo)
+    appendFormField(formData, "partyName", payload.partyName)
+    appendFormField(formData, "fy", payload.fy)
+    appendFormField(formData, "invoiceAmt", payload.invoiceAmt)
+    appendFormField(formData, "fileName", payload.fileName)
+    appendFormField(formData, "driveUrl", payload.driveUrl)
+    appendFormField(formData, "itemCount", payload.itemCount)
+    // Also send structured JSON for n8n convenience
+    formData.append("payload", JSON.stringify(payload))
+
+    const arrayBuffer = pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength) as ArrayBuffer
+    formData.append("attachments", new Blob([arrayBuffer], { type: "application/pdf" }), payload.fileName)
+    // Also as 'file' alias for n8n compatibility
+    formData.append("file", new Blob([arrayBuffer], { type: "application/pdf" }), payload.fileName)
+
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    })
+
+    console.log(`[n8n] Certificate email webhook response status: ${response.status}`)
+
+    if (!response.ok) {
+      const text = await response.text()
+      console.error(`[n8n] Certificate email webhook returned ${response.status}: ${text}`)
+      return { success: false, message: `Webhook returned ${response.status}: ${text}` }
+    }
+
+    return { success: true, message: "Certificate email webhook triggered successfully" }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error"
+    console.error("[n8n] Certificate email webhook failed:", error)
+    return { success: false, message: `Webhook failed: ${msg}` }
+  }
+}
+
 export async function triggerReverseAuctionWebhook(
   data: ReverseAuctionWebhookData,
 ): Promise<boolean> {

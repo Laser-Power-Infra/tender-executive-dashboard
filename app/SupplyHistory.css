@@ -1043,6 +1043,35 @@
   display: inline-block;
 }
 
+.send-email-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #16a34a;
+  border-radius: 4px;
+  background: #16a34a;
+  cursor: pointer;
+  color: #fff;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.send-email-btn:hover:not(:disabled) {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+.send-email-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #a7f3d0;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

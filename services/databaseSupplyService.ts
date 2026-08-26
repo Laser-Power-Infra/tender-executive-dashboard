@@ -34,8 +34,11 @@ export class DatabaseSupplyService {
       invoiceQty: r.invoiceQty,
       invoiceAmt: r.invoiceAmt,
       attachmentUrl: r.attachmentUrl,
+      documentUrls: r.documentUrls ?? null,
       email: r.email ?? null,
       contactNo: r.contactNo ?? null,
+      certificateUrl: r.certificateUrl ?? null,
+      certificateFileName: r.certificateFileName ?? null,
     }));
   }
 
@@ -141,5 +144,24 @@ export class DatabaseSupplyService {
     console.log(
       `[DatabaseSupplyService] Sync: ${inserted} inserted, ${updated} updated`,
     );
+  }
+
+  static async persistCertificateForPartyRef(
+    partyRefNo: string,
+    driveUrl: string,
+    fileName: string,
+  ): Promise<number> {
+    if (!prisma || !partyRefNo) return 0;
+    try {
+      const result = await prisma.supplyHistory.updateMany({
+        where: { partyRefNo },
+        data: { certificateUrl: driveUrl, certificateFileName: fileName },
+      });
+      console.log(`[DatabaseSupplyService] Persisted certificate for partyRefNo ${partyRefNo}: ${result.count} rows updated`);
+      return result.count;
+    } catch (err) {
+      console.error(`[DatabaseSupplyService] Failed to persist certificate for ${partyRefNo}:`, err);
+      return 0;
+    }
   }
 }

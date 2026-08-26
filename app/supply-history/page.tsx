@@ -4,7 +4,7 @@ import { useSupplyHistory } from "@/hooks/useSupplyHistory";
 import { SupplyHistoryRecord } from "@/types/supplyHistory";
 import { SupplyAttachmentModal } from "@/components/SupplyAttachmentModal";
 // import { Package, RefreshCw, Eraser, ExternalLink, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen } from "lucide-react";
-import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText, ExternalLink, Download, Pencil, Check } from "lucide-react";
+import { Package, RefreshCw, Eraser, FileSpreadsheet, AlertTriangle, Search, ChevronUp, ChevronDown, ArrowUpDown, X, Inbox, FolderOpen, FileText, ExternalLink, Download, Pencil, Check, Mail, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import {
@@ -266,10 +266,14 @@ const SupplyHistoryDashboard: React.FC = () => {
   type CertState =
     | { status: "idle" }
     | { status: "generating" }
+    | { status: "ready"; driveUrl: string; fileName: string }
+    | { status: "emailSending" }
+    | { status: "emailSent" }
     | { status: "error"; error: string };
 
   const [certStates, setCertStates] = useState<Record<string, CertState>>({});
   const certGeneratingRef = useRef<Set<string>>(new Set());
+  const emailSendingRef = useRef<Set<string>>(new Set());
 
   const triggerDownload = useCallback((blob: Blob, fileName: string) => {
     const url = URL.createObjectURL(blob);
@@ -290,7 +294,7 @@ const SupplyHistoryDashboard: React.FC = () => {
       setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "generating" } }));
 
       const group = displayData.filter((r) => r.partyRefNo === partyRefNo);
-      const fileName = `Certificate_${partyRefNo || "NAN"}.pdf`;
+      const fallbackFileName = `Certificate_${partyRefNo || "NAN"}.pdf`;
 
       try {
         const res = await fetch("/api/supply-history/generate-certificate", {
@@ -302,19 +306,76 @@ const SupplyHistoryDashboard: React.FC = () => {
           const err = await res.json().catch(() => ({ error: "Generation failed" }));
           throw new Error(err.error || "Generation failed");
         }
+        const driveUrl = res.headers.get("X-Drive-Url") || "";
+        const contentDisp = res.headers.get("Content-Disposition") || "";
+        const match = contentDisp.match(/filename="?([^"]+)"?/);
+        const fileName = match ? match[1] : fallbackFileName;
         const blob = await res.blob();
         triggerDownload(blob, fileName);
-        setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "idle" } }));
+        // Persist locally and optimistically update displayData certificateUrl (no full-page refresh)
+        setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "ready", driveUrl, fileName } }));
+        const updatedRows = group.map((r) => r.certificateUrl ? r : { ...r, certificateUrl: driveUrl, certificateFileName: fileName });
+        if (updatedRows.some((r) => r.certificateUrl)) {
+          setLocalData((prev) => {
+            const base = prev ?? displayData;
+            return base.map((r) => (r.partyRefNo === partyRefNo ? { ...r, certificateUrl: driveUrl, certificateFileName: fileName } : r));
+          });
+        }
+        toast.success("Certificate generated successfully");
       } catch (err: any) {
         setCertStates((prev) => ({
           ...prev,
           [partyRefNo]: { status: "error", error: err.message },
         }));
+        toast.error(err.message || "Failed to generate certificate");
       } finally {
         certGeneratingRef.current.delete(partyRefNo);
       }
     },
     [displayData, triggerDownload]
+  );
+
+  const handleSendCertificateEmail = useCallback(
+    async (partyRefNo: string) => {
+      if (emailSendingRef.current.has(partyRefNo)) return;
+      emailSendingRef.current.add(partyRefNo);
+      setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "emailSending" } }));
+      try {
+        const res = await fetch("/api/supply-history/send-certificate-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ partyRefNo }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Failed to send email");
+        }
+        setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "emailSent" } }));
+        toast.success(`Certificate emailed to ${json.to}${json.cc?.length ? ` (cc: ${json.cc.join(", ")})` : ""}`);
+        // Reset to ready after 3s
+        setTimeout(() => {
+          setCertStates((prev) => {
+            const state = prev[partyRefNo];
+            if (state?.status === "emailSent") {
+              const row = displayData.find((r) => r.partyRefNo === partyRefNo);
+              const driveUrl = (row as any)?.certificateUrl || "";
+              const fileName = (row as any)?.certificateFileName || `Certificate_${partyRefNo}.pdf`;
+              return { ...prev, [partyRefNo]: { status: "ready", driveUrl, fileName } };
+            }
+            return prev;
+          });
+        }, 3000);
+      } catch (err: any) {
+        setCertStates((prev) => ({
+          ...prev,
+          [partyRefNo]: { status: "error", error: err.message },
+        }));
+        toast.error(err.message || "Failed to send email");
+      } finally {
+        emailSendingRef.current.delete(partyRefNo);
+      }
+    },
+    [displayData],
   );
 
   // Keep localData in sync when server data refreshes (unless editing)
@@ -337,10 +398,30 @@ const SupplyHistoryDashboard: React.FC = () => {
     const { saleBillNumber, itemCode, field } = editingCell;
     const key = `${saleBillNumber}|${itemCode}|${field}`;
     const value = editingDraft.trim();
-    // Validation
+    // Validation — allow comma/semicolon separated list (to/cc)
     if (field === "email" && value) {
+      const parts = value
+        .split(/[,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!re.test(value)) { toast.error("Invalid email format"); return; }
+      const seen = new Set<string>();
+      for (const p of parts) {
+        if (!re.test(p)) {
+          toast.error(`Invalid email: ${p}`);
+          return;
+        }
+        const lower = p.toLowerCase();
+        if (seen.has(lower)) {
+          toast.error(`Duplicate email: ${p}`);
+          return;
+        }
+        seen.add(lower);
+      }
+      if (value.length > 1000) {
+        toast.error("Too many emails (max 1000 chars)");
+        return;
+      }
     }
     if (field === "contactNo" && value) {
       const re = /^[0-9+\-()\s]+$/;
@@ -1576,7 +1657,7 @@ const SupplyHistoryDashboard: React.FC = () => {
                           />
                         </th>
                       ))}
-                      <th style={{ width: "150px", minWidth: "150px" }}>
+                      <th style={{ width: "200px", minWidth: "200px" }}>
                         <div className="supply-th-inner">Certificate PDF</div>
                       </th>
                     </tr>
@@ -1701,7 +1782,8 @@ const SupplyHistoryDashboard: React.FC = () => {
                                     onKeyDown={(e)=>{ if(e.key==="Enter"){ e.preventDefault(); handleEditSave(); } else if(e.key==="Escape"){ handleEditCancel(); } }}
                                     autoFocus
                                     disabled={isSaving}
-                                    placeholder="Email"
+                                    placeholder="a@x.com, b@y.com"
+                                    title="Separate multiple emails with comma"
                                     style={{ fontSize: "12px", padding: "2px 6px", border: "1px solid #dadce0", borderRadius: 4, width: 160 }}
                                   />
                                   <button onClick={handleEditSave} disabled={isSaving} title="Save" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:22, height:22, borderRadius:"50%", background:"#1a73e8", color:"#fff", border:"none", cursor:"pointer" }}><Check size={12} /></button>
@@ -1770,8 +1852,21 @@ const SupplyHistoryDashboard: React.FC = () => {
                             <span className="supply-null-cell">—</span>
                           ) : (() => {
                             const state = certStates[row.partyRefNo] ?? { status: "idle" };
+                            const hasCert = !!(row as any).certificateUrl || state.status === "ready" || state.status === "emailSent" || state.status === "emailSending";
+                            const groupEmails = displayData.filter((r) => r.partyRefNo === row.partyRefNo).map((r) => r.email).filter(Boolean) as string[];
+                            const hasEmail = groupEmails.length > 0;
                             if (state.status === "generating") {
                               return <span className="supply-generating"><span className="supply-spinner-sm" /> Generating...</span>;
+                            }
+                            if (state.status === "emailSending") {
+                              return <span className="supply-generating"><Loader2 size={12} className="animate-spin" /> Sending...</span>;
+                            }
+                            if (state.status === "emailSent") {
+                              return (
+                                <span className="supply-generating" style={{ color: "#16a34a", fontWeight: 600 }}>
+                                  <Send size={12} /> Sent!
+                                </span>
+                              );
                             }
                             if (state.status === "error") {
                               return (
@@ -1783,6 +1878,30 @@ const SupplyHistoryDashboard: React.FC = () => {
                                 >
                                   <RefreshCw size={14} /> Retry
                                 </button>
+                              );
+                            }
+                            // Has certificate → show Generate + Send Email
+                            if (hasCert) {
+                              return (
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                  <button
+                                    className="generate-pdf-btn"
+                                    onClick={() => handleGenerateCertificate(row.partyRefNo!)}
+                                    title="Re-generate certificate"
+                                    style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 8px", fontSize: 11 }}
+                                  >
+                                    <FileText size={12} /> PDF
+                                  </button>
+                                  <button
+                                    className="send-email-btn"
+                                    onClick={() => handleSendCertificateEmail(row.partyRefNo!)}
+                                    disabled={!hasEmail}
+                                    title={!hasEmail ? "No recipient email — add Email first" : `Send to ${groupEmails[0]}${groupEmails.length > 1 ? ` + ${groupEmails.length - 1} cc` : ""}`}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                  >
+                                    <Mail size={12} /> Send Email
+                                  </button>
+                                </div>
                               );
                             }
                             return (

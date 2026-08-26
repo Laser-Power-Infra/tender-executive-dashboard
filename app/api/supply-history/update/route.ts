@@ -10,9 +10,21 @@ function validateField(field: string, value: string | null): string | null {
   const v = value == null ? "" : String(value).trim();
   if (field === "email") {
     if (v === "") return null;
-    if (v.length > 254) return "Email too long (max 254)";
+    if (v.length > 1000) return "Too many emails (max 1000 chars)";
+    const parts = v
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return null;
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!re.test(v)) return "Invalid email format";
+    const seen = new Set<string>();
+    for (const p of parts) {
+      if (p.length > 254) return `Email too long: ${p.slice(0, 30)}`;
+      if (!re.test(p)) return `Invalid email: ${p}`;
+      const lower = p.toLowerCase();
+      if (seen.has(lower)) return `Duplicate email: ${p}`;
+      seen.add(lower);
+    }
     return null;
   }
   if (field === "contactNo") {
