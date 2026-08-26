@@ -3,8 +3,11 @@
 import React, { useMemo, useState, useRef, useCallback } from "react";
 import { useEmdDetailsBg, EmdDetailsBgRecord } from "@/hooks/useEmdDetailsBg";
 import { EmdBgSidebar, EmdBgStatus, EmdBgStats } from "@/components/emd-bg/EmdBgSidebar";
-import { RefreshCw, Eraser, Search, Download, FileSpreadsheet, ChevronUp, ChevronDown, RotateCcw, X } from "lucide-react";
+import { RefreshCw, Eraser, Search, Download, FileSpreadsheet, ChevronUp, ChevronDown, RotateCcw, X, Mail, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { toast } from "sonner";
+import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
+import { EmdBgEmailDialog } from "@/components/emd/EmdBgEmailDialog";
 import "@/app/SupplyHistory.css";
 import "@/components/TenderTable.css";
 
@@ -38,7 +41,7 @@ function parseDateValue(v: unknown): number {
 
 type BgColumn = {
   header: string;
-  accessor: keyof EmdDetailsBgRecord;
+  accessor: keyof EmdDetailsBgRecord | "action";
   defaultWidth: number;
   align?: "left" | "right" | "center";
   sticky?: boolean;
@@ -72,6 +75,10 @@ const BG_COLUMNS: BgColumn[] = [
   { header: "TM No", accessor: "tmNo", defaultWidth: 115, align: "left" },
   { header: "Docket No", accessor: "docketNo", defaultWidth: 130, align: "left" },
   { header: "Last Email Sent", accessor: "lastEmailSent", defaultWidth: 140, align: "center", sortable: true },
+  { header: "Email Draft", accessor: "emailDraft", defaultWidth: 320, align: "left" },
+  { header: "Last Email Sent At", accessor: "lastEmailSentAt", defaultWidth: 170, align: "center", sortable: true },
+  { header: "Tender Conclusion Reason", accessor: "reason", defaultWidth: 280, align: "left", sortable: true },
+  { header: "Action", accessor: "action", defaultWidth: 140, align: "center", sortable: false },
 ];
 
 export default function EmdDetailsBgPage() {
@@ -90,6 +97,11 @@ export default function EmdDetailsBgPage() {
     BG_COLUMNS.forEach((c) => (m[String(c.accessor)] = c.defaultWidth));
     return m;
   });
+
+  const [localReasonMap, setLocalReasonMap] = useState<Record<string, string | null>>({});
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [reasonFilter, setReasonFilter] = useState<string>("");
 
   const resizingColumnRef = useRef<string | null>(null);
   const startXRef = useRef(0);
@@ -119,12 +131,13 @@ export default function EmdDetailsBgPage() {
     document.body.style.cursor = "col-resize";
   };
 
-  const handleSort = (col: keyof EmdDetailsBgRecord) => {
+  const handleSort = (col: keyof EmdDetailsBgRecord | "action") => {
+    if (col === "action") return;
     const cfg = BG_COLUMNS.find((c) => c.accessor === col);
     if (!cfg?.sortable) return;
     if (sortColumn === col) setSortDirection((p) => (p === "asc" ? "desc" : "asc"));
     else {
-      setSortColumn(col);
+      setSortColumn(col as keyof EmdDetailsBgRecord);
       setSortDirection("desc");
     }
     setCurrentPage(1);
@@ -156,10 +169,69 @@ export default function EmdDetailsBgPage() {
     return map;
   }, [data]);
 
+  const mergedData = useMemo(() => {
+    return data.map((r) => (localReasonMap[r.id] !== undefined ? { ...r, reason: localReasonMap[r.id] } : r));
+  }, [data, localReasonMap]);
+
   const statusFiltered = useMemo(() => {
-    if (selectedStatus === "ALL") return data;
-    return data.filter((r) => normalizeStatus(r.status) === selectedStatus);
-  }, [data, selectedStatus]);
+    if (selectedStatus === "ALL") return mergedData;
+    return mergedData.filter((r) => normalizeStatus(r.status) === selectedStatus);
+  }, [mergedData, selectedStatus]);
+
+  const handleReasonChange = useCallback(async (id: string, newReason: string) => {
+    const prev = (mergedData.find((r) => r.id === id)?.reason ?? null) as string | null;
+    setLocalReasonMap((prevMap) => ({ ...prevMap, [id]: newReason || null }));
+    setUpdatingId(id);
+    try {
+      const res = await fetch(`/api/emd-details-bg/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: newReason || null }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to update reason");
+      toast.success("Reason updated");
+    } catch (e: any) {
+      setLocalReasonMap((prevMap) => ({ ...prevMap, [id]: prev }));
+      toast.error(e.message || "Failed to update reason");
+    } finally {
+      setUpdatingId(null);
+    }
+  }, [mergedData]);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogRow, setDialogRow] = useState<EmdDetailsBgRecord | null>(null);
+
+  const handleSendEmail = useCallback(async (row: EmdDetailsBgRecord) => {
+    if (!row.reason) {
+      toast.error("Please select Tender Conclusion Reason before sending email");
+      return;
+    }
+    setDialogRow(row);
+    setDialogOpen(true);
+  }, []);
+
+  const handleDialogConfirm = useCallback(async (payload: { to: string; subject: string; body: string; html: string }) => {
+    if (!dialogRow) return;
+    setSendingId(dialogRow.id);
+    try {
+      const res = await fetch(`/api/emd-details-bg/${dialogRow.id}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: payload.to, subject: payload.subject, body: payload.body, html: payload.html }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to send email");
+      toast.success("Email sent");
+      setDialogOpen(false);
+      await refresh();
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send email");
+      throw e;
+    } finally {
+      setSendingId(null);
+    }
+  }, [dialogRow, refresh]);
 
   const processedRecords = useMemo(() => {
     let result = [...statusFiltered];
@@ -168,7 +240,8 @@ export default function EmdDetailsBgPage() {
       const q = globalSearch.toLowerCase().trim();
       result = result.filter((r) =>
         BG_COLUMNS.some((c) => {
-          const v = r[c.accessor];
+          if (c.accessor === "action") return false;
+          const v = (r as any)[c.accessor as keyof EmdDetailsBgRecord];
           if (v == null) return false;
           return String(v).toLowerCase().includes(q);
         })
@@ -179,22 +252,31 @@ export default function EmdDetailsBgPage() {
       if (!searchVal.trim()) continue;
       const q = searchVal.toLowerCase().trim();
       result = result.filter((r) => {
-        const v = r[accessor as keyof EmdDetailsBgRecord];
+        if (accessor === "reason" || accessor === "action") return true;
+        const v = (r as any)[accessor as keyof EmdDetailsBgRecord];
         if (v == null) return false;
         return String(v).toLowerCase().includes(q);
       });
     }
 
+    if (reasonFilter) {
+      if (reasonFilter === "__blank__") {
+        result = result.filter((r) => !r.reason || String(r.reason).trim() === "");
+      } else {
+        result = result.filter((r) => r.reason === reasonFilter);
+      }
+    }
+
     if (sortColumn) {
       result.sort((a, b) => {
-        const va = a[sortColumn];
-        const vb = b[sortColumn];
+        const va = (a as any)[sortColumn];
+        const vb = (b as any)[sortColumn];
         if (sortColumn === "bgAmtLocal" || sortColumn === "bgAmtFc") {
           const na = parseAmt(va);
           const nb = parseAmt(vb);
           return sortDirection === "asc" ? na - nb : nb - na;
         }
-        if (sortColumn === "bgDate" || sortColumn === "expiryDate" || sortColumn === "claimDate" || sortColumn === "lastEmailSent") {
+        if (sortColumn === "bgDate" || sortColumn === "expiryDate" || sortColumn === "claimDate" || sortColumn === "lastEmailSent" || sortColumn === "lastEmailSentAt") {
           const da = parseDateValue(va);
           const db = parseDateValue(vb);
           if (da === db) return 0;
@@ -208,7 +290,7 @@ export default function EmdDetailsBgPage() {
     }
 
     return result;
-  }, [statusFiltered, globalSearch, columnSearchText, sortColumn, sortDirection]);
+  }, [statusFiltered, globalSearch, columnSearchText, reasonFilter, sortColumn, sortDirection]);
 
   const totalRecords = processedRecords.length;
   const totalPages = Math.ceil(totalRecords / rowsPerPage) || 1;
@@ -221,7 +303,10 @@ export default function EmdDetailsBgPage() {
   const handleExportExcel = useCallback(() => {
     const exportData = processedRecords.map((rec) => {
       const obj: Record<string, string> = {};
-      for (const col of BG_COLUMNS) obj[col.header] = String(rec[col.accessor] ?? "");
+      for (const col of BG_COLUMNS) {
+        if (col.accessor === "action") continue;
+        obj[col.header] = String((rec as any)[col.accessor as keyof EmdDetailsBgRecord] ?? "");
+      }
       return obj;
     });
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -232,10 +317,11 @@ export default function EmdDetailsBgPage() {
   }, [processedRecords]);
 
   const handleExportCSV = useCallback(() => {
-    const headers = BG_COLUMNS.map((c) => c.header).join(",");
+    const exportCols = BG_COLUMNS.filter((c) => c.accessor !== "action");
+    const headers = exportCols.map((c) => c.header).join(",");
     const rows = processedRecords.map((rec) =>
-      BG_COLUMNS.map((col) => {
-        let v = String(rec[col.accessor] ?? "");
+      exportCols.map((col) => {
+        let v = String((rec as any)[col.accessor as keyof EmdDetailsBgRecord] ?? "");
         if (v.includes(",") || v.includes('"') || v.includes("\n")) v = `"${v.replace(/"/g, '""')}"`;
         return v;
       }).join(",")
@@ -287,7 +373,7 @@ export default function EmdDetailsBgPage() {
           <button className="supply-refresh-sidebar-btn" onClick={refresh}>
             <RefreshCw size={14} /> Refresh
           </button>
-          <button className="supply-refresh-sidebar-btn" onClick={() => { setSelectedStatus("ALL"); setGlobalSearch(""); setColumnSearchText({}); setCurrentPage(1); }} style={{ marginTop: "8px" }}>
+          <button className="supply-refresh-sidebar-btn" onClick={() => { setSelectedStatus("ALL"); setGlobalSearch(""); setColumnSearchText({}); setReasonFilter(""); setCurrentPage(1); }} style={{ marginTop: "8px" }}>
             <Eraser size={14} /> Clear Filter
           </button>
         </div>
@@ -347,7 +433,7 @@ export default function EmdDetailsBgPage() {
                             ...(col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], zIndex: 3 } : {}),
                           }}
                         >
-                          <div className="header-content" onClick={() => handleSort(col.accessor)} style={{ cursor: col.sortable ? "pointer" : "default" }}>
+                          <div className="header-content" onClick={() => handleSort(col.accessor as any)} style={{ cursor: col.sortable ? "pointer" : "default" }}>
                             <span>{col.header}</span>
                             {sortColumn === col.accessor && (
                               <span className="sort-indicator" style={{ display: "inline-flex", alignItems: "center" }}>
@@ -355,14 +441,29 @@ export default function EmdDetailsBgPage() {
                               </span>
                             )}
                           </div>
-                          <input
-                            type="text"
-                            className="column-search-input"
-                            placeholder={`Search ${col.header}...`}
-                            value={columnSearchText[String(col.accessor)] ?? ""}
-                            onChange={(e) => { setColumnSearchText((prev) => ({ ...prev, [String(col.accessor)]: e.target.value })); setCurrentPage(1); }}
-                            onClick={(e) => e.stopPropagation()}
-                          />
+                          {col.accessor === "reason" ? (
+                            <select
+                              className="column-search-input"
+                              value={reasonFilter}
+                              onChange={(e) => { setReasonFilter(e.target.value); setCurrentPage(1); }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <option value="">All Reasons</option>
+                              {TENDER_REASON_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                              <option value="__blank__">Blank</option>
+                            </select>
+                          ) : col.accessor === "action" ? null : (
+                            <input
+                              type="text"
+                              className="column-search-input"
+                              placeholder={`Search ${col.header}...`}
+                              value={columnSearchText[String(col.accessor)] ?? ""}
+                              onChange={(e) => { setColumnSearchText((prev) => ({ ...prev, [String(col.accessor)]: e.target.value })); setCurrentPage(1); }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
                           <div className="column-resizer" onMouseDown={(e) => handleResizeStart(e, String(col.accessor), columnWidths[String(col.accessor)])} />
                         </th>
                       ))}
@@ -379,7 +480,42 @@ export default function EmdDetailsBgPage() {
                       paginatedRecords.map((row) => (
                         <tr key={String(row.id)} className="tender-row">
                           {BG_COLUMNS.map((col) => {
-                            const raw = row[col.accessor];
+                            if (col.accessor === "action") {
+                              const isSending = sendingId === row.id;
+                              const hasReason = !!row.reason;
+                              return (
+                                <td key={String(col.accessor)} className="col-center" style={{ background: "#fff" }}>
+                                  <button
+                                    onClick={() => handleSendEmail(row)}
+                                    disabled={!hasReason || isSending}
+                                    title={!hasReason ? "Select Tender Conclusion Reason first" : "Send email"}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 12px", background: hasReason ? "#0a2540" : "#cbd5e1", color: "white", borderRadius: "6px", fontWeight: 600, fontSize: "12px", border: "none", cursor: hasReason ? "pointer" : "not-allowed", opacity: isSending ? 0.7 : 1 }}
+                                  >
+                                    {isSending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} {isSending ? "Sending..." : "Send Email"}
+                                  </button>
+                                </td>
+                              );
+                            }
+                            if (col.accessor === "reason") {
+                              const isUpdating = updatingId === row.id;
+                              return (
+                                <td key={String(col.accessor)} className={`${col.sticky ? "sticky-col" : ""}`} style={col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], background: "#fff" } : {}}>
+                                  <select
+                                    value={row.reason ?? ""}
+                                    onChange={(e) => handleReasonChange(row.id, e.target.value)}
+                                    disabled={isUpdating}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #dadce0", fontSize: "12px", background: isUpdating ? "#f1f3f4" : "white" }}
+                                  >
+                                    <option value="">Select reason...</option>
+                                    {TENDER_REASON_OPTIONS.map((opt) => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                              );
+                            }
+                            const raw = (row as any)[col.accessor as keyof EmdDetailsBgRecord];
                             const display = raw == null || String(raw).trim() === "" ? "-" : String(raw);
                             const alignClass = col.align === "right" ? "col-currency" : col.align === "center" ? "col-center" : "";
                             return (
@@ -444,6 +580,7 @@ export default function EmdDetailsBgPage() {
           </div>
         </main>
       </div>
+      <EmdBgEmailDialog open={dialogOpen} onOpenChange={setDialogOpen} row={dialogRow} onConfirm={handleDialogConfirm} />
     </div>
   );
 }

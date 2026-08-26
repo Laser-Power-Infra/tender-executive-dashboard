@@ -26,6 +26,9 @@ export interface EmdDetailsCashRecord {
   remarks: string | null;
   certificateByParty: string | null;
   certificateByUtility: string | null;
+  emailDraft: string | null;
+  lastEmailSentAt: string | null;
+  reason: string | null;
 }
 
 interface UseEmdDetailsCashResult {

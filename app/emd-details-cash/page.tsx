@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { useEmdDetailsCash, EmdDetailsCashRecord } from "@/hooks/useEmdDetailsCash";
 import {
   OptimizedTenderTable,
   ColumnDef,
 } from "@/components/tender-viewer/optimized-tender-table/OptimizedTenderTable";
 import { EmdCashSidebar, EmdStatus, EmdStats } from "@/components/emd-cash/EmdCashSidebar";
-import { RefreshCw, Eraser } from "lucide-react";
+import { RefreshCw, Eraser, Mail, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
 import "@/app/SupplyHistory.css";
 
 function normalizeStatus(v: string | null | undefined): EmdStatus | null {
@@ -28,6 +30,14 @@ function parseEmdAmt(v: unknown): number {
 export default function EmdDetailsCashPage() {
   const { data, loading, error, refresh } = useEmdDetailsCash();
   const [selectedStatus, setSelectedStatus] = useState<EmdStatus | "ALL">("ALL");
+  const [localReasonMap, setLocalReasonMap] = useState<Record<string, string | null>>({});
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [sendingId, setSendingId] = useState<number | null>(null);
+
+  const mergedData = useMemo(() => {
+    if (Object.keys(localReasonMap).length === 0) return data;
+    return data.map((r) => (localReasonMap[String(r.id)] !== undefined ? { ...r, reason: localReasonMap[String(r.id)] } : r));
+  }, [data, localReasonMap]);
 
   const sidebarStats: Record<EmdStatus, EmdStats> = useMemo(() => {
     const init = (): EmdStats => ({ count: 0, totalEmd: 0, customerCount: 0 });
@@ -41,7 +51,7 @@ export default function EmdDetailsCashPage() {
       PENDING: new Set(),
       "WRITTEN OFF": new Set(),
     } as any;
-    for (const r of data) {
+    for (const r of mergedData) {
       const k = normalizeStatus(r.statusRefundedPending);
       if (!k) continue;
       map[k].count += 1;
@@ -52,12 +62,41 @@ export default function EmdDetailsCashPage() {
       map[k].customerCount = customerSets[k].size;
     }
     return map;
-  }, [data]);
+  }, [mergedData]);
 
   const filteredData = useMemo(() => {
-    if (selectedStatus === "ALL") return data;
-    return data.filter((r) => normalizeStatus(r.statusRefundedPending) === selectedStatus);
-  }, [data, selectedStatus]);
+    if (selectedStatus === "ALL") return mergedData;
+    return mergedData.filter((r) => normalizeStatus(r.statusRefundedPending) === selectedStatus);
+  }, [mergedData, selectedStatus]);
+
+  const handleReasonChange = useCallback(async (id: number, newReason: string) => {
+    const prev = (mergedData.find((r) => r.id === id)?.reason ?? null) as string | null;
+    setLocalReasonMap((prevMap) => ({ ...prevMap, [String(id)]: newReason || null }));
+    setUpdatingId(id);
+    try {
+      const res = await fetch(`/api/emd-details-cash/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: newReason || null }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to update reason");
+      toast.success("Reason updated");
+    } catch (e: any) {
+      setLocalReasonMap((prevMap) => ({ ...prevMap, [String(id)]: prev }));
+      toast.error(e.message || "Failed to update reason");
+    } finally {
+      setUpdatingId(null);
+    }
+  }, [mergedData]);
+
+  const handleSendEmail = useCallback(async (row: EmdDetailsCashRecord) => {
+    if (!row.reason) {
+      toast.error("Please select Tender Conclusion Reason before sending email");
+      return;
+    }
+    toast.info("Work in progress — EMD Cash email sending will be available soon");
+  }, []);
 
   const columns: ColumnDef<Record<string, unknown>>[] = useMemo(
     () => [
@@ -241,8 +280,78 @@ export default function EmdDetailsCashPage() {
         sortable: true,
         searchable: true,
       },
+      {
+        header: "Email Draft",
+        accessor: "emailDraft",
+        defaultWidth: 320,
+        filter: { type: "text", placeholder: "Search draft" },
+        searchable: true,
+        sortable: false,
+      },
+      {
+        header: "Last Email Sent At",
+        accessor: "lastEmailSentAt",
+        type: "date",
+        defaultWidth: 170,
+        filter: { type: "dateRange" },
+        sortable: true,
+        sortValue: (v) => (v ? new Date(String(v)).getTime() : 0),
+      },
+      {
+        header: "Tender Conclusion Reason",
+        accessor: "reason",
+        defaultWidth: 280,
+        filter: {
+          type: "select",
+          placeholder: "Filter reason",
+          options: [...TENDER_REASON_OPTIONS.map((v) => ({ value: v, label: v })), { value: "__blank__", label: "Blank" }],
+        },
+        sortable: true,
+        searchable: true,
+        renderCell: (value, row) => {
+          const r = row as unknown as EmdDetailsCashRecord;
+          const isUpdating = updatingId === r.id;
+          return (
+            <select
+              value={(r.reason as string) ?? ""}
+              onChange={(e) => handleReasonChange(r.id, e.target.value)}
+              disabled={isUpdating}
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: "100%", padding: "6px 8px", borderRadius: "6px", border: "1px solid #dadce0", fontSize: "12px", background: isUpdating ? "#f1f3f4" : "white" }}
+            >
+              <option value="">Select reason...</option>
+              {TENDER_REASON_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          );
+        },
+      },
+      {
+        header: "Action",
+        accessor: "action",
+        defaultWidth: 140,
+        align: "center",
+        sortable: false,
+        searchable: false,
+        renderCell: (_value, row) => {
+          const r = row as unknown as EmdDetailsCashRecord;
+          const isSending = sendingId === r.id;
+          const hasReason = !!r.reason;
+          return (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleSendEmail(r); }}
+              disabled={!hasReason || isSending}
+              title={!hasReason ? "Select Tender Conclusion Reason first" : "Send email"}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 12px", background: hasReason ? "#0a2540" : "#cbd5e1", color: "white", borderRadius: "6px", fontWeight: 600, fontSize: "12px", border: "none", cursor: hasReason ? "pointer" : "not-allowed", opacity: isSending ? 0.7 : 1 }}
+            >
+              {isSending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />} {isSending ? "Sending..." : "Send Email"}
+            </button>
+          );
+        },
+      },
     ],
-    []
+    [updatingId, sendingId, handleReasonChange, handleSendEmail]
   );
 
   if (loading) {
