@@ -180,6 +180,8 @@ model SupplyHistory {
   attachmentUrl String?
   email         String?
   contactNo     String?
+  certificateUrl String?
+  certificateFileName String? 
 
   lastSyncedAt DateTime @default(now())
 
