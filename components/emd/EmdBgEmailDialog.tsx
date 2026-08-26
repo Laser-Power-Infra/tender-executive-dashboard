@@ -92,16 +92,12 @@ export function EmdBgEmailDialog({ open, onOpenChange, row, onConfirm }: Props) 
         date: initial.date,
       };
       setMailData(md);
-      // if row has stored draft, use it; else compile from template (cached)
-      if (row.emailDraft && row.emailDraft.trim().length > 20) {
-        setHtml(row.emailDraft);
-      } else {
-        try {
-          const compiled = compiledTemplate(md);
-          setHtml(compiled);
-        } catch {
-          setHtml(EMD_MAIL_TEMPLATE);
-        }
+      // Always generate from Handlebars template (per requirement) — ignore stale emailDraft that may contain old To/Subject blocks
+      try {
+        const compiled = compiledTemplate(md);
+        setHtml(compiled);
+      } catch {
+        setHtml(EMD_MAIL_TEMPLATE);
       }
       setShowPreview(true);
     }

@@ -5,22 +5,32 @@ import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
 
 export const runtime = "nodejs";
 
-async function updateEmdDetailsCashReason(id: number, reason: string | null) {
-  if (reason !== null && reason !== "" && !(TENDER_REASON_OPTIONS as readonly string[]).includes(reason)) {
-    throw new Error("Invalid reason option");
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function updateEmdDetailsCashFields(id: number, data: { reason?: string | null; contactEmailId?: string | null }) {
+  const updateData: any = {};
+  if (data.reason !== undefined) {
+    const reason = data.reason === "" ? null : data.reason;
+    if (reason !== null && !(TENDER_REASON_OPTIONS as readonly string[]).includes(reason)) {
+      throw new Error("Invalid reason option");
+    }
+    updateData.reason = reason;
   }
-  const updated = await prisma.emdDetailsCash.update({
-    where: { id },
-    data: { reason: reason || null },
-  });
+  if (data.contactEmailId !== undefined) {
+    const raw = data.contactEmailId === "" ? null : (data.contactEmailId as string)?.trim() ?? null;
+    if (raw !== null && !EMAIL_RE.test(raw)) throw new Error("Invalid contact email");
+    updateData.contactEmailId = raw;
+  }
+  if (Object.keys(updateData).length === 0) throw new Error("No fields to update");
+  const updated = await prisma.emdDetailsCash.update({ where: { id }, data: updateData });
   return updated;
 }
 
-const updateReasonWithLog = withLog(updateEmdDetailsCashReason, (result, id, reason) => ({
+const updateFieldsWithLog = withLog(updateEmdDetailsCashFields, (result, id, data) => ({
   action: "UPDATE" as const,
   tableName: "EmdDetailsCash",
   recordId: String(id),
-  details: `Updated reason to "${reason ?? ""}" on EMD Cash #${id}`,
+  details: `Updated ${Object.keys(data).join(",")} on EMD Cash #${id}`,
 }));
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,13 +39,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const id = Number(rawId);
     if (!rawId || Number.isNaN(id)) return NextResponse.json({ success: false, error: "Missing or invalid id" }, { status: 400 });
     const body = await req.json();
-    const reason = body.reason !== undefined ? (body.reason as string | null) : null;
-    const normalized = reason === "" ? null : reason;
-    const updated = await updateReasonWithLog(id, normalized);
+    const data: any = {};
+    if ("reason" in body) data.reason = body.reason as string | null;
+    if ("contactEmailId" in body) data.contactEmailId = body.contactEmailId as string | null;
+    const updated = await updateFieldsWithLog(id, data);
     return NextResponse.json({ success: true, data: updated });
   } catch (err: any) {
-    const msg = err.message ?? "Failed to update reason";
-    const status = msg.includes("Invalid reason") ? 400 : msg.includes("Record to update does not exist") ? 404 : 500;
+    const msg = err.message ?? "Failed to update";
+    const status = msg.includes("Invalid") ? 400 : msg.includes("Record to update does not exist") ? 404 : msg.includes("No fields") ? 400 : 500;
     console.error("[API:PATCH /api/emd-details-cash/[id]] failed:", msg);
     return NextResponse.json({ success: false, error: msg }, { status });
   }

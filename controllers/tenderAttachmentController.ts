@@ -22,6 +22,7 @@ function getAllowedRoots(): string[] {
     process.env.INDEXER_NETWORK_PATH,
     process.env.COSTING_FILE_NETWORK_PATH,
     process.env.OLD_RA_EXCEL_PATH,
+    process.env.OLD_FILES,
     process.env.SUPPLY_NETWORK_PATH,
     process.env.CONDUTOR_PATH,
   ];
@@ -97,6 +98,12 @@ export class TenderAttachmentController {
       base = resolveRootPath();
     } else if (type === "RA_COSTING_FILE") {
       base = process.env.OLD_RA_EXCEL_PATH ?? resolveRootPath();
+    } else if (type === "OLDFILE") {
+      base = process.env.OLD_FILES!;
+      if (!base) throw new Error("OLD_FILES not set");
+    } else if (type === "oldfiles") {
+      base = process.env.OLD_FILES!;
+      if (!base) throw new Error("OLD_FILES not set");
     } else {
       throw new Error(`Unknown path type prefix: ${type}`);
     }

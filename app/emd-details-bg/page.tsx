@@ -3,11 +3,12 @@
 import React, { useMemo, useState, useRef, useCallback } from "react";
 import { useEmdDetailsBg, EmdDetailsBgRecord } from "@/hooks/useEmdDetailsBg";
 import { EmdBgSidebar, EmdBgStatus, EmdBgStats } from "@/components/emd-bg/EmdBgSidebar";
-import { RefreshCw, Eraser, Search, Download, FileSpreadsheet, ChevronUp, ChevronDown, RotateCcw, X, Mail, Loader2 } from "lucide-react";
+import { RefreshCw, Eraser, Search, Download, FileSpreadsheet, ChevronUp, ChevronDown, RotateCcw, X, Mail, Loader2, Check } from "lucide-react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
 import { EmdBgEmailDialog } from "@/components/emd/EmdBgEmailDialog";
+import { formatDateTimeIST } from "@/lib/format-ist";
 import "@/app/SupplyHistory.css";
 import "@/components/TenderTable.css";
 
@@ -99,9 +100,15 @@ export default function EmdDetailsBgPage() {
   });
 
   const [localReasonMap, setLocalReasonMap] = useState<Record<string, string | null>>({});
+  const [localContactEmailMap, setLocalContactEmailMap] = useState<Record<string, string | null>>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updatingContactEmailId, setUpdatingContactEmailId] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [reasonFilter, setReasonFilter] = useState<string>("");
+  const [editingContactEmailId, setEditingContactEmailId] = useState<string | null>(null);
+  const [draftContactEmail, setDraftContactEmail] = useState<string>("");
+
+  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
   const resizingColumnRef = useRef<string | null>(null);
   const startXRef = useRef(0);
@@ -170,8 +177,13 @@ export default function EmdDetailsBgPage() {
   }, [data]);
 
   const mergedData = useMemo(() => {
-    return data.map((r) => (localReasonMap[r.id] !== undefined ? { ...r, reason: localReasonMap[r.id] } : r));
-  }, [data, localReasonMap]);
+    return data.map((r) => {
+      let n = r;
+      if (localReasonMap[r.id] !== undefined) n = { ...n, reason: localReasonMap[r.id] };
+      if (localContactEmailMap[r.id] !== undefined) n = { ...n, contactEmailId: localContactEmailMap[r.id] };
+      return n;
+    });
+  }, [data, localReasonMap, localContactEmailMap]);
 
   const statusFiltered = useMemo(() => {
     if (selectedStatus === "ALL") return mergedData;
@@ -198,6 +210,39 @@ export default function EmdDetailsBgPage() {
       setUpdatingId(null);
     }
   }, [mergedData]);
+
+  const handleContactEmailSave = useCallback(async (id: string) => {
+    const raw = draftContactEmail.trim();
+    if (raw !== "" && !isValidEmail(raw)) {
+      toast.error("Invalid email format");
+      return;
+    }
+    const prev = (mergedData.find((r) => r.id === id)?.contactEmailId ?? null) as string | null;
+    const next = raw === "" ? null : raw;
+    setLocalContactEmailMap((prevMap) => ({ ...prevMap, [id]: next }));
+    setUpdatingContactEmailId(id);
+    setEditingContactEmailId(null);
+    try {
+      const res = await fetch(`/api/emd-details-bg/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactEmailId: next }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to update contact email");
+      toast.success("Contact email updated");
+    } catch (e: any) {
+      setLocalContactEmailMap((prevMap) => ({ ...prevMap, [id]: prev }));
+      toast.error(e.message || "Failed to update contact email");
+    } finally {
+      setUpdatingContactEmailId(null);
+    }
+  }, [draftContactEmail, mergedData]);
+
+  const handleContactEmailCancel = useCallback(() => {
+    setEditingContactEmailId(null);
+    setDraftContactEmail("");
+  }, []);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogRow, setDialogRow] = useState<EmdDetailsBgRecord | null>(null);
@@ -305,7 +350,8 @@ export default function EmdDetailsBgPage() {
       const obj: Record<string, string> = {};
       for (const col of BG_COLUMNS) {
         if (col.accessor === "action") continue;
-        obj[col.header] = String((rec as any)[col.accessor as keyof EmdDetailsBgRecord] ?? "");
+        const raw = (rec as any)[col.accessor as keyof EmdDetailsBgRecord];
+        obj[col.header] = col.accessor === "lastEmailSentAt" && raw ? formatDateTimeIST(raw as string) : String(raw ?? "");
       }
       return obj;
     });
@@ -321,7 +367,8 @@ export default function EmdDetailsBgPage() {
     const headers = exportCols.map((c) => c.header).join(",");
     const rows = processedRecords.map((rec) =>
       exportCols.map((col) => {
-        let v = String((rec as any)[col.accessor as keyof EmdDetailsBgRecord] ?? "");
+        const raw = (rec as any)[col.accessor as keyof EmdDetailsBgRecord];
+        let v = col.accessor === "lastEmailSentAt" && raw ? formatDateTimeIST(raw as string) : String(raw ?? "");
         if (v.includes(",") || v.includes('"') || v.includes("\n")) v = `"${v.replace(/"/g, '""')}"`;
         return v;
       }).join(",")
@@ -512,6 +559,66 @@ export default function EmdDetailsBgPage() {
                                       <option key={opt} value={opt}>{opt}</option>
                                     ))}
                                   </select>
+                                </td>
+                              );
+                            }
+                            if (col.accessor === "contactEmailId") {
+                              const isUpdating = updatingContactEmailId === row.id;
+                              const isEditing = editingContactEmailId === row.id;
+                              if (isEditing) {
+                                return (
+                                  <td key={String(col.accessor)} className={`${col.sticky ? "sticky-col" : ""}`} style={col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], background: "#fff" } : {}}>
+                                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                      <input
+                                        autoFocus
+                                        value={draftContactEmail}
+                                        onChange={(e) => setDraftContactEmail(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleContactEmailSave(row.id);
+                                          if (e.key === "Escape") handleContactEmailCancel();
+                                        }}
+                                        placeholder="email@company.com"
+                                        style={{ flex: 1, padding: "6px 8px", borderRadius: "6px", border: `1px solid ${draftContactEmail && !isValidEmail(draftContactEmail) ? "#ef4444" : "#dadce0"}`, fontSize: "12px" }}
+                                      />
+                                      <button onClick={() => handleContactEmailSave(row.id)} disabled={isUpdating || (draftContactEmail.trim() !== "" && !isValidEmail(draftContactEmail))} title="Save" style={{ padding: "4px", borderRadius: "4px", background: "#0a2540", color: "white", border: "none" }}><Check size={12} /></button>
+                                      <button onClick={handleContactEmailCancel} disabled={isUpdating} title="Cancel" style={{ padding: "4px", borderRadius: "4px", background: "#e5e7eb", border: "none" }}><X size={12} /></button>
+                                    </div>
+                                  </td>
+                                );
+                              }
+                              const display = row.contactEmailId ? String(row.contactEmailId) : "";
+                              const isInvalid = display !== "" && !isValidEmail(display);
+                              return (
+                                <td key={String(col.accessor)} className={`${col.sticky ? "sticky-col" : ""}`} style={col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], background: "#fff" } : {}}>
+                                  <div
+                                    onClick={() => {
+                                      setEditingContactEmailId(row.id);
+                                      setDraftContactEmail(display);
+                                    }}
+                                    title={display || "Click to add email"}
+                                    style={{ padding: "6px 8px", borderRadius: "6px", border: isInvalid ? "1px solid #ef4444" : "1px solid transparent", background: isUpdating ? "#f1f3f4" : isInvalid ? "#fef2f2" : "transparent", cursor: "pointer", fontSize: "12px", minHeight: "28px", display: "flex", alignItems: "center" }}
+                                  >
+                                    {isUpdating ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
+                                    {display ? <span style={{ color: isInvalid ? "#dc2626" : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{display}</span> : <span style={{ color: "#9ca3af" }}>— Add email</span>}
+                                  </div>
+                                </td>
+                              );
+                            }
+                            if (col.accessor === "lastEmailSentAt") {
+                              const v = (row as any)[col.accessor as keyof EmdDetailsBgRecord];
+                              const formatted = v ? formatDateTimeIST(v as string) : "";
+                              const display = formatted && formatted.trim() !== "" ? formatted : "-";
+                              const isBlank = display === "-";
+                              return (
+                                <td
+                                  key={String(col.accessor)}
+                                  className={`${col.sticky ? "sticky-col" : ""}`}
+                                  style={col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], background: "#fff" } : {}}
+                                  title={v ? String(v) : display}
+                                >
+                                  <div className="cell-scroll-wrap" style={{ height: "auto", maxHeight: "96px" }}>
+                                    {isBlank ? <span style={{ color: "#b0b8c1" }}>-</span> : display}
+                                  </div>
                                 </td>
                               );
                             }

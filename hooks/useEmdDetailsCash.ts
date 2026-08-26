@@ -29,6 +29,7 @@ export interface EmdDetailsCashRecord {
   emailDraft: string | null;
   lastEmailSentAt: string | null;
   reason: string | null;
+  contactEmailId: string | null;
 }
 
 interface UseEmdDetailsCashResult {

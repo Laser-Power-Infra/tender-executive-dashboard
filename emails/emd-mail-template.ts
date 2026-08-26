@@ -119,17 +119,6 @@ export const EMD_MAIL_TEMPLATE = `
     <div class="content">
 
       <p>
-        <strong>To</strong><br>
-        {{employerName}}<br>
-        {{employerAddress}}
-      </p>
-
-      <p class="subject">
-        Subject: Request for Release/Return of Bid Guarantee Submitted Against
-        Tender No. {{tenderNumber}}
-      </p>
-
-      <p>
         Dear Sir/Madam,
       </p>
 

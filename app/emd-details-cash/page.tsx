@@ -10,6 +10,7 @@ import { EmdCashSidebar, EmdStatus, EmdStats } from "@/components/emd-cash/EmdCa
 import { RefreshCw, Eraser, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
+import { formatDateTimeIST } from "@/lib/format-ist";
 import "@/app/SupplyHistory.css";
 
 function normalizeStatus(v: string | null | undefined): EmdStatus | null {
@@ -31,13 +32,24 @@ export default function EmdDetailsCashPage() {
   const { data, loading, error, refresh } = useEmdDetailsCash();
   const [selectedStatus, setSelectedStatus] = useState<EmdStatus | "ALL">("ALL");
   const [localReasonMap, setLocalReasonMap] = useState<Record<string, string | null>>({});
+  const [localContactEmailMap, setLocalContactEmailMap] = useState<Record<string, string | null>>({});
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [updatingContactEmailId, setUpdatingContactEmailId] = useState<number | null>(null);
+  const [editingContactEmailId, setEditingContactEmailId] = useState<number | null>(null);
+  const [draftContactEmail, setDraftContactEmail] = useState<string>("");
   const [sendingId, setSendingId] = useState<number | null>(null);
 
+  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+
   const mergedData = useMemo(() => {
-    if (Object.keys(localReasonMap).length === 0) return data;
-    return data.map((r) => (localReasonMap[String(r.id)] !== undefined ? { ...r, reason: localReasonMap[String(r.id)] } : r));
-  }, [data, localReasonMap]);
+    if (Object.keys(localReasonMap).length === 0 && Object.keys(localContactEmailMap).length === 0) return data;
+    return data.map((r) => {
+      let n: any = r;
+      if (localReasonMap[String(r.id)] !== undefined) n = { ...n, reason: localReasonMap[String(r.id)] };
+      if (localContactEmailMap[String(r.id)] !== undefined) n = { ...n, contactEmailId: localContactEmailMap[String(r.id)] };
+      return n;
+    });
+  }, [data, localReasonMap, localContactEmailMap]);
 
   const sidebarStats: Record<EmdStatus, EmdStats> = useMemo(() => {
     const init = (): EmdStats => ({ count: 0, totalEmd: 0, customerCount: 0 });
@@ -89,6 +101,39 @@ export default function EmdDetailsCashPage() {
       setUpdatingId(null);
     }
   }, [mergedData]);
+
+  const handleContactEmailSave = useCallback(async (id: number) => {
+    const raw = draftContactEmail.trim();
+    if (raw !== "" && !isValidEmail(raw)) {
+      toast.error("Invalid email format");
+      return;
+    }
+    const prev = (mergedData.find((r) => r.id === id) as any)?.contactEmailId ?? null;
+    const next = raw === "" ? null : raw;
+    setLocalContactEmailMap((prevMap) => ({ ...prevMap, [String(id)]: next }));
+    setUpdatingContactEmailId(id);
+    setEditingContactEmailId(null);
+    try {
+      const res = await fetch(`/api/emd-details-cash/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactEmailId: next }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to update contact email");
+      toast.success("Contact email updated");
+    } catch (e: any) {
+      setLocalContactEmailMap((prevMap) => ({ ...prevMap, [String(id)]: prev as string | null }));
+      toast.error(e.message || "Failed to update contact email");
+    } finally {
+      setUpdatingContactEmailId(null);
+    }
+  }, [draftContactEmail, mergedData]);
+
+  const handleContactEmailCancel = useCallback(() => {
+    setEditingContactEmailId(null);
+    setDraftContactEmail("");
+  }, []);
 
   const handleSendEmail = useCallback(async (row: EmdDetailsCashRecord) => {
     if (!row.reason) {
@@ -281,6 +326,54 @@ export default function EmdDetailsCashPage() {
         searchable: true,
       },
       {
+        header: "Contact Email",
+        accessor: "contactEmailId",
+        defaultWidth: 220,
+        filter: { type: "text", placeholder: "Search email" },
+        sortable: true,
+        searchable: true,
+        renderCell: (value, row) => {
+          const r = row as unknown as EmdDetailsCashRecord;
+          const isEditing = editingContactEmailId === r.id;
+          const isUpdating = updatingContactEmailId === r.id;
+          const display = (r.contactEmailId as string) ?? "";
+          if (isEditing) {
+            return (
+              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <input
+                  autoFocus
+                  value={draftContactEmail}
+                  onChange={(e) => setDraftContactEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleContactEmailSave(r.id);
+                    if (e.key === "Escape") handleContactEmailCancel();
+                  }}
+                  placeholder="email@company.com"
+                  style={{ flex: 1, padding: "6px 8px", borderRadius: "6px", border: `1px solid ${draftContactEmail && !isValidEmail(draftContactEmail) ? "#ef4444" : "#dadce0"}`, fontSize: "12px" }}
+                />
+                <button onClick={() => handleContactEmailSave(r.id)} disabled={isUpdating || (draftContactEmail.trim() !== "" && !isValidEmail(draftContactEmail))} title="Save" style={{ padding: "4px", borderRadius: "4px", background: "#0a2540", color: "white", border: "none", cursor: "pointer" }}>✓</button>
+                <button onClick={handleContactEmailCancel} disabled={isUpdating} title="Cancel" style={{ padding: "4px", borderRadius: "4px", background: "#e5e7eb", border: "none", cursor: "pointer" }}>✕</button>
+              </div>
+            );
+          }
+          const isInvalid = display !== "" && !isValidEmail(display);
+          return (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingContactEmailId(r.id);
+                setDraftContactEmail(display);
+              }}
+              title={display || "Click to add email"}
+              style={{ padding: "6px 8px", borderRadius: "6px", border: isInvalid ? "1px solid #ef4444" : "1px solid transparent", background: isUpdating ? "#f1f3f4" : isInvalid ? "#fef2f2" : "transparent", cursor: "pointer", fontSize: "12px", minHeight: "28px", display: "flex", alignItems: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: display ? (isInvalid ? "#dc2626" : undefined) : "#9ca3af" }}
+            >
+              {isUpdating ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
+              {display || "— Add email"}
+            </div>
+          );
+        },
+      },
+      {
         header: "Email Draft",
         accessor: "emailDraft",
         defaultWidth: 320,
@@ -291,11 +384,15 @@ export default function EmdDetailsCashPage() {
       {
         header: "Last Email Sent At",
         accessor: "lastEmailSentAt",
-        type: "date",
         defaultWidth: 170,
         filter: { type: "dateRange" },
         sortable: true,
         sortValue: (v) => (v ? new Date(String(v)).getTime() : 0),
+        renderCell: (v) => {
+          if (v == null || String(v).trim() === "") return "-";
+          const s = formatDateTimeIST(v as string);
+          return s && s.trim() !== "" ? s : "-";
+        },
       },
       {
         header: "Tender Conclusion Reason",
@@ -351,7 +448,7 @@ export default function EmdDetailsCashPage() {
         },
       },
     ],
-    [updatingId, sendingId, handleReasonChange, handleSendEmail]
+    [updatingId, sendingId, handleReasonChange, handleSendEmail, editingContactEmailId, updatingContactEmailId, draftContactEmail, handleContactEmailSave, handleContactEmailCancel]
   );
 
   if (loading) {

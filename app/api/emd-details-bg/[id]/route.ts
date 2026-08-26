@@ -5,22 +5,32 @@ import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
 
 export const runtime = "nodejs";
 
-async function updateEmdDetailsBgReason(id: string, reason: string | null) {
-  if (reason !== null && reason !== "" && !(TENDER_REASON_OPTIONS as readonly string[]).includes(reason)) {
-    throw new Error("Invalid reason option");
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function updateEmdDetailsBgFields(id: string, data: { reason?: string | null; contactEmailId?: string | null }) {
+  const updateData: any = {};
+  if (data.reason !== undefined) {
+    const reason = data.reason === "" ? null : data.reason;
+    if (reason !== null && !(TENDER_REASON_OPTIONS as readonly string[]).includes(reason)) {
+      throw new Error("Invalid reason option");
+    }
+    updateData.reason = reason;
   }
-  const updated = await prisma.emdDetailsBG.update({
-    where: { id },
-    data: { reason: reason || null },
-  });
+  if (data.contactEmailId !== undefined) {
+    const raw = data.contactEmailId === "" ? null : (data.contactEmailId as string)?.trim() ?? null;
+    if (raw !== null && !EMAIL_RE.test(raw)) throw new Error("Invalid contact email");
+    updateData.contactEmailId = raw;
+  }
+  if (Object.keys(updateData).length === 0) throw new Error("No fields to update");
+  const updated = await prisma.emdDetailsBG.update({ where: { id }, data: updateData });
   return updated;
 }
 
-const updateReasonWithLog = withLog(updateEmdDetailsBgReason, (result, id, reason) => ({
+const updateFieldsWithLog = withLog(updateEmdDetailsBgFields, (result, id, data) => ({
   action: "UPDATE" as const,
   tableName: "EmdDetailsBG",
   recordId: String(id),
-  details: `Updated reason to "${reason ?? ""}" on EMD BG #${id}`,
+  details: `Updated ${Object.keys(data).join(",")} on EMD BG #${id}`,
 }));
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,13 +38,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
     const body = await req.json();
-    const reason = body.reason !== undefined ? (body.reason as string | null) : null;
-    const normalized = reason === "" ? null : reason;
-    const updated = await updateReasonWithLog(id, normalized);
+    const data: any = {};
+    if ("reason" in body) data.reason = body.reason as string | null;
+    if ("contactEmailId" in body) data.contactEmailId = body.contactEmailId as string | null;
+    // backward compat: allow single reason payload without wrapper
+    if (Object.keys(data).length === 0) {
+      if ("reason" in body) data.reason = body.reason;
+    }
+    const updated = await updateFieldsWithLog(id, data);
     return NextResponse.json({ success: true, data: updated });
   } catch (err: any) {
-    const msg = err.message ?? "Failed to update reason";
-    const status = msg.includes("Invalid reason") ? 400 : msg.includes("Record to update does not exist") ? 404 : 500;
+    const msg = err.message ?? "Failed to update";
+    const status = msg.includes("Invalid") ? 400 : msg.includes("Record to update does not exist") ? 404 : msg.includes("No fields") ? 400 : 500;
     console.error("[API:PATCH /api/emd-details-bg/[id]] failed:", msg);
     return NextResponse.json({ success: false, error: msg }, { status });
   }

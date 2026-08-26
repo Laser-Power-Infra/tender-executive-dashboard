@@ -941,6 +941,7 @@ model EmdDetailsCash {
   emailDraft                       String?   @db.Text
   lastEmailSentAt                  DateTime?
   reason                           String?   @db.Text
+  contactEmailId                   String?
 
   // @@index([tenderNo])
   // @@index([tmNo])
