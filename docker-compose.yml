@@ -14,51 +14,31 @@ services:
       NODE_ENV: production
       PORT: 3126
       HOSTNAME: 0.0.0.0
+      
+      # Paths inside the container
+      CONDUTOR_PATH: /mnt/condutor/Tenders-bd/Condutor
+      INDEXER_NETWORK_PATH: /mnt/indexer/COSTING & INVOLVEMENT
+      SUPPLY_NETWORK_PATH: /mnt/supply
+      COSTING_FILE_NETWORK_HOST_PATH: /mnt/costing/COSTING & INVOLVEMENT
+      OLD_RA_EXCEL_PATH: /mnt/old-files/TENDER 2023-2024
+      OLD_FILES: /mnt/old-files/TENDER 2023-2024
 
-      # GOOGLE_CLIENT_EMAIL: ${GOOGLE_CLIENT_EMAIL}
-      # GOOGLE_PRIVATE_KEY: ${GOOGLE_PRIVATE_KEY}
-      # DATABASE_URL: ${DATABASE_URL}
-
-      # SMARTSHEET_API_TOKEN: ${SMARTSHEET_API_TOKEN}
-      # SMARTSHEET_SHEET_ID: ${SMARTSHEET_SHEET_ID}
-
-      # OPENAI_API_KEY: ${OPENAI_API_KEY}
-
-      # GDRIVE_CLIENT_EMAIL: ${GDRIVE_CLIENT_EMAIL}
-      # GDRIVE_PRIVATE_KEY: ${GDRIVE_PRIVATE_KEY}
-      # GOOGLE_SPREADSHEET_ID: ${GOOGLE_SPREADSHEET_ID}
-      # GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL}
-
-      # N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL}
-      # N8N_WEBHOOK_URL_TEST: ${N8N_WEBHOOK_URL_TEST}
-      # N8N_EMD_WEBHOOK_URL: ${N8N_EMD_WEBHOOK_URL}
-
-      # ENVIRONMENT: ${ENVIRONMENT}
-      # DJANGO_API_KEY: ${DJANGO_API_KEY}
-      # RABBITMQ_URL: ${RABBITMQ_URL}
-
-      # AUTH_SECRET: ${AUTH_SECRET}
-
-      # CONDUTOR_PATH: ${CONDUTOR_PATH}
-      # INDEXER_NETWORK_PATH: ${INDEXER_NETWORK_PATH}
-      # SUPPLY_NETWORK_PATH: ${SUPPLY_NETWORK_PATH}
-
-      # CHROME_PATH: ${CHROME_PATH}
+    volumes:
+      - condutor:/mnt/condutor
+      - indexer:/mnt/indexer
+      - supply:/mnt/supply
+      - costing:/mnt/costing
+      - old-files:/mnt/old-files
 
     restart: unless-stopped
 
     networks:
       - infra
 
-    # volumes:
-    #   -
-
   evolution-api:
     image: evoapicloud/evolution-api:latest
     container_name: evolution-api
     restart: unless-stopped
-    depends_on:
-      - redis
     ports:
       - "8080:8080"
     env_file:
@@ -71,15 +51,15 @@ services:
     networks:
       - infra
 
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    volumes:
-      - ./evolution/redis:/data
-    networks:
-      - infra
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: redis
+  #   restart: unless-stopped
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - ./evolution/redis:/data
+  #   networks:
+  #     - infra
 
   kestra:
     build:
@@ -115,6 +95,43 @@ services:
 
     networks:
       - infra
+
+volumes:
+  condutor:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "${CONDUTOR_CIFS_DEVICE}"
+      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+
+  indexer:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "${INDEXER_CIFS_DEVICE}"
+      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+
+  supply:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "${SUPPLY_CIFS_DEVICE}"
+      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+
+  costing:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "${COSTING_CIFS_DEVICE}"
+      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+
+  old-files:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "${OLD_FILES_CIFS_DEVICE}"
+      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+
 
 networks:
   infra:

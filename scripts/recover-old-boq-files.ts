@@ -16,6 +16,7 @@ import fs from "fs";
 import path from "path";
 import { prisma } from "../lib/prisma";
 import { encryptRelativePath } from "../lib/fileCrypto";
+import { toPortableRelative } from "../lib/pathUtils";
 import { TENDER_FILE_TYPES } from "../lib/tender-file-types";
 import { publishNonGemBoqParsingTask } from "../lib/queue/publisher";
 import { extractNumericDocket } from "../lib/extractNumericDocket";
@@ -232,7 +233,7 @@ async function main() {
         const filename = path.basename(boqFilePath);
         const ext = path.extname(filename);
         const name = ext ? filename.slice(0, -ext.length) : filename;
-        const relativePath = path.relative(resolvedRoot, boqFilePath);
+        const relativePath = toPortableRelative(path.relative(resolvedRoot, boqFilePath));
 
         // Create TenderFile entry
         try {

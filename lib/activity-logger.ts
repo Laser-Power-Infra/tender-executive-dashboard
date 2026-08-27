@@ -12,23 +12,38 @@ export type LogActivityParams = {
   details?: string
 }
 
+async function createActivityLogRecord(params: LogActivityParams) {
+  const session = await auth()
+  const user = session?.user
+
+  return prisma.activityLog.create({
+    data: {
+      userId: user?.id ?? null,
+      userName: user?.name ?? "Unknown",
+      userEmail: user?.email ?? "unknown@unknown",
+      action: params.action,
+      tableName: params.tableName,
+      recordId: params.recordId ?? null,
+      referenceNo: params.referenceNo ?? null,
+      details: params.details ?? null,
+    },
+  })
+}
+
 export async function logActivity(params: LogActivityParams) {
   try {
-    const session = await auth()
-    const user = session?.user
+    const activity = await createActivityLogRecord(params)
 
-    await prisma.activityLog.create({
-      data: {
-        userId: user?.id ?? null,
-        userName: user?.name ?? "Unknown",
-        userEmail: user?.email ?? "unknown@unknown",
-        action: params.action,
-        tableName: params.tableName,
-        recordId: params.recordId ?? null,
-        referenceNo: params.referenceNo ?? null,
-        details: params.details ?? null,
-      },
+    console.log("[ActivityLog] Activity created", {
+      userName: activity.userName,
+      userEmail: activity.userEmail,
+      action: activity.action,
+      tableName: activity.tableName,
+      recordId: activity.recordId,
+      referenceNo: activity.referenceNo,
     })
+
+    return activity
   } catch (error) {
     console.error("[ActivityLog] Failed to log activity:", error)
   }
@@ -48,7 +63,15 @@ export function withLog<TArgs extends unknown[], TResult>(
     try {
       const params = await getLogParams(result, ...args)
       if (params) {
-        await logActivity(params)
+        const activity = await createActivityLogRecord(params)
+        console.log("[ActivityLog] Activity created", {
+          userName: activity.userName,
+          userEmail: activity.userEmail,
+          action: activity.action,
+          tableName: activity.tableName,
+          recordId: activity.recordId,
+          referenceNo: activity.referenceNo,
+        })
       }
     } catch (error) {
       console.error("[ActivityLog] Failed to log activity:", error)

@@ -1,13 +1,13 @@
 /**
  * Script to scan OLD_FILES for docket folders that contain a
- * "TENDER" folder AND a "doc*" subfolder (case-insensitive) and create
- * TenderFile entries with tag tenderDocument.
+ * "TENDER DOCS" folder (single folder name contains *tender* AND *doc*,
+ * case-insensitive) and create TenderFile entries with tag tenderDocument.
  *
- * Matching predicate: TENDER AND doc* (hierarchical)
- *   - First find all subfolders named "TENDER" (case-insensitive exact)
- *   - Within each TENDER subtree, find descendant folders whose name starts with "DOC"
- *     (covers docs, document, documents, doc_xxx, etc.)
- *   - Collect ALL files recursively inside each DOC* folder
+ * Matching predicate: single folder name contains *tender* AND *doc*
+ *   (e.g. "Tender Docs", "TENDER DOCUMENTS", "tender docs", "Tender Document")
+ *   - Scans recursively under each docket folder for any folder whose name
+ *     uppercased includes both "TENDER" and "DOC"
+ *   - Collect ALL files recursively inside each matched folder
  *
  * Source encryption uses pipe mapping: encryptRelativePath("OLDFILE", relativePath)
  * which is resolved in TenderAttachmentController via OLD_FILES env.
@@ -23,18 +23,16 @@ import path from "path";
 import { prisma } from "../lib/prisma";
 import { extractNumericDocket } from "../lib/extractNumericDocket";
 import { encryptRelativePath } from "../lib/fileCrypto";
+import { toPortableRelative } from "../lib/pathUtils";
 import { TENDER_FILE_TYPES } from "../lib/tender-file-types";
 import { scanDirectoryRecursive } from "../services/documentIndexer";
 
-function isTenderFolder(name: string): boolean {
-  return name.toUpperCase() === "TENDER";
+function isTenderDocsFolder(name: string): boolean {
+  const u = name.toUpperCase();
+  return u.includes("TENDER") && u.includes("DOC");
 }
 
-function isDocFolder(name: string): boolean {
-  return name.toUpperCase().startsWith("DOC");
-}
-
-function collectTenderFolders(rootPath: string, out: string[]): void {
+function collectTenderDocsFolders(rootPath: string, out: string[]): void {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(rootPath, { withFileTypes: true });
@@ -45,28 +43,10 @@ function collectTenderFolders(rootPath: string, out: string[]): void {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const fullPath = path.join(rootPath, entry.name);
-    if (isTenderFolder(entry.name)) {
+    if (isTenderDocsFolder(entry.name)) {
       out.push(fullPath);
     }
-    collectTenderFolders(fullPath, out);
-  }
-}
-
-function collectDocFoldersUnderTender(tenderPath: string, out: string[]): void {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(tenderPath, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const fullPath = path.join(tenderPath, entry.name);
-    if (isDocFolder(entry.name)) {
-      out.push(fullPath);
-    }
-    collectDocFoldersUnderTender(fullPath, out);
+    collectTenderDocsFolders(fullPath, out);
   }
 }
 
@@ -134,9 +114,9 @@ async function main() {
   await scanDirectoryRecursive(networkRoot, scannedIndex, 0);
   console.log(`[sync-tender-doc] Network scan complete. Found ${scannedIndex.size} indexed folders.`);
 
-  console.log("[sync-tender-doc] Fetching TenderMerged records with docketNo...");
+  console.log("[sync-tender-doc] Fetching NON_GEM + participated TenderMerged records with docketNo...");
   let tenders = await prisma.tenderMerged.findMany({
-    where: { docketNo: { not: null } },
+    where: { docketNo: { not: null }, tenderType: "NON_GEM", participated: true },
     select: {
       id: true,
       referenceNo: true,
@@ -163,8 +143,7 @@ async function main() {
 
   let networkMatchCount = 0;
   let tenderDocFoundCount = 0;
-  let noTenderCount = 0;
-  let noDocCount = 0;
+  let noTenderDocsCount = 0;
   let noMatchCount = 0;
   let filesCreated = 0;
   let filesSkippedDup = 0;
@@ -189,43 +168,32 @@ async function main() {
 
     networkMatchCount++;
 
-    const tenderFolders: string[] = [];
-    collectTenderFolders(scanRecord.folderPath, tenderFolders);
+    const tenderDocsFolders: string[] = [];
+    collectTenderDocsFolders(scanRecord.folderPath, tenderDocsFolders);
 
-    if (tenderFolders.length === 0) {
-      noTenderCount++;
-      console.log(`  [NO-TENDER] ${tender.referenceNo} - folder found, no TENDER subfolder`);
-      continue;
-    }
-
-    const docFolders: string[] = [];
-    for (const tf of tenderFolders) {
-      collectDocFoldersUnderTender(tf, docFolders);
-    }
-
-    if (docFolders.length === 0) {
-      noDocCount++;
-      console.log(`  [NO-DOC] ${tender.referenceNo} - TENDER folder found, no DOC* subfolder`);
+    if (tenderDocsFolders.length === 0) {
+      noTenderDocsCount++;
+      console.log(`  [NO-TENDER-DOCS] ${tender.referenceNo} - folder found, no *tender*+*doc* folder`);
       continue;
     }
 
     tenderDocFoundCount++;
 
     const allFiles: string[] = [];
-    for (const df of docFolders) {
+    for (const df of tenderDocsFolders) {
       collectAllFiles(df, allFiles);
     }
 
     if (allFiles.length === 0) {
-      console.log(`  [EMPTY] ${tender.referenceNo} - TENDER/DOC* found but no files inside`);
+      console.log(`  [EMPTY] ${tender.referenceNo} - *tender*+*doc* found but no files inside`);
       continue;
     }
 
     filesDiscovered += allFiles.length;
-    console.log(`  [MATCH] ${tender.referenceNo} - ${docFolders.length} DOC* folder(s), ${allFiles.length} file(s) found`);
+    console.log(`  [MATCH] ${tender.referenceNo} - ${tenderDocsFolders.length} *tender*+*doc* folder(s), ${allFiles.length} file(s) found`);
 
     for (const absPath of allFiles) {
-      const relativePath = path.relative(networkRoot, absPath);
+      const relativePath = toPortableRelative(path.relative(networkRoot, absPath));
       const ext = path.extname(absPath);
       const name = ext ? path.basename(absPath, ext) : path.basename(absPath);
 
@@ -263,9 +231,8 @@ async function main() {
   console.log("\n--- Summary ---");
   console.log(`  Tenders with docketNo:     ${tenders.length}`);
   console.log(`  Network folder matches:     ${networkMatchCount}`);
-  console.log(`  TENDER+DOC* found:          ${tenderDocFoundCount}`);
-  console.log(`  No TENDER folder:           ${noTenderCount}`);
-  console.log(`  No DOC* under TENDER:       ${noDocCount}`);
+  console.log(`  *tender*+*doc* found:       ${tenderDocFoundCount}`);
+  console.log(`  No *tender*+*doc* folder:   ${noTenderDocsCount}`);
   console.log(`  No network match:           ${noMatchCount}`);
   console.log(`  Files discovered:           ${filesDiscovered}`);
   console.log(`  Files created:              ${filesCreated}`);

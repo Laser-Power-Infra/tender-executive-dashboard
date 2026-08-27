@@ -15,6 +15,7 @@ import path from "path";
 import { prisma } from "../lib/prisma";
 import { extractNumericDocket } from "../lib/extractNumericDocket";
 import { encryptRelativePath } from "../lib/fileCrypto";
+import { toPortableRelative } from "../lib/pathUtils";
 import { TENDER_FILE_TYPES } from "../lib/tender-file-types";
 import {
   resolveRootPath,
@@ -165,7 +166,7 @@ async function main() {
     }
 
     const absPath = candidates[0];
-    const relativePath = path.relative(networkRoot, absPath);
+    const relativePath = toPortableRelative(path.relative(networkRoot, absPath));
     const ext = path.extname(absPath);
     const name = ext ? absPath.slice(0, -ext.length).split(path.sep).pop() ?? "" : path.basename(absPath);
 

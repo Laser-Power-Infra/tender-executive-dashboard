@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { toPortableRelative } from "@/lib/pathUtils";
 import type { FileMetadata, FileIndex, FileIndexEntry, FolderScanResult, ScanDirectoryResult } from "@/types/indexer";
 
 const CONFIG = {
@@ -84,7 +85,7 @@ async function scanDirectoryRecursive(
         console.error(`[Scanner] Failed to read stats for: ${entryPath}`);
       }
 
-      const relativePath = path.relative(baseDir, entryPath);
+      const relativePath = toPortableRelative(path.relative(baseDir, entryPath));
 
       const record: FileMetadata = {
         filename,

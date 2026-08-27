@@ -4,6 +4,7 @@ import { indexFolderFiles } from "@/services/fileIndexer";
 import { encryptPath, decryptPath } from "@/lib/fileCrypto";
 import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import { resolveRootPath } from "@/services/documentIndexer";
+import { resolvePortablePath } from "@/lib/pathUtils";
 import { prisma } from "@/lib/prisma";
 import type {
   FileResponse,
@@ -49,7 +50,10 @@ export function resolveSupplyPath(storedPath: string): string {
 }
 
 function verifyPathSafety(absolutePath: string): void {
-  const resolvedPath = normalizeDrive(path.resolve(absolutePath));
+  // Normalize backslashes to forward slashes before resolving so Linux
+  // correctly handles tokens created on Windows (e.g. 2026-27\04_APRIL\...)
+  const normalizedInput = absolutePath.replace(/\\/g, "/");
+  const resolvedPath = normalizeDrive(path.resolve(normalizedInput));
   const isSafe = getAllowedRoots().some((root) =>
     resolvedPath.startsWith(normalizeDrive(path.resolve(root)))
   );
@@ -77,9 +81,12 @@ export class TenderAttachmentController {
     const pipeIdx = decrypted.indexOf("|");
 
     if (pipeIdx === -1) {
+      // Legacy absolute path token — normalize backslashes for Linux hosts
+      const resolved = resolveSupplyPath(decrypted);
+      const normalized = resolved.replace(/\\/g, "/");
       const result = path.resolve(
         /* turbopackIgnore: true */
-        resolveSupplyPath(decrypted),
+        normalized,
       );
       console.log("[resolveFilePath] Legacy token", { decrypted, result });
       return result;
@@ -108,10 +115,7 @@ export class TenderAttachmentController {
       throw new Error(`Unknown path type prefix: ${type}`);
     }
 
-    const result = path.resolve(
-      /* turbopackIgnore: true */
-      path.join(base, relative),
-    );
+    const result = resolvePortablePath(base, relative);
     console.log("[resolveFilePath] New format token", { type, base, relative, result });
     return result;
   }

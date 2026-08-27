@@ -5,6 +5,7 @@ import path from "path"
 import { format } from "date-fns"
 import { parseDate } from "@/lib/parse-date"
 import { describeTenderFile } from "@/lib/tenderFileDescriptor"
+import { resolvePortablePath } from "@/lib/pathUtils"
 
 export interface EmdWebhookItem {
   sl: number
@@ -64,7 +65,8 @@ function resolveNetworkFilePath(decrypted: string): string {
         supplyRoot.replace(/\\+$/, "") + "\\" + decrypted.substring(3),
       )
     }
-    return path.resolve(decrypted)
+    // Normalize backslashes for Linux hosts (tokens created on Windows)
+    return path.resolve(decrypted.replace(/\\/g, "/"))
   }
   const type = decrypted.slice(0, pipeIdx)
   const relative = decrypted.slice(pipeIdx + 1)
@@ -77,7 +79,7 @@ function resolveNetworkFilePath(decrypted: string): string {
     base = process.env.INDEXER_NETWORK_PATH ?? ""
   }
   if (!base) throw new Error(`Unable to resolve base path for type "${type}"`)
-  return path.resolve(path.join(base, relative))
+  return resolvePortablePath(base, relative)
 }
 
 export async function resolveEmdAttachment(

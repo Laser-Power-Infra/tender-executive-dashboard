@@ -6,6 +6,7 @@ import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 import { getNetworkFolderIndex, resolveRootPath } from "./documentIndexer";
 import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import { encryptRelativePath } from "@/lib/fileCrypto";
+import { toPortableRelative } from "@/lib/pathUtils";
 import { parseDate } from "@/lib/parse-date";
 import { format } from "date-fns";
 import { publishTenderParsingTask } from "@/lib/queue/publisher";
@@ -678,7 +679,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
               /* turbopackIgnore: true */
               process.env.CONDUTOR_PATH!,
             );
-            const relativePath = path.relative(condutorRoot, matchedPath);
+            const relativePath = toPortableRelative(path.relative(condutorRoot, matchedPath));
             await prisma.tenderFile.create({
               data: {
                 name,
