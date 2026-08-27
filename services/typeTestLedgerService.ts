@@ -6,17 +6,32 @@ const LEDGER_FILENAME = "Type Test Ledger.xlsx";
 const TARGET_HEADERS = {
   erpCode: "erp code",
   issued: "issued",
+  expire: "expire",
   testCertificateNo: "test certificate no",
   laboratory: "laboratory",
 } as const;
 
+export type TypeTestLab = "CPRI" | "ERDA" | "NABL";
+
+export function mapLab(raw: string | null): TypeTestLab | null {
+  if (!raw) return null;
+  const n = raw.toLowerCase().trim();
+  if (n.includes("central power research institute")) return "CPRI";
+  if (n.includes("electrical research and development association")) return "ERDA";
+  return "NABL";
+}
+
 export type TypeTestLedgerRow = {
   erpCode: string | null;
+  itemCode: string | null;
   issued: string | null;
   issuedRaw: unknown;
+  expiredRaw: unknown;
+  expired: string | null;
   testCertificateNo: string | null;
   testCertificateHyperlink: string | null;
   laboratory: string | null;
+  lab: TypeTestLab | null;
   rowNumber: number; // 1-indexed excel row
 };
 
@@ -175,6 +190,7 @@ export async function readTypeTestLedger(opts?: { filePath?: string }): Promise<
 
     const erpRaw = cols.erpCode !== undefined ? row[cols.erpCode] : null;
     const issuedRaw = cols.issued !== undefined ? row[cols.issued] : null;
+    const expiredRaw = (cols as Record<string, number>).expire !== undefined ? row[(cols as Record<string, number>).expire] : null;
     const certRaw = cols.testCertificateNo !== undefined ? row[cols.testCertificateNo] : null;
     const labRaw = cols.laboratory !== undefined ? row[cols.laboratory] : null;
 
@@ -193,18 +209,27 @@ export async function readTypeTestLedger(opts?: { filePath?: string }): Promise<
       certHyperlink = extractHyperlinkUrl(cell);
     }
 
-    // Issued may be Date object if cellDates:true
+    // Issued/Expire may be Date object if cellDates:true
     let issuedStr: string | null = null;
     if (issuedRaw instanceof Date) issuedStr = issuedRaw.toISOString();
     else issuedStr = cellToString(issuedRaw);
+    let expiredStr: string | null = null;
+    if (expiredRaw instanceof Date) expiredStr = expiredRaw.toISOString();
+    else expiredStr = cellToString(expiredRaw);
 
+    const erpCodeStr = cellToString(erpRaw);
+    const labStr = cellToString(labRaw);
     result.push({
-      erpCode: cellToString(erpRaw),
+      erpCode: erpCodeStr,
+      itemCode: erpCodeStr,
       issued: issuedStr,
       issuedRaw,
+      expiredRaw,
+      expired: expiredStr,
       testCertificateNo: cellToString(certRaw),
       testCertificateHyperlink: certHyperlink,
-      laboratory: cellToString(labRaw),
+      laboratory: labStr,
+      lab: mapLab(labStr),
       rowNumber: r + 1, // 1-indexed
     });
   }

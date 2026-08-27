@@ -43,6 +43,12 @@ enum StatusCategory {
   TECHNICAL
 }
 
+enum TypeTestLab {
+  CPRI
+  ERDA
+  NABL
+}
+
 model User {
   id           String        @id @default(uuid())
   name         String?
@@ -1007,4 +1013,23 @@ model Bom {
 
   @@unique([itemCode, bomId])
   @@index([itemName])
+}
+
+model TypeTest {
+  id                   Int         @id @default(autoincrement())
+  itemCode             String
+  testCertificateNo    String
+  testCertificateUrl   String?     @db.Text
+  lab                  TypeTestLab?
+  issuedAt             DateTime?
+  expiredAt            DateTime?
+  validity             String?
+
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@unique([itemCode, testCertificateNo])
+  @@index([itemCode])
+  @@index([testCertificateNo])
+  @@map("type_tests")
 }

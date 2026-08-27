@@ -1,9 +1,9 @@
 services:
   tender-executive-dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    # image: ghcr.io/laser-power-infra/tender-executive-dashboard:${APP_VERSION:-latest}
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: ghcr.io/laser-power-infra/tender-executive-dashboard:${APP_VERSION:-latest}
     # ghcr.io/laser-power-infra/laser-tender:${APP_VERSION:-latest}
     container_name: tender-executive-dashboard
     ports:

@@ -9,7 +9,7 @@ triggers:
 tasks:
   - id: call_sync_bom
     type: io.kestra.plugin.core.http.Request
-    uri: "http://laser-tender:3126/api/sync-bom"
+    uri: "http://tender-executive-dashboard:3126/api/sync-bom"
     method: POST
     headers:
       Authorization: "Bearer {{ secret('KESTRA_EXTERNAL_API_KEY') }}"

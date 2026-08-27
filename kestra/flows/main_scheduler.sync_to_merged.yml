@@ -9,7 +9,7 @@ triggers:
 tasks:
   - id: call_sync_to_merged_api
     type: io.kestra.plugin.core.http.Request
-    uri: "http://laser-tender:3126/api/sync-to-merged"
+    uri: "http://tender-executive-dashboard:3126/api/sync-to-merged"
     method: POST
     headers:
       Authorization: "Bearer {{ secret('KESTRA_EXTERNAL_API_KEY') }}"
