@@ -46,13 +46,43 @@ export async function GET(request: NextRequest) {
         reportings: true,
         evaluations: true,
         tenderFiles: true,
-        CostingSheetDetails: { select: { id: true, itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true, bomType: true, bomCode: true } },
+        CostingSheetDetails: { select: { id: true, itemCode: true, itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true, bomType: true, bomCode: true } },
       },
     }).then((r) => { dbTenderMs = performance.now() - p1Start; return r; });
     const p2Start = performance.now();
     const pAssoc = prisma.association.findMany({ select: { id: true, name: true, email: true } }).then((r) => { dbAssocMs = performance.now() - p2Start; return r; });
     const [tenderMerged, allAssociations] = await Promise.all([pTenders, pAssoc]);
     const dbTotalMs = Math.round(performance.now() - tDbStart);
+
+    // Batch fetch TypeTests by distinct itemCodes from costing details
+    let typeTestsByItemCode: Map<string, { itemCode: string; testCertificateNo: string; testCertificateUrl: string | null; lab: string | null; issuedAt: string | null; expiredAt: string | null }[]> | undefined;
+    try {
+      const codes = [...new Set(
+        tenderMerged.flatMap((t) => (t.CostingSheetDetails as { itemCode: string }[]).map((c) => c.itemCode?.trim().toUpperCase()).filter((c): c is string => !!c && c !== "NA"))
+      )];
+      if (codes.length > 0) {
+        const rows = await prisma.typeTest.findMany({
+          where: { itemCode: { in: codes } },
+          select: { itemCode: true, testCertificateNo: true, testCertificateUrl: true, lab: true, issuedAt: true, expiredAt: true },
+        });
+        typeTestsByItemCode = new Map();
+        for (const r of rows) {
+          const key = r.itemCode.trim().toUpperCase();
+          const entry = {
+            itemCode: r.itemCode,
+            testCertificateNo: r.testCertificateNo,
+            testCertificateUrl: r.testCertificateUrl,
+            lab: r.lab as string | null,
+            issuedAt: r.issuedAt ? r.issuedAt.toISOString() : null,
+            expiredAt: r.expiredAt ? r.expiredAt.toISOString() : null,
+          };
+          if (!typeTestsByItemCode.has(key)) typeTestsByItemCode.set(key, []);
+          typeTestsByItemCode.get(key)!.push(entry);
+        }
+      }
+    } catch (e) {
+      console.warn("[tenders] typeTest fetch failed", (e as Error).message);
+    }
 
     logMetrics("db_complete", {
       reqId, fileId, fileName: fileRecord.fileName,
@@ -80,6 +110,7 @@ export async function GET(request: NextRequest) {
         t.reportings,
         t.evaluations,
         t.tenderFiles,
+        typeTestsByItemCode,
       );
       flattenMsTotal += performance.now() - fStart;
       rows.push(flat);

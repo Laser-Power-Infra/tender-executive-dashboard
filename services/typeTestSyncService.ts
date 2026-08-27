@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { readTypeTestLedger } from "@/services/typeTestLedgerService";
+import { encryptRelativePath } from "@/lib/fileCrypto";
+import { TYPE_TEST_FILE_TYPE, readTypeTestLedger } from "@/services/typeTestLedgerService";
 
 export type TypeTestSyncOptions = {
   filePath?: string;
@@ -76,10 +77,26 @@ export async function syncTypeTestFromLedger(opts: TypeTestSyncOptions = {}): Pr
     const issuedAt = parseDateValue(row.issuedRaw, row.issued);
     const expiredAt = parseDateValue(row.expiredRaw, row.expired);
 
+    // Store as encrypted TYPETEST|\<backslash path> per standard (portable will normalize \ -> / at resolve)
+    let encryptedUrl: string | null = null;
+    const rawLink = row.testCertificateHyperlink;
+    if (rawLink) {
+      try {
+        const decoded = decodeURI(rawLink.trim());
+        // force Windows separators as requested: store as \\ path
+        const backslashPath = decoded.replace(/\//g, "\\");
+        encryptedUrl = encryptRelativePath(TYPE_TEST_FILE_TYPE, backslashPath);
+      } catch {
+        // fallback: store raw as backslash
+        const backslashPath = rawLink.trim().replace(/\//g, "\\");
+        encryptedUrl = encryptRelativePath(TYPE_TEST_FILE_TYPE, backslashPath);
+      }
+    }
+
     const data = {
       itemCode,
       testCertificateNo: certNo,
-      testCertificateUrl: row.testCertificateHyperlink,
+      testCertificateUrl: encryptedUrl,
       lab,
       issuedAt,
       expiredAt,

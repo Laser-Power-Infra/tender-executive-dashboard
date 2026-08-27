@@ -35,6 +35,15 @@ export interface TenderAssociationInfo {
   createdAt?: string | Date;
 }
 
+export interface TypeTestInfo {
+  itemCode: string;
+  testCertificateNo: string;
+  testCertificateUrl: string | null;
+  lab: string | null;
+  issuedAt: string | null;
+  expiredAt: string | null;
+}
+
 export interface FlatRow {
   type: "Gem" | "Non-Gem";
   id: string;
@@ -43,6 +52,7 @@ export interface FlatRow {
   tenderFiles?: string;
   itemSchedules?: string;
   costingDetails?: string;
+  typeTests?: string;
   assignedDate?: string;
   [key: string]: string | undefined;
 }
@@ -72,6 +82,7 @@ export function flattenTender(
   reportings?: ReportingInfo[],
   evaluations?: EvaluationInfo[],
   tenderFiles?: TenderFileInfo[],
+  typeTestsByItemCode?: Map<string, TypeTestInfo[]>,
 ): FlatRow {
   const fStart = performance.now();
   const assignedIds = tenderAssociations.map((ta) => ta.association.id).join(",");
@@ -133,6 +144,35 @@ export function flattenTender(
   const costingDetailsVal = tender["CostingSheetDetails"];
   if (Array.isArray(costingDetailsVal) && costingDetailsVal.length > 0) {
     row.costingDetails = JSON.stringify(costingDetailsVal);
+    // typeTests joined via itemCode
+    if (typeTestsByItemCode && typeTestsByItemCode.size > 0) {
+      const collected: TypeTestInfo[] = [];
+      for (const c of costingDetailsVal) {
+        const code = (c as { itemCode?: string | null })?.itemCode?.trim().toUpperCase();
+        if (!code) continue;
+        const list = typeTestsByItemCode.get(code);
+        if (list) collected.push(...list);
+      }
+      // dedup by testCertificateNo
+      if (collected.length > 0) {
+        const seen = new Set<string>();
+        const deduped: TypeTestInfo[] = [];
+        for (const tt of collected) {
+          const key = `${tt.itemCode}|${tt.testCertificateNo}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          deduped.push(tt);
+        }
+        row.typeTests = JSON.stringify(deduped);
+        (row as Record<string, string>).typetest = row.typeTests;
+      } else {
+        row.typeTests = "";
+        (row as Record<string, string>).typetest = "";
+      }
+    } else {
+      row.typeTests = "";
+      (row as Record<string, string>).typetest = "";
+    }
     const schedules = Array.from(
       new Set(
         costingDetailsVal
@@ -181,6 +221,8 @@ export function flattenTender(
     row.cva = cvaValues.length > 0 ? JSON.stringify(cvaValues) : "";
   } else {
     row.costingDetails = "";
+    row.typeTests = "";
+    (row as Record<string, string>).typetest = "";
     row.itemSchedules = "";
     row.proposedErpItemName = "";
     row.proposedErpQuantity = "";

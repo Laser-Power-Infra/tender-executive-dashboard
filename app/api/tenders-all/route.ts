@@ -36,6 +36,7 @@ function buildColumns(tenderMerged: any[]): string[] {
     "evaluations",
     "itemSchedules",
     "costingDetails",
+    "typeTests",
   ];
 }
 
@@ -117,7 +118,7 @@ export async function GET(_req: NextRequest) {
             reportings: true,
             evaluations: true,
             tenderFiles: true,
-            CostingSheetDetails: { select: { id: true, itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true, bomType: true, bomCode: true } },
+            CostingSheetDetails: { select: { id: true, itemCode: true, itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true, bomType: true, bomCode: true } },
           },
         });
         const dbMs = performance.now() - dbStart;
@@ -155,6 +156,36 @@ export async function GET(_req: NextRequest) {
           heapUsedMb: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2),
         });
 
+        // batch TypeTest join via itemCodes in this batch
+        let batchTypeTestsByCode: Map<string, { itemCode: string; testCertificateNo: string; testCertificateUrl: string | null; lab: string | null; issuedAt: string | null; expiredAt: string | null }[]> | undefined;
+        try {
+          const codes = [...new Set(
+            (batch as { CostingSheetDetails: { itemCode: string }[] }[]).flatMap((t) => t.CostingSheetDetails.map((c) => c.itemCode?.trim().toUpperCase()).filter((c): c is string => !!c && c !== "NA"))
+          )];
+          if (codes.length > 0) {
+            const rows = await prisma.typeTest.findMany({
+              where: { itemCode: { in: codes } },
+              select: { itemCode: true, testCertificateNo: true, testCertificateUrl: true, lab: true, issuedAt: true, expiredAt: true },
+            });
+            batchTypeTestsByCode = new Map();
+            for (const r of rows) {
+              const key = r.itemCode.trim().toUpperCase();
+              const entry = {
+                itemCode: r.itemCode,
+                testCertificateNo: r.testCertificateNo,
+                testCertificateUrl: r.testCertificateUrl,
+                lab: r.lab as string | null,
+                issuedAt: r.issuedAt ? r.issuedAt.toISOString() : null,
+                expiredAt: r.expiredAt ? r.expiredAt.toISOString() : null,
+              };
+              if (!batchTypeTestsByCode.has(key)) batchTypeTestsByCode.set(key, []);
+              batchTypeTestsByCode.get(key)!.push(entry);
+            }
+          }
+        } catch (e) {
+          console.warn("[tenders-all] typeTest fetch failed", (e as Error).message);
+        }
+
         for (const t of batch) {
           const type: "Gem" | "Non-Gem" = t.tenderType === "GEM" ? "Gem" : "Non-Gem";
           if (type === "Gem") totalGem++;
@@ -169,6 +200,7 @@ export async function GET(_req: NextRequest) {
             t.reportings,
             t.evaluations,
             t.tenderFiles,
+            batchTypeTestsByCode,
           );
           flattenMsTotal += performance.now() - fStart;
 

@@ -764,6 +764,7 @@ interface TenderTableProps {
   defaultEndDate?: string;
   showDeadlineOverBadge?: boolean;
   showReasonColumn?: boolean;
+  showTypeTestColumn?: boolean;
 }
 
 interface ColumnDef {
@@ -803,6 +804,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   defaultEndDate,
   showDeadlineOverBadge = false,
   showReasonColumn = false,
+  showTypeTestColumn = false,
 }) => {
   // 1. Column Definitions
   const columns: ColumnDef[] = [
@@ -888,10 +890,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     },
     {
       header: "Type Test",
-      accessor: "typetest",
-      defaultWidth: 180,
+      accessor: "typeTests" as unknown as ColumnDef["accessor"],
+      defaultWidth: 260,
       align: "left",
-      type: "string",
+      type: "custom",
     },
     {
       header: "Costing File",
@@ -1274,9 +1276,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     "catalogueDone",
     "participated",
   ]);
-  const baseVisibleColumns = showPostParticipationColumns
+  const filteredForMode = showPostParticipationColumns
     ? columns.filter((col) => !postParticipationExcludeAccessors.has(col.accessor) && !(postParticipationHiddenAccessors.has(col.accessor) && !(showReasonColumn && col.accessor === "reason")))
     : columns.filter((col) => !postParticipationAccessors.has(col.accessor));
+  const baseVisibleColumns = showTypeTestColumn
+    ? filteredForMode
+    : filteredForMode.filter((col) => (col.accessor as string) !== "typeTests" && (col.accessor as string) !== "typetest");
 
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [showColumnPicker, setShowColumnPicker] = useState(false);
@@ -3949,6 +3954,40 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                             <BOQChartCell docketNo={record.docketNo} boqFileId={record.boqFileId} tenderFilesJson={record.tenderFiles} />
                           );
                           cellClass = "col-center";
+                        } else if ((col.accessor as string) === "typeTests" || (col.accessor as string) === "typetest") {
+                          const rawTT = (record as any).typeTests ?? (record as any).typetest ?? "";
+                          let ttList: Array<{ itemCode: string; testCertificateNo: string; testCertificateUrl: string | null }> = [];
+                          try {
+                            const parsed = JSON.parse(rawTT || "[]");
+                            if (Array.isArray(parsed)) ttList = parsed;
+                          } catch {}
+                          if (ttList.length === 0) {
+                            cellContent = <span>-</span>;
+                          } else {
+                            cellContent = (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: 140, overflowY: "auto" }}>
+                                {ttList.map((tt, i) => (
+                                  <div key={i} style={{ fontSize: "11px", lineHeight: "14px", whiteSpace: "nowrap" }}>
+                                    {tt.itemCode} -{" "}
+                                    {tt.testCertificateUrl ? (
+                                      <a
+                                        href={`/api/executive-files/view/${tt.testCertificateUrl}?auth=${encodeURIComponent("Bearer MOCK_TOKEN_LASERPOWER_SECURE_AUTH_SCOPE")}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ color: "#1a73e8", textDecoration: "underline" }}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {tt.testCertificateNo}
+                                      </a>
+                                    ) : (
+                                      <span>{tt.testCertificateNo}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          }
+                          cellClass = "col-left";
                         } else if (col.accessor === "proposedErpItemName") {
                           // Prefer full CostingSheetDetails rows (with id/bomType/bomCode) for card rendering; fallback to string parts
                           type CostingRow = { id: number; proposedErpItemName: string | null; bomType?: string | null; bomCode?: string | null };

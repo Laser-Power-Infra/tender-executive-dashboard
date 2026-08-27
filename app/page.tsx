@@ -165,7 +165,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger}
+              <TenderTable records={activeDataset} clearTrigger={clearTrigger} showTypeTestColumn
                 aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
                 copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
               />

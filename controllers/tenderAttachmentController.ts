@@ -26,7 +26,17 @@ function getAllowedRoots(): string[] {
     process.env.OLD_FILES,
     process.env.SUPPLY_NETWORK_PATH,
     process.env.CONDUTOR_PATH,
+    process.env.TYPE_TEST_FILES_PATH,
   ];
+  // Allow parent of TYPE_TEST_FILES_PATH so "../Conductors/..." (sibling) passes safety check
+  if (process.env.TYPE_TEST_FILES_PATH) {
+    try {
+      const parent = path.dirname(path.resolve(process.env.TYPE_TEST_FILES_PATH));
+      if (parent && parent !== path.resolve(process.env.TYPE_TEST_FILES_PATH)) {
+        envPaths.push(parent);
+      }
+    } catch {}
+  }
   for (const envPath of envPaths) {
     if (envPath) {
       roots.push(
@@ -111,6 +121,9 @@ export class TenderAttachmentController {
     } else if (type === "oldfiles") {
       base = process.env.OLD_FILES!;
       if (!base) throw new Error("OLD_FILES not set");
+    } else if (type === "TYPETEST") {
+      base = process.env.TYPE_TEST_FILES_PATH!;
+      if (!base) throw new Error("TYPE_TEST_FILES_PATH not set");
     } else {
       throw new Error(`Unknown path type prefix: ${type}`);
     }

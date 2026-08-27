@@ -66,7 +66,6 @@ const BOM_FIELDS: (keyof BomApiRecord)[] = [
   "sheetTotalDiff",
   "bomType",
   "bomId",
-  "option2",
   "option2Diff",
   "ccvSioplas",
   "ccvSioplasDiff",
