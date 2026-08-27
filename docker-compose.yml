@@ -1,9 +1,11 @@
 services:
-  laser-tender:
+  tender-executive-dashboard:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: laser-tender
+    # image: ghcr.io/laser-power-infra/tender-executive-dashboard:${APP_VERSION:-latest}
+    # ghcr.io/laser-power-infra/laser-tender:${APP_VERSION:-latest}
+    container_name: tender-executive-dashboard
     ports:
       - "3126:3126"
 
@@ -40,7 +42,7 @@ services:
     container_name: evolution-api
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "3127:8080"
     env_file:
       - ./evolution/.env.production
     environment:
@@ -51,25 +53,15 @@ services:
     networks:
       - infra
 
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: redis
-  #   restart: unless-stopped
-  #   command: redis-server --appendonly yes
-  #   volumes:
-  #     - ./evolution/redis:/data
-  #   networks:
-  #     - infra
-
-  kestra:
+  kestra-ted:
     build:
       context: ./kestra
       dockerfile: Dockerfile
-    container_name: kestra
+    container_name: kestra-ted
     restart: unless-stopped
 
     ports:
-      - "8081:8080"
+      - "3128:8080"
 
     user: root
 
