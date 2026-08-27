@@ -27,6 +27,9 @@ COPY --from=stage1 /app/prisma ./prisma
 
 COPY . .
 ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
+RUN npx prisma generate
 
 RUN if [ -f package-lock.json ]; then \
         npm run build; \
