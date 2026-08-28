@@ -1,9 +1,9 @@
 services:
   tender-executive-dashboard:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
-    image: ghcr.io/laser-power-infra/tender-executive-dashboard:${APP_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: ghcr.io/laser-power-infra/tender-executive-dashboard:${APP_VERSION:-latest}
     # ghcr.io/laser-power-infra/laser-tender:${APP_VERSION:-latest}
     container_name: tender-executive-dashboard
     ports:
@@ -88,41 +88,27 @@ services:
     networks:
       - infra
 
+
 volumes:
   condutor:
-    driver: local
-    driver_opts:
-      type: cifs
-      device: "${CONDUTOR_CIFS_DEVICE}"
-      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+    external: true
+    name: infrastructure_condutor
 
   indexer:
-    driver: local
-    driver_opts:
-      type: cifs
-      device: "${INDEXER_CIFS_DEVICE}"
-      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+    external: true
+    name: infrastructure_indexer
 
   supply:
-    driver: local
-    driver_opts:
-      type: cifs
-      device: "${SUPPLY_CIFS_DEVICE}"
-      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+    external: true
+    name: infrastructure_supply
 
   costing:
-    driver: local
-    driver_opts:
-      type: cifs
-      device: "${COSTING_CIFS_DEVICE}"
-      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+    external: true
+    name: infrastructure_costing
 
   old-files:
-    driver: local
-    driver_opts:
-      type: cifs
-      device: "${OLD_FILES_CIFS_DEVICE}"
-      o: "username=${CIFS_USERNAME},password=${CIFS_PASSWORD},vers=3.0"
+    external: true
+    name: infrastructure_old-files
 
 
 networks:
