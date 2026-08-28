@@ -39,25 +39,6 @@ export interface SyncResult {
     linked: number;
     errors: number;
   };
-  costingFetched: Array<{
-    referenceNo: string;
-    fileName: string;
-    url: string;
-  }>;
-  networkFetched: Array<{
-    referenceNo: string;
-    docketNo: string;
-    folderPath: string;
-    files: Array<{ name: string; extension: string; url: string }>;
-  }>;
-  tenders: {
-    fileName: string;
-    columns: string[];
-    rows: FlatRow[];
-    associations: AssociationInfo[];
-    totalGem: number;
-    totalNonGem: number;
-  };
 }
 
 const SKIP_RELATION_FIELDS = new Set([
@@ -361,11 +342,6 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
     errors: 0,
   };
 
-  const costingFetched: SyncResult["costingFetched"] = [];
-  const networkFetched: SyncResult["networkFetched"] = [];
-
-  const associations = await prisma.association.findMany();
-
   const sheetService = new GoogleSheetService();
   let records: EpcTenderRecord[];
   try {
@@ -462,7 +438,6 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
         },
       });
       costingCount++;
-      costingFetched.push({ referenceNo: refNo, fileName: name, url: urlStr });
       console.log("[SheetSync] Created TenderFile for", refNo, {
         name,
         extension,
@@ -717,48 +692,7 @@ export async function syncSheetToTenderMerged(): Promise<SyncResult> {
   //   console.warn("[SheetSync] Smartsheet docket sync failed:", (e as Error).message);
   // }
 
-  // Fetch affected records to return as TenderData
-  const affected = await prisma.tenderMerged.findMany({
-    include: {
-      tenderAssociations: { include: { association: true } },
-      reportings: true,
-      evaluations: true,
-      tenderFiles: true,
-      CostingSheetDetails: { select: { itemSchedule: true, proposedErpItemName: true, proposedErpQuantity: true, cva: true } },
-    },
-  });
-
-  const rows: FlatRow[] = [];
-  let totalGem = 0;
-  let totalNonGem = 0;
-
-  for (const t of affected) {
-    const type: "Gem" | "Non-Gem" = t.tenderType === "GEM" ? "Gem" : "Non-Gem";
-    if (type === "Gem") totalGem++;
-    else totalNonGem++;
-    rows.push(
-      flattenTender(t as unknown as Record<string, unknown>, type, t.id),
-    );
-  }
-
-  const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-  const allAssociations = associations.map((a) => ({
-    id: a.id,
-    name: a.name,
-    email: a.email,
-  }));
-
   return {
     summary,
-    costingFetched,
-    networkFetched,
-    tenders: {
-      fileName: `Sheet Sync (${summary.created} costing attachments)`,
-      columns,
-      rows,
-      associations: allAssociations,
-      totalGem,
-      totalNonGem,
-    },
   };
 }

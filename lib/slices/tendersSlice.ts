@@ -1291,29 +1291,12 @@ export const tendersSlice = createSlice({
       state.feedbackSaving[key] = false;
     });
 
-    // syncSheetToMerged
+    // syncSheetToMerged - lean: returns only { summary }, no rows/columns
     builder.addCase(syncSheetToMerged.pending, (state) => {
       state.loading = true;
     });
-    builder.addCase(syncSheetToMerged.fulfilled, (state, action) => {
+    builder.addCase(syncSheetToMerged.fulfilled, (state) => {
       state.loading = false;
-      const { tenders } = action.payload;
-      if (!state.data || !tenders) return;
-
-      for (const row of tenders.rows) {
-        const idx = state.data.rows.findIndex((r) => r.referenceNo === row.referenceNo);
-        if (idx >= 0) {
-          state.data.rows[idx] = { ...state.data.rows[idx], ...row };
-        } else {
-          state.data.rows.push(row);
-        }
-      }
-
-      for (const col of tenders.columns) {
-        if (!state.data.columns.includes(col)) {
-          state.data.columns.push(col);
-        }
-      }
     });
     builder.addCase(syncSheetToMerged.rejected, (state) => {
       state.loading = false;

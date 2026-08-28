@@ -11,12 +11,12 @@ async function runSyncToMerged() {
 const syncToMergedWithLog = withLog(
   runSyncToMerged,
   (result) => {
-    const { summary, costingFetched, networkFetched } = result;
+    const { summary } = result;
     return {
       action: "UPDATE",
       tableName: "TenderMerged",
-      recordId: networkFetched.map((n) => n.referenceNo).join(",") || undefined,
-      details: `Sheet-to-Merged sync: ${summary.created} costing attachments created (${costingFetched.length} total fetched), network files fetched for ${networkFetched.length} tenders, errors ${summary.errors}`,
+      recordId: undefined,
+      details: `Sheet-to-Merged sync: ${summary.created} costing attachments created, total ${summary.total}, errors ${summary.errors}`,
     };
   },
 );
