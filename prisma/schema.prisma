@@ -188,6 +188,7 @@ model SupplyHistory {
   contactNo     String?
   certificateUrl String?
   certificateFileName String? 
+  certificateSentDate DateTime?
 
   lastSyncedAt DateTime @default(now())
 

@@ -39,6 +39,7 @@ export class DatabaseSupplyService {
       contactNo: r.contactNo ?? null,
       certificateUrl: r.certificateUrl ?? null,
       certificateFileName: r.certificateFileName ?? null,
+      certificateSentDate: r.certificateSentDate ? (r.certificateSentDate as Date).toISOString() : null,
     }));
   }
 
@@ -110,10 +111,13 @@ export class DatabaseSupplyService {
           lastSyncedAt: new Date(),
         };
 
-        // Preserve user-edited fields (email/contactNo/itemSchedule) on sheet sync — they are not provided by sheet
+        // Preserve user-edited fields (email/contactNo/itemSchedule) and certificate fields on sheet sync — they are not provided by sheet
         const updateData: any = { ...data };
         delete updateData.email;
         delete updateData.contactNo;
+        delete (updateData as any).certificateUrl;
+        delete (updateData as any).certificateFileName;
+        delete (updateData as any).certificateSentDate;
         // Only update itemSchedule if sheet record actually has a value; otherwise preserve DB value
         if (!(record as any).itemSchedule) delete updateData.itemSchedule;
 

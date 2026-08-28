@@ -24,4 +24,5 @@ export interface SupplyHistoryRecord {
   contactNo?: string | null;
   certificateUrl?: string | null;
   certificateFileName?: string | null;
+  certificateSentDate?: string | null;
 }

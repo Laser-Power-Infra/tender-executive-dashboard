@@ -174,7 +174,20 @@ async function runSendCertificateEmail(params: { partyRefNo: string }) {
     throw err;
   }
 
-  return { partyRefNo: trimmedRef, to, cc, fileName: finalFileName, driveUrl };
+  // Persist certificateSentDate for all rows sharing this partyRefNo (overwrite with latest on each successful send)
+  let certificateSentDate: string | null = null;
+  try {
+    const sentAt = new Date();
+    await prisma.supplyHistory.updateMany({
+      where: { partyRefNo: trimmedRef },
+      data: { certificateSentDate: sentAt },
+    });
+    certificateSentDate = sentAt.toISOString();
+  } catch (e: any) {
+    console.warn("[send-certificate-email] Failed to persist certificateSentDate:", e?.message);
+  }
+
+  return { partyRefNo: trimmedRef, to, cc, fileName: finalFileName, driveUrl, certificateSentDate };
 }
 
 const sendCertificateEmailWithLog = withLog(
@@ -183,7 +196,7 @@ const sendCertificateEmailWithLog = withLog(
     action: "UPDATE" as const,
     tableName: "SupplyHistory",
     referenceNo: result.partyRefNo,
-    details: `Certificate email sent for partyRefNo ${result.partyRefNo} to ${result.to} cc [${result.cc.join(", ")}] file ${result.fileName}`,
+    details: `Certificate email sent for partyRefNo ${result.partyRefNo} to ${result.to} cc [${result.cc.join(", ")}] file ${result.fileName} at ${result.certificateSentDate ?? new Date().toISOString()}`,
   }),
 );
 

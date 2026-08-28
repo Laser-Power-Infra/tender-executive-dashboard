@@ -44,9 +44,10 @@ const COLUMNS: ColDef[] = [
   { key: "rate",            label: "Rate",              width: 110, align: "right"  },
   { key: "invoiceQty",      label: "Invoice Qty",       width: 110, align: "right"  },
   { key: "invoiceAmt",      label: "Invoice Amt",       width: 130, align: "right"  },
-  { key: "email",           label: "Email",             width: 200, align: "left"   },
-  { key: "contactNo",       label: "Contact No",        width: 150, align: "left"   },
-  { key: "hasDocuments",    label: "Documents",         width: 140, align: "center" },
+  { key: "email",               label: "Email",                 width: 200, align: "left"   },
+  { key: "contactNo",           label: "Contact No",            width: 150, align: "left"   },
+  { key: "hasDocuments",        label: "Documents",             width: 140, align: "center" },
+  { key: "certificateSentDate", label: "Certificate Sent Date", width: 160, align: "center" },
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
@@ -183,6 +184,8 @@ const SupplyHistoryDashboard: React.FC = () => {
   const [saleBillDateEnd, setSaleBillDateEnd] = useState("");
   const [partyRefDateStart, setPartyRefDateStart] = useState("");
   const [partyRefDateEnd, setPartyRefDateEnd] = useState("");
+  const [certSentDateStart, setCertSentDateStart] = useState("");
+  const [certSentDateEnd, setCertSentDateEnd] = useState("");
   const [showPartyDropdown, setShowPartyDropdown] = useState(false);
   const [selectedParties, setSelectedParties] = useState<string[]>([]);
   const partyDropdownRef = useRef<HTMLDivElement>(null);
@@ -352,6 +355,12 @@ const SupplyHistoryDashboard: React.FC = () => {
         }
         setCertStates((prev) => ({ ...prev, [partyRefNo]: { status: "emailSent" } }));
         toast.success(`Certificate emailed to ${json.to}${json.cc?.length ? ` (cc: ${json.cc.join(", ")})` : ""}`);
+        // Optimistically update certificateSentDate for all rows sharing partyRefNo
+        const sentIso: string = json.certificateSentDate ?? new Date().toISOString();
+        setLocalData((prev) => {
+          const base = prev ?? displayData;
+          return base.map((r) => (r.partyRefNo === partyRefNo ? { ...r, certificateSentDate: sentIso } : r));
+        });
         // Reset to ready after 3s
         setTimeout(() => {
           setCertStates((prev) => {
@@ -556,6 +565,8 @@ const SupplyHistoryDashboard: React.FC = () => {
     setSaleBillDateEnd("");
     setPartyRefDateStart("");
     setPartyRefDateEnd("");
+    setCertSentDateStart("");
+    setCertSentDateEnd("");
     setRateMin("");
     setRateMax("");
     setQtyMin("");
@@ -626,7 +637,7 @@ const SupplyHistoryDashboard: React.FC = () => {
             const fmt = formatNumber(v).toLowerCase();
             return numStr.includes(sVal) || fmt.includes(sVal);
           }
-          if ((key === "saleBillDate" || key === "partyRefDate") && typeof v === "string") {
+          if ((key === "saleBillDate" || key === "partyRefDate" || key === "certificateSentDate") && typeof v === "string") {
             const fmt = formatDate(v);
             return String(v).toLowerCase().includes(sVal) || Boolean(fmt && fmt.toLowerCase().includes(sVal));
           }
@@ -727,6 +738,22 @@ const SupplyHistoryDashboard: React.FC = () => {
       });
     }
 
+    if (certSentDateStart) {
+      const start = new Date(certSentDateStart);
+      rows = rows.filter(row => {
+        if (!row.certificateSentDate) return false;
+        return new Date(row.certificateSentDate) >= start;
+      });
+    }
+    if (certSentDateEnd) {
+      const end = new Date(certSentDateEnd);
+      end.setHours(23, 59, 59, 999);
+      rows = rows.filter(row => {
+        if (!row.certificateSentDate) return false;
+        return new Date(row.certificateSentDate) <= end;
+      });
+    }
+
     const rateLo = rateMin.trim() !== "" ? parseFloat(rateMin) : Number.NEGATIVE_INFINITY;
     const rateHi = rateMax.trim() !== "" ? parseFloat(rateMax) : Number.POSITIVE_INFINITY;
     if (isFinite(rateLo) || isFinite(rateHi)) {
@@ -750,6 +777,7 @@ const SupplyHistoryDashboard: React.FC = () => {
     displayData, search, colSearches,
     saleBillDateStart, saleBillDateEnd,
     partyRefDateStart, partyRefDateEnd,
+    certSentDateStart, certSentDateEnd,
     rateMin, rateMax, qtyMin, qtyMax, amtMin, amtMax,
     selectedParties,
     selectedItems,
@@ -957,7 +985,12 @@ const SupplyHistoryDashboard: React.FC = () => {
       const exportData = displayData.map((rec) => {
         const obj: Record<string, string | number | boolean> = {};
         for (const col of COLUMNS) {
-          obj[col.label] = rec[col.key] ?? "";
+          const val = (rec as any)[col.key];
+          if (col.key === "certificateSentDate") {
+            obj[col.label] = val ? (formatDate(val) ?? val) : "Not Sent";
+          } else {
+            obj[col.label] = val ?? "";
+          }
         }
         return obj;
       });
@@ -1013,7 +1046,12 @@ const SupplyHistoryDashboard: React.FC = () => {
     const exportData = sorted.map((rec) => {
       const obj: Record<string, string | number | boolean> = {};
       for (const col of COLUMNS) {
-        obj[col.label] = rec[col.key] ?? "";
+        const val = (rec as any)[col.key];
+        if (col.key === "certificateSentDate") {
+          obj[col.label] = val ? (formatDate(val) ?? val) : "Not Sent";
+        } else {
+          obj[col.label] = val ?? "";
+        }
       }
       return obj;
     });
@@ -1280,6 +1318,34 @@ const SupplyHistoryDashboard: React.FC = () => {
                                   <button
                                     className="date-filter-clear-btn"
                                     onClick={() => { setPartyRefDateStart(""); setPartyRefDateEnd(""); setPage(1); }}
+                                    title="Clear date filter"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {col.key === "certificateSentDate" && (
+                              <div className="column-date-filter">
+                                <input
+                                  type="date"
+                                  className="date-filter-input"
+                                  value={certSentDateStart}
+                                  onChange={e => { setCertSentDateStart(e.target.value); setPage(1); }}
+                                  title="Start Date"
+                                />
+                                <span className="date-filter-to">to</span>
+                                <input
+                                  type="date"
+                                  className="date-filter-input"
+                                  value={certSentDateEnd}
+                                  onChange={e => { setCertSentDateEnd(e.target.value); setPage(1); }}
+                                  title="End Date"
+                                />
+                                {(certSentDateStart || certSentDateEnd) && (
+                                  <button
+                                    className="date-filter-clear-btn"
+                                    onClick={() => { setCertSentDateStart(""); setCertSentDateEnd(""); setPage(1); }}
                                     title="Clear date filter"
                                   >
                                     <X size={14} />
@@ -1845,6 +1911,13 @@ const SupplyHistoryDashboard: React.FC = () => {
                             </button>
                           ) : (
                             <span className="supply-null-cell">—</span>
+                          )}
+                        </td>
+                        <td className="col-center">
+                          {row.certificateSentDate ? (
+                            <span className="supply-date-badge">{formatDate(row.certificateSentDate)}</span>
+                          ) : (
+                            <span className="supply-null-cell">Not Sent</span>
                           )}
                         </td>
                         <td className="col-center">
