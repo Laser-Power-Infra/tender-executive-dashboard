@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, LogIn, LogOut, User, UserPlus } from "lucide-react";
+import { ChevronDown, KeyRound, LogIn, LogOut, User, UserPlus } from "lucide-react";
 import { UnderChangesBanner } from "@/components/UnderChangesBanner";
+import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -61,6 +63,7 @@ export function NavBar() {
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
   const isAdminActive = adminLinks.some((l) => pathname === l.href);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   // console.log(session)
 
   return (
@@ -155,6 +158,14 @@ export function NavBar() {
                       </p>
                     </div>
                     <button
+                      onClick={() => setShowChangePassword(true)}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      <KeyRound size={14} />
+                      Change Password
+                    </button>
+                    <div className="mx-2 my-1 border-t border-gray-100" />
+                    <button
                       onClick={() => signOut()}
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                     >
@@ -183,8 +194,12 @@ export function NavBar() {
               </>
             )}
           </div>
-        </NavigationMenu>
+          </NavigationMenu>
       </nav>
+      <ChangePasswordDialog
+        open={showChangePassword}
+        onOpenChange={setShowChangePassword}
+      />
     </>
   );
 }
