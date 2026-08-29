@@ -24,7 +24,7 @@ services:
       COSTING_FILE_NETWORK_HOST_PATH: /mnt/costing/COSTING & INVOLVEMENT
       OLD_RA_EXCEL_PATH: /mnt/old-files/TENDER 2023-2024
       OLD_FILES: /mnt/old-files/TENDER 2023-2024
-      TYPE_TEST_FILES_PATH: /mnt/condutor/Updated TTR"
+      TYPE_TEST_FILES_PATH: /mnt/condutor/Updated TTR
 
     volumes:
       - condutor:/mnt/condutor
