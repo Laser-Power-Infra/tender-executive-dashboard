@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { toISTDateKey } from "./format-ist";
 
 export interface TenderFileInfo {
   id: number;
@@ -92,10 +92,18 @@ export function flattenTender(
     if (SKIP_RELATION_FIELDS.has(field)) continue;
     const val = tender[field];
     if (val instanceof Date) {
-      row[field] =
-        field === "reverseAuctionStartDate" || field === "reverseAuctionEndDate"
-          ? format(val, "yyyy-MM-dd'T'HH:mm:ss")
-          : format(val, "yyyy-MM-dd");
+      if (
+        field === "reverseAuctionStartDate" ||
+        field === "reverseAuctionEndDate"
+      ) {
+        // Preserve full instant — client formats in IST via formatDateTimeIST
+        row[field] = val.toISOString();
+      } else {
+        // Date-only fields (deadline etc.) — serialize as IST calendar date
+        // so client formatDateISTLong (Asia/Kolkata) shows correct day
+        const istKey = toISTDateKey(val);
+        row[field] = istKey ?? val.toISOString();
+      }
     } else {
       row[field] = val == null ? "" : String(val);
     }
@@ -112,7 +120,7 @@ export function flattenTender(
     .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
   row.assignedDate =
     assignedDates.length > 0
-      ? format(new Date(assignedDates[0]), "yyyy-MM-dd")
+      ? (toISTDateKey(new Date(assignedDates[0])) ?? new Date(assignedDates[0]).toISOString())
       : "";
 
   const docFile = tenderFiles?.find((f) => f.tags.includes("tenderDocument"));

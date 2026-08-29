@@ -8,7 +8,7 @@ import { extractNumericDocket } from "@/lib/extractNumericDocket";
 import { encryptRelativePath } from "@/lib/fileCrypto";
 import { toPortableRelative } from "@/lib/pathUtils";
 import { parseDate } from "@/lib/parse-date";
-import { format } from "date-fns";
+import { toISTDateKey } from "@/lib/format-ist";
 import { publishTenderParsingTask } from "@/lib/queue/publisher";
 import { describeTenderFile } from "@/lib/tenderFileDescriptor";
 import type { EpcTenderRecord } from "@/types/tender";
@@ -62,7 +62,15 @@ function flattenTender(
     if (SKIP_RELATION_FIELDS.has(field)) continue;
     const val = tender[field];
     if (val instanceof Date) {
-      row[field] = format(val, "yyyy-MM-dd");
+      if (
+        field === "reverseAuctionStartDate" ||
+        field === "reverseAuctionEndDate"
+      ) {
+        row[field] = val.toISOString();
+      } else {
+        const istKey = toISTDateKey(val);
+        row[field] = istKey ?? val.toISOString();
+      }
     } else {
       row[field] = val == null ? "" : String(val);
     }

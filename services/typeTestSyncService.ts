@@ -84,11 +84,20 @@ export async function syncTypeTestFromLedger(opts: TypeTestSyncOptions = {}): Pr
       try {
         const decoded = decodeURI(rawLink.trim());
         // force Windows separators as requested: store as \\ path
-        const backslashPath = decoded.replace(/\//g, "\\");
+        // strip leading ../, ..\, ./, .\ and leading separators so resolve does not pop base (e.g. "..\Cables" -> "Cables")
+        const sanitized = decoded
+          .trim()
+          .replace(/^(\.\.?[\\/]+)+/, "")
+          .replace(/^[\\/]+/, "");
+        const backslashPath = sanitized.replace(/\//g, "\\");
         encryptedUrl = encryptRelativePath(TYPE_TEST_FILE_TYPE, backslashPath);
       } catch {
         // fallback: store raw as backslash
-        const backslashPath = rawLink.trim().replace(/\//g, "\\");
+        const sanitized = rawLink
+          .trim()
+          .replace(/^(\.\.?[\\/]+)+/, "")
+          .replace(/^[\\/]+/, "");
+        const backslashPath = sanitized.replace(/\//g, "\\");
         encryptedUrl = encryptRelativePath(TYPE_TEST_FILE_TYPE, backslashPath);
       }
     }
