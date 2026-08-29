@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { isGemReference } from "@/lib/tender-columns";
-import { format } from "date-fns";
+import { toISTDateKey } from "@/lib/format-ist";
 
 const MERGED_DIRECT_MAP: Record<string, string> = {
   tenderNoNitNo: "referenceNo",
@@ -34,7 +34,7 @@ export interface ImportEpcResult {
 
 function valToString(val: unknown): string | null {
   if (val === null || val === undefined) return null;
-  if (val instanceof Date) return format(val, "yyyy-MM-dd");
+  if (val instanceof Date) return toISTDateKey(val) ?? val.toISOString();
   return String(val);
 }
 

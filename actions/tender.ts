@@ -16,6 +16,7 @@ import { TENDER_FILE_TYPES } from "@/lib/tender-file-types";
 import { describeTenderFile } from "@/lib/tenderFileDescriptor";
 import { format } from "date-fns";
 import { parseDate } from "@/lib/parse-date";
+import { toISTDateKey } from "@/lib/format-ist";
 import { calcDiffDecimal, calcDiffString } from "@/lib/diffCalculator";
 
 export const updateTenderAssignmentsAction = withLog(
@@ -676,7 +677,7 @@ export async function updateTenderMergedStringField(params: {
           itemDescription: [current.tenderBrief, current.itemCategory].filter(Boolean).join(" @ "),
           itemList,
           bidSubmissionEndDate: current.deadline
-            ? format(current.deadline, "yyyy-MM-dd")
+            ? (toISTDateKey(current.deadline) ?? format(current.deadline, "yyyy-MM-dd"))
             : null,
           tenderFeeLastDate: null,
           tenderFee: null,
