@@ -110,7 +110,9 @@ export default function EmdDetailsCashPage() {
   const [draftHtml, setDraftHtml] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
 
-  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isValidEmail = (v: string) => v.trim().split(",").map((s) => s.trim()).filter(Boolean).every((e) => EMAIL_RE.test(e));
+  const invalidEmails = (v: string) => v.split(",").map((s) => s.trim()).filter(Boolean).filter((e) => !EMAIL_RE.test(e));
 
   const resizingColumnRef = useRef<string | null>(null);
   const startXRef = useRef(0);
@@ -218,7 +220,7 @@ export default function EmdDetailsCashPage() {
   const handleContactEmailSave = useCallback(async (id: number) => {
     const raw = draftContactEmail.trim();
     if (raw !== "" && !isValidEmail(raw)) {
-      toast.error("Invalid email format");
+      toast.error(`Invalid email(s): ${invalidEmails(raw).join(", ")}`);
       return;
     }
     const prev = (mergedData.find((r) => r.id === id) as any)?.contactEmailId ?? null;
@@ -661,21 +663,21 @@ export default function EmdDetailsCashPage() {
                               if (isEditing) {
                                 return (
                                   <td key={String(col.accessor)} className={`${col.sticky ? "sticky-col" : ""}`} style={col.sticky ? { left: stickyLeftOffsets[String(col.accessor)], background: "#fff" } : {}}>
-                                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                      <input
+                                    <div className="flex items-start gap-1" onClick={(e) => e.stopPropagation()}>
+                                      <textarea
                                         autoFocus
                                         value={draftContactEmail}
                                         onChange={(e) => setDraftContactEmail(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") handleContactEmailSave(row.id);
-                                          if (e.key === "Escape") handleContactEmailCancel();
-                                        }}
-                                        placeholder="email@company.com"
-                                        style={{ flex: 1, padding: "6px 8px", borderRadius: "6px", border: `1px solid ${draftContactEmail && !isValidEmail(draftContactEmail) ? "#ef4444" : "#dadce0"}`, fontSize: "12px" }}
+                                        placeholder="email1@company.com, email2@company.com"
+                                        rows={2}
+                                        style={{ flex: 1, padding: "6px 8px", borderRadius: "6px", border: `1px solid ${draftContactEmail && !isValidEmail(draftContactEmail) ? "#ef4444" : "#dadce0"}`, fontSize: "12px", resize: "vertical", minHeight: "56px" }}
                                       />
-                                      <button onClick={() => handleContactEmailSave(row.id)} disabled={isUpdating || (draftContactEmail.trim() !== "" && !isValidEmail(draftContactEmail))} title="Save" style={{ padding: "4px", borderRadius: "4px", background: "#0a2540", color: "white", border: "none", cursor: "pointer" }}><Check size={12} /></button>
-                                      <button onClick={handleContactEmailCancel} disabled={isUpdating} title="Cancel" style={{ padding: "4px", borderRadius: "4px", background: "#e5e7eb", border: "none", cursor: "pointer" }}><X size={12} /></button>
+                                      <div className="flex flex-col gap-1">
+                                        <button onClick={() => handleContactEmailSave(row.id)} disabled={isUpdating || (draftContactEmail.trim() !== "" && !isValidEmail(draftContactEmail))} title="Save" style={{ padding: "6px", borderRadius: "4px", background: "#0a2540", color: "white", border: "none", cursor: "pointer" }}><Check size={12} /></button>
+                                        <button onClick={handleContactEmailCancel} disabled={isUpdating} title="Cancel" style={{ padding: "6px", borderRadius: "4px", background: "#e5e7eb", border: "none", cursor: "pointer" }}><X size={12} /></button>
+                                      </div>
                                     </div>
+                                    {draftContactEmail && !isValidEmail(draftContactEmail) && <div style={{ fontSize: "10px", color: "#dc2626", marginTop: "4px" }}>Invalid: {invalidEmails(draftContactEmail).join(", ")}</div>}
                                   </td>
                                 );
                               }

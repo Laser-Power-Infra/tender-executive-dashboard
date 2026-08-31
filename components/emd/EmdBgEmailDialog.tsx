@@ -73,6 +73,13 @@ export function EmdBgEmailDialog({ open, onOpenChange, row, onConfirm }: Props) 
   const [sending, setSending] = useState(false);
 
   const to = (row?.contactEmailId ?? "").trim();
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isValidEmails = (v: string) => {
+    const s = v.trim();
+    if (!s) return false;
+    return s.split(",").map((x) => x.trim()).filter(Boolean).every((e) => EMAIL_RE.test(e));
+  };
+  const invalidEmails = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean).filter((e) => !EMAIL_RE.test(e));
 
   useEffect(() => {
     if (open && initial && row) {
@@ -113,8 +120,6 @@ export function EmdBgEmailDialog({ open, onOpenChange, row, onConfirm }: Props) 
     }
   };
 
-  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
-
   if (!row || !mailData) return null;
 
   return (
@@ -132,10 +137,10 @@ export function EmdBgEmailDialog({ open, onOpenChange, row, onConfirm }: Props) 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           <div className="grid grid-cols-1 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-semibold">To *</label>
-              <Input value={to} disabled readOnly placeholder="No contact email" className="bg-muted" />
+              <label className="text-xs font-semibold">To * (comma separated)</label>
+              <Textarea value={to} disabled readOnly placeholder="No contact email" className="bg-muted min-h-[60px]" />
               {!to && <p className="text-xs text-amber-600">No contact email for this record</p>}
-              {to && !isValidEmail(to) && <p className="text-xs text-red-600">Invalid email in contact email</p>}
+              {to && !isValidEmails(to) && <p className="text-xs text-red-600">Invalid email(s): {invalidEmails(to).join(", ")}</p>}
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold">Subject *</label>
@@ -159,7 +164,7 @@ export function EmdBgEmailDialog({ open, onOpenChange, row, onConfirm }: Props) 
 
         <SheetFooter className="border-t px-6 py-3 flex-row justify-end gap-2 flex-shrink-0 bg-slate-50">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>Cancel</Button>
-          <Button onClick={handleConfirm} disabled={sending || !to || !isValidEmail(to) || !subject || !row.reason} className="bg-[#0a2540] text-white">
+          <Button onClick={handleConfirm} disabled={sending || !to || !isValidEmails(to) || !subject || !row.reason} className="bg-[#0a2540] text-white">
             {sending ? <><Loader2 size={14} className="animate-spin" /> Sending...</> : <><Mail size={14} /> Confirm & Send</>}
           </Button>
         </SheetFooter>

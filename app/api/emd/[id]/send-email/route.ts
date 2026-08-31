@@ -5,12 +5,19 @@ import { triggerEmdEmailWebhook } from "@/lib/integrations/n8n";
 
 export const runtime = "nodejs";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmailsCSV(v: string) {
+  return v.split(",").map((s) => s.trim()).filter(Boolean).every((e) => EMAIL_RE.test(e));
+}
+
 async function sendEmdMergedEmail(id: string, payload: { subject?: string; body?: string; html?: string; to?: string } | undefined) {
   const existing = await prisma.emdMerged.findUnique({ where: { id } });
   if (!existing) throw new Error("Record to update does not exist");
   if (!existing.reason) throw new Error("Please select Tender Conclusion Reason before sending email");
   const to = (payload?.to ?? existing.contactEmailId ?? "").trim();
-  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error("Valid contact email (to) is required");
+  if (!to || !isValidEmailsCSV(to)) throw new Error("Valid contact email(s) (to) is required - comma separated");
+  const invalid = to.split(",").map((s) => s.trim()).filter(Boolean).filter((e) => !EMAIL_RE.test(e));
+  if (invalid.length) throw new Error(`Invalid email(s): ${invalid.join(", ")}`);
   const tenderNo = existing.tenderNo || existing.tmNo || id;
   const subject = payload?.subject?.trim() || `Request for Release/Return of EMD - ${tenderNo}`;
   const html = payload?.html || payload?.body || existing.emailDraft || "";

@@ -5,12 +5,15 @@ import { triggerEmdEmailWebhook } from "@/lib/integrations/n8n";
 
 export const runtime = "nodejs";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 async function sendEmdBgEmail(id: string, payload: { subject?: string; body?: string; html?: string; to?: string } | undefined) {
   const existing = await prisma.emdDetailsBG.findUnique({ where: { id } });
   if (!existing) throw new Error("Record to update does not exist");
   if (!existing.reason) throw new Error("Please select Tender Conclusion Reason before sending email");
   const to = (payload?.to ?? existing.contactEmailId ?? "").trim();
-  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new Error("Valid contact email (to) is required");
+  const emails = to.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!to || emails.length === 0 || emails.some((e) => !EMAIL_RE.test(e))) throw new Error("Valid contact email(s) (to) is required - comma separated");
   const subject = payload?.subject?.trim() || `Request for Release/Return of Bid Guarantee - ${existing.tenderNo || existing.tenderNo1 || id}`;
   const html = payload?.html || payload?.body || existing.emailDraft || "";
   if (!html || html.trim().length < 10) throw new Error("Email body/html is required");

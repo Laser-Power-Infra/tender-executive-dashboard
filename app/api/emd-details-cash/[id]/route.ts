@@ -18,7 +18,10 @@ async function updateEmdDetailsCashFields(id: number, data: { reason?: string | 
   }
   if (data.contactEmailId !== undefined) {
     const raw = data.contactEmailId === "" ? null : (data.contactEmailId as string)?.trim() ?? null;
-    if (raw !== null && !EMAIL_RE.test(raw)) throw new Error("Invalid contact email");
+    if (raw !== null) {
+      const bad = raw.split(",").map((s) => s.trim()).filter(Boolean).filter((e) => !EMAIL_RE.test(e));
+      if (bad.length) throw new Error(`Invalid contact email(s): ${bad.join(", ")}`);
+    }
     updateData.contactEmailId = raw;
   }
   if (Object.keys(updateData).length === 0) throw new Error("No fields to update");
