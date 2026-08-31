@@ -32,6 +32,11 @@ enum TenderType {
   NON_GEM
 }
 
+enum EmdType {
+  CASH
+  BG
+}
+
 enum PriceType {
   FIRM
   VARIABLE
@@ -966,7 +971,7 @@ model EmdMerged {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  emdType   String? // "CASH" | "BG"
+  emdType   EmdType?
 
   // Shared / Match (18 logical -> 21 physical incl. synonyms)
   tenderNo                         String?

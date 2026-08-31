@@ -67,6 +67,7 @@ import type {
   ColumnFilterConfig,
   ColumnFilterState,
 } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 
 export type {
   ColumnFilterType,
@@ -192,6 +193,7 @@ export interface ColumnDef<T> {
   renderCell?: (value: unknown, row: T) => React.ReactNode;
   renderExpanded?: (row: T) => React.ReactNode;
   sortValue?: (value: unknown, row: T) => string | number | boolean | null;
+  provenance?: Array<"PRE" | "POST" | "NOT_PARTICIPATED">;
 }
 
 export interface OptimizedTenderTableProps<T extends Record<string, unknown>> {
@@ -1596,6 +1598,29 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
                         </span>
                       )}
                     </div>
+                    {col.provenance && col.provenance.length > 0 && (
+                      <div
+                        className="flex gap-1 mt-1 flex-wrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {col.provenance.map((badge) => {
+                          const badgeClass =
+                            badge === "PRE"
+                              ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50"
+                              : badge === "POST"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                                : "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-100";
+                          return (
+                            <Badge
+                              key={badge}
+                              className={`inline-flex w-fit text-[9px] font-medium px-1.5 py-0 border ${badgeClass}`}
+                            >
+                              {badge}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    )}
                     {(() => {
                       try {
                         return renderFilter(col);

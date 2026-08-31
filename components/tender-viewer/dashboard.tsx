@@ -56,6 +56,7 @@ import {
   Lock,
 } from "lucide-react";
 import { getDisplayNameMap } from "@/lib/tender-columns";
+import { getProvenance, getProvenanceForFields } from "@/lib/columnProvenance";
 
 const normalizeKey = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
 
@@ -1853,8 +1854,13 @@ export default function Dashboard() {
             const val = row[firstField as keyof typeof row];
             return val != null && val !== "" ? String(val) : "-";
           },
+          provenance: getProvenanceForFields(g.fields),
         } as ColumnDef<Record<string, unknown>>;
       });
+
+    for (const def of individualDefs) {
+      (def as ColumnDef<Record<string, unknown>>).provenance = getProvenance(String(def.accessor));
+    }
 
     const result: ColumnDef<Record<string, unknown>>[] = [];
     let mergedIdx = 0;

@@ -24,6 +24,7 @@ const links: Array<{ href: string; label: string; isExternal?: boolean }> = [
     label: "Not Participated",
   },
   { href: "/supply-history", label: "Supply History Dashboard" },
+  { href: "/emd", label: "EMD Merged" },
   { href: "/emd-details-cash", label: "EMD Cash" },
   { href: "/emd-details-bg", label: "EMD BG" },
   { href: "/activity", label: "Activity" },
