@@ -878,6 +878,7 @@ model TenderMerged {
   evaluations         Evaluation[]
   tenderFiles         TenderFile[]
   CostingSheetDetails CostingSheetDetails[]
+  emdMergeds          EmdMerged[]         @relation("EmdMergedToTenderMerged")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -959,6 +960,73 @@ model EmdDetailsCash {
   // @@index([tmNo])
   @@index([customerName])
   @@map("emd_details_cash")
+}
+
+model EmdMerged {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  emdType   String? // "CASH" | "BG"
+
+  // Shared / Match (18 logical -> 21 physical incl. synonyms)
+  tenderNo                         String?
+  tmNo                             String?
+  remarks                          String?
+  contactEmailId                   String?
+  emailDraft                       String?   @db.Text
+  lastEmailSent                    String?
+  lastEmailSentAt                  DateTime?
+  reason                           String?   @db.Text
+  contactNo                        String?
+  address                          String?
+  docketNo                         String?
+  bgNo                             String?
+  customerName                     String? // partyName / customerName
+  emdAmt                           String?
+  bgAmtLocal                       String?
+  bgAmtFc                          String?
+  issueDt                          DateTime?
+  bgDate                           String?
+  expectedRefundDateOrRefundedDate DateTime?
+  expiryDate                       String?
+  claimDate                        String?
+
+  // BG only (8)
+  trantype           String?
+  bankName           String?
+  partyCode          String?
+  staffName          String?
+  status             String?
+  match              String?
+  bgMatch            String?
+  statusPriceAssDone String?
+
+  // Cash only (14)
+  permanent                    String?
+  chDdNo                       String?
+  acHolder                     String?
+  statusAsPerSujibDaAndOther   String?
+  canBeRefunded                String?
+  rank                         String?
+  poIssueStatus                String?
+  aocAwardOfContractStatus     String?
+  refundableOrNot              String?
+  statusRefundedPending        String?
+  statusOfTender               String?
+  conditionsForRefund          String?
+  certificateByParty           String?
+  certificateByUtility         String?
+
+  // M:N with TenderMerged via implicit join table, populated by docketNo matching
+  tenderMergeds TenderMerged[] @relation("EmdMergedToTenderMerged")
+
+  @@index([docketNo])
+  @@index([tenderNo])
+  @@index([tmNo])
+  @@index([customerName])
+  @@index([emdType])
+  @@index([bgNo])
+  @@map("emd_merged")
 }
 
 model Bom {

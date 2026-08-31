@@ -36,6 +36,7 @@ import AiFeedbackDialog from "@/components/tender-viewer/ai-feedback-dialog";
 import DashboardSkeleton from "@/components/tender-viewer/dashboard-skeleton";
 import WebsiteEditDialog from "@/components/tender-viewer/website-edit-dialog";
 import TenderDocumentUploadDialog from "@/components/tender-viewer/tender-document-upload-dialog";
+import { AttachmentModal } from "@/components/AttachmentModal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
@@ -240,7 +241,14 @@ export default function Dashboard() {
     string,
     unknown
   > | null>(null);
+  const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, string>[]>([]);
   const [syncingDockets, setSyncingDockets] = useState(false);
+
+  const handleOpenAttachmentModal = useCallback((files: Record<string, string>[]) => {
+    setSelectedFiles(files);
+    setIsAttachmentModalOpen(true);
+  }, []);
   const feedbackSaving = useAppSelector((s) => s.tenders.feedbackSaving);
   const { data: session } = useSession();
   const canEditRemarks = session?.user?.role === "admin" || session?.user?.role === "developer";
@@ -1216,31 +1224,42 @@ export default function Dashboard() {
           },
           renderCell: (_value: unknown, row: Record<string, unknown>) => {
             const filesRaw = row.tenderFiles as string | undefined;
-            const files: Array<{ url: string; tags: string[] }> = filesRaw
-              ? JSON.parse(filesRaw)
-              : [];
-            const docFile = files.find((f) =>
-              f.tags?.includes("tenderDocument"),
-            );
-            const url = docFile?.url ?? "";
-            const isSaving = updatingCellsRef.current[
-              `${row.id}-tenderDocument`
-            ];
+            let allFiles: Record<string, string>[] = [];
+            try {
+              allFiles = filesRaw ? (JSON.parse(filesRaw) as Record<string, string>[]) : [];
+            } catch {
+              allFiles = [];
+            }
+            const tenderDocFiles = allFiles.filter((f) => {
+              const tags = (f as unknown as { tags?: string[] | string }).tags;
+              if (Array.isArray(tags)) return tags.includes("tenderDocument");
+              if (typeof tags === "string") {
+                try {
+                  return (JSON.parse(tags) as string[]).includes("tenderDocument");
+                } catch {
+                  return false;
+                }
+              }
+              return false;
+            });
+            const hasFiles = tenderDocFiles.length > 0;
+            const isSaving = updatingCellsRef.current[`${row.id}-tenderDocument`];
 
             return (
               <div className="relative group/cell h-full">
                 <div className="flex items-center h-full gap-1.5">
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 border-2 border-rose-500 text-rose-500 px-3 py-1.5 text-xs font-medium hover:bg-rose-500 hover:text-rose-100 transition-colors"
+                  {hasFiles ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenAttachmentModal(tenderDocFiles);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 border-2 border-rose-500 text-rose-500 px-3 py-1.5 text-xs font-medium hover:bg-rose-500 hover:text-rose-100 transition-colors cursor-pointer"
+                      title="View tender documents"
                     >
                       <FileText className="h-3.5 w-3.5" />
-                      Show Tender Document
-                    </a>
+                      Show Tender Documents
+                    </button>
                   ) : (
                     <span className="text-slate-300">-</span>
                   )}
@@ -1882,6 +1901,7 @@ export default function Dashboard() {
     rowIndexMap,
     handleDecisionClick,
     handleAssignmentChange,
+    handleOpenAttachmentModal,
     displayNameMap,
     mergedGroups,
     columnIndices,
@@ -2005,6 +2025,11 @@ export default function Dashboard() {
             onClose={() => setDocumentUploadRow(null)}
           />
         )}
+        <AttachmentModal
+          isOpen={isAttachmentModalOpen}
+          onClose={() => setIsAttachmentModalOpen(false)}
+          files={selectedFiles}
+        />
       </>
     ),
     [
@@ -2016,6 +2041,8 @@ export default function Dashboard() {
       feedbackSaving,
       websiteEditRow,
       documentUploadRow,
+      isAttachmentModalOpen,
+      selectedFiles,
       updatingCells,
       handleSyncDockets,
       handleSaveFeedback,
