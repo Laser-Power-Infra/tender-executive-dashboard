@@ -783,6 +783,7 @@ model TenderMerged {
   diffPercentFromL1    Float?
   diffPercentFromL2    Float?
   reason               String?
+  reasonForNotAPM      String?
   finalRemarks         String?
   tenderUpdateStatus   TenderUpdateStatus?
   nextAction           NextAction?
@@ -855,6 +856,7 @@ model TenderMerged {
   typetest String?
 
   competitors     String?
+  
   applicableIndex String?
   publishedDate   DateTime?
 
