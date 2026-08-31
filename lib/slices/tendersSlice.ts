@@ -16,6 +16,7 @@ import {
   updateDiffPercentFromL2,
   updateStatusAndAction,
   triggerReverseAuctionMail,
+  updateReasonForNotAPM,
   updateTenderMergedStringField,
   updateTenderMergedDateField,
   updateTenderMergedBooleanField,
@@ -349,6 +350,24 @@ export const triggerReverseAuctionWebhook = createAsyncThunk(
   async (params: ReverseAuctionWebhookData) => {
     await triggerReverseAuctionMail(params);
     return params;
+  },
+);
+
+export const updateTenderReasonForNotAPM = createAsyncThunk(
+  "tenders/updateReasonForNotAPM",
+  async (
+    params: { tenderMergedId: number; reasonForNotAPM: string; oldReasonForNotAPM: string },
+    { rejectWithValue },
+  ) => {
+    try {
+      await updateReasonForNotAPM({
+        tenderMergedId: params.tenderMergedId,
+        reasonForNotAPM: params.reasonForNotAPM,
+      });
+      return params;
+    } catch (err: any) {
+      return rejectWithValue(err?.message || "Failed to update reasonForNotAPM");
+    }
   },
 );
 
@@ -1063,6 +1082,32 @@ export const tendersSlice = createSlice({
       const { rowIndex, oldValue } = action.meta.arg;
       if (state.data?.rows[rowIndex]) {
         state.data.rows[rowIndex].assignedTo = oldValue;
+      }
+    });
+    // updateTenderReasonForNotAPM
+    builder.addCase(updateTenderReasonForNotAPM.pending, (state, action) => {
+      const key = `${action.meta.arg.tenderMergedId}-reasonForNotAPM`;
+      state.updatingCells[key] = true;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === action.meta.arg.tenderMergedId);
+        if (row) row.reasonForNotAPM = action.meta.arg.reasonForNotAPM;
+      }
+    });
+    builder.addCase(updateTenderReasonForNotAPM.fulfilled, (state, action) => {
+      const key = `${action.meta.arg.tenderMergedId}-reasonForNotAPM`;
+      state.updatingCells[key] = false;
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === action.meta.arg.tenderMergedId);
+        if (row) row.reasonForNotAPM = action.meta.arg.reasonForNotAPM;
+      }
+    });
+    builder.addCase(updateTenderReasonForNotAPM.rejected, (state, action) => {
+      const key = `${action.meta.arg.tenderMergedId}-reasonForNotAPM`;
+      state.updatingCells[key] = false;
+      const oldVal = (action.meta.arg as { oldReasonForNotAPM?: string })?.oldReasonForNotAPM ?? "";
+      if (state.data) {
+        const row = state.data.rows.find((r) => Number(r.id) === action.meta.arg.tenderMergedId);
+        if (row) row.reasonForNotAPM = oldVal;
       }
     });
     // updateWebsiteMapping

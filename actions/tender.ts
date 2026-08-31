@@ -897,6 +897,36 @@ export const updateStatusAndAction = withLog(
   }),
 );
 
+const REASON_FOR_NOT_APM_OPTIONS = [
+  "Not Enlisted",
+  "BIS Issue",
+  "Special Certification Required",
+  "Poor Payment Terms",
+  "Quantity Restrain",
+] as const;
+
+export const updateReasonForNotAPM = withLog(
+  async (params: { tenderMergedId: number; reasonForNotAPM: string }) => {
+    const raw = (params.reasonForNotAPM ?? "").trim();
+    if (raw !== "" && !(REASON_FOR_NOT_APM_OPTIONS as readonly string[]).includes(raw)) {
+      throw new Error(`Invalid reasonForNotAPM value: "${raw}"`);
+    }
+    const updated = await prisma.tenderMerged.update({
+      where: { id: params.tenderMergedId },
+      data: { reasonForNotAPM: raw || null },
+      select: { id: true, referenceNo: true },
+    });
+    return updated;
+  },
+  (updated, params) => ({
+    action: "UPDATE" as const,
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo: updated.referenceNo ?? undefined,
+    details: `Updated reasonForNotAPM to "${params.reasonForNotAPM}" on tender #${params.tenderMergedId}`,
+  }),
+);
+
 export const triggerReverseAuctionMail = withLog(
   async (params: ReverseAuctionWebhookData) => {
     console.log(

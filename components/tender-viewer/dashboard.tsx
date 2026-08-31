@@ -19,7 +19,9 @@ import {
   saveFeedbackAndReanalyze,
   uploadTenderDocument,
   updateTenderRemarks,
+  updateTenderReasonForNotAPM,
 } from "@/lib/slices/tendersSlice";
+import { REASON_FOR_NOT_APM_OPTIONS } from "@/lib/reason-for-not-apm";
 import { useSession } from "next-auth/react";
 import { setExclusionFilter } from "@/lib/slices/filtersSlice";
 import {
@@ -1048,6 +1050,69 @@ export default function Dashboard() {
                   {(tenderDataRef.current?.associations ?? []).map((a) => (
                     <SelectItem key={a.id} value={String(a.id)}>
                       {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          },
+        };
+      }
+
+      if (col === "reasonForNotAPM") {
+        const colIndex = indexMap.get(normalizeKey(col));
+        return {
+          header: displayNameMap[col] ?? "Reason for Not Approval",
+          accessor: col as keyof Record<string, unknown>,
+          defaultWidth: colIndex?.width ?? 220,
+          hidden: colIndex ? !colIndex.visible : false,
+          searchable: false,
+          filter: {
+            type: "select" as const,
+            options: [
+              ...REASON_FOR_NOT_APM_OPTIONS.map((v) => ({ value: v, label: v })),
+              { value: "__blank__", label: "Blank" },
+            ],
+          },
+          sortValue: (value: unknown) => String(value ?? ""),
+          renderCell: (_value: unknown, row: Record<string, unknown>) => {
+            const val = String(row[col] ?? "");
+            const rowId = String(row.id ?? "");
+            const isSaving = !!updatingCellsRef.current[`${rowId}-reasonForNotAPM`];
+            // Radix Select requires non-empty value; map empty DB value to sentinel
+            const selectValue = val || "__clear__";
+            return (
+              <Select
+                value={selectValue}
+                disabled={isSaving}
+                onValueChange={(v) => {
+                  const newVal = v === "__clear__" ? "" : (v ?? "");
+                  if (newVal === val) return;
+                  dispatch(
+                    updateTenderReasonForNotAPM({
+                      tenderMergedId: Number(rowId),
+                      reasonForNotAPM: newVal,
+                      oldReasonForNotAPM: val,
+                    }),
+                  )
+                    .unwrap()
+                    .then(() => toast.success(newVal ? "Reason updated" : "Reason cleared"))
+                    .catch((err: Error) => toast.error(err?.message || "Failed to update reason"));
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-full"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <SelectValue placeholder="Select reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__clear__">—</SelectItem>
+                  {REASON_FOR_NOT_APM_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
                     </SelectItem>
                   ))}
                 </SelectContent>
