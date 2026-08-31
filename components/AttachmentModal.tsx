@@ -64,7 +64,8 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                   ? file.name.endsWith(extension) ? file.name : file.name + extension
                   : (file.filename || "Unknown");
                 const tags = parseTags(file);
-                const isNetworkFile = tags.includes("networkFiles");
+                const isNetworkFile = tags.includes("networkFiles") || (!!file.source && file.source !== "SHEET_SYNC" && file.source !== "MANUAL_UPLOAD");
+                const normalizedExt = extension.replace(/^\./, "").toLowerCase();
                 const isHttpUrl = file.url?.startsWith("http");
 
                 return (
@@ -89,7 +90,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                       )}
                     </div>
                     <div className="file-actions">
-                      {isNetworkFile && extension.toLowerCase() === ".pdf" && (
+                      {isNetworkFile && normalizedExt === "pdf" && (
                         <button
                           className="file-action-btn view-btn"
                           onClick={() =>
