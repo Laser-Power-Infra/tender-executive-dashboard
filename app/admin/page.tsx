@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Link from "next/link";
-import { RefreshCw, Columns, ListOrdered, GitMerge } from "lucide-react";
+import { RefreshCw, Columns, ListOrdered, GitMerge, ClipboardList } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 export default function AdminPage() {
@@ -89,6 +89,27 @@ export default function AdminPage() {
             <div>
               <div style={{ fontWeight: 600, color: "#0a2540", fontSize: "14px" }}>Column Merging</div>
               <div style={{ color: "#888", fontSize: "12px" }}>Merge multiple fields into one</div>
+            </div>
+          </div>
+        </Link>
+        <Link href="/admin/sop" style={{ textDecoration: "none", flex: "1", minWidth: "200px" }}>
+          <div style={{
+            background: "#fff",
+            border: "1px solid #e0e0e0",
+            borderRadius: "8px",
+            padding: "20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            transition: "box-shadow 0.15s",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
+          >
+            <ClipboardList size={24} style={{ color: "#0a2540" }} />
+            <div>
+              <div style={{ fontWeight: 600, color: "#0a2540", fontSize: "14px" }}>SOP Responsibilities</div>
+              <div style={{ color: "#888", fontSize: "12px" }}>Manage SOP columns & daily logs</div>
             </div>
           </div>
         </Link>

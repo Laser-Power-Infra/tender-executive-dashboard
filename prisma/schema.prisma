@@ -1036,3 +1036,40 @@ model TypeTest {
   @@index([testCertificateNo])
   @@map("type_tests")
 }
+
+model SopResponsibility {
+  id          Int      @id @default(autoincrement())
+  columnName  String  
+  description String?  @db.Text
+  allocatedTo String?  
+  email       String?
+  dailyLog    String?  @db.Text
+  date        DateTime? @db.Date
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  logs SopDailyLog[]
+  source String? 
+  doneFromWhere String?
+  isManual Boolean @default(false)
+  dailyLogEnabled Boolean @default(true)
+  dateEnabled Boolean @default(true)
+  @@index([source])
+  @@index([columnName])
+  @@index([date])
+  @@map("sop_responsibilities")
+}
+model SopDailyLog {
+  id                  Int      @id @default(autoincrement())
+  sopResponsibilityId Int
+  sopResponsibility   SopResponsibility @relation(fields: [sopResponsibilityId], references: [id], onDelete: Cascade)
+  date                DateTime @db.Date // IST day 00:00
+  isChecked           Boolean  @default(false)
+  checkedBy           String?  // session.user.email
+  checkedAt           DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  @@unique([sopResponsibilityId, date])
+  @@index([date])
+  @@index([sopResponsibilityId])
+  @@map("sop_daily_logs")
+}
