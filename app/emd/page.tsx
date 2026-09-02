@@ -8,7 +8,8 @@ import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
 import { EMD_STATUS_OPTIONS } from "@/lib/emdStatusOptions";
 import { EmdBgEmailDialog } from "@/components/emd/EmdBgEmailDialog";
 import { EmailDraftDialog } from "@/components/emd/EmailDraftDialog";
-import { formatDateTimeIST } from "@/lib/format-ist";
+import { formatDateISTShort, formatDateTimeIST } from "@/lib/format-ist";
+import { parseDate as parseDateLib } from "@/lib/parse-date";
 import "@/app/SupplyHistory.css";
 import "@/components/TenderTable.css";
 import { EmdDetailsBgRecord } from "@/hooks/useEmdDetailsBg";
@@ -17,52 +18,52 @@ import { EmdCashSidebar, EmdStatus, EmdStats } from "@/components/emd-cash/EmdCa
 type Col = { header: string; accessor: keyof EmdMergedRecord | "action" | "tenderMergeds"; defaultWidth: number; align?: "left"|"right"|"center"; sortable?: boolean };
 
 const COLS: Col[] = [
-  { header: "EMD Type", accessor: "emdType", defaultWidth: 110, align: "center", sortable: true },
-  { header: "BG No", accessor: "bgNo", defaultWidth: 150, align: "left", sortable: true },
-  { header: "Tender No", accessor: "tenderNo", defaultWidth: 180, align: "left", sortable: true },
+  { header: "EMD Type", accessor: "emdType", defaultWidth: 200, align: "center", sortable: true },
+  { header: "BG No", accessor: "bgNo", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Tender No", accessor: "tenderNo", defaultWidth: 200, align: "left", sortable: true },
   { header: "Customer Name", accessor: "customerName", defaultWidth: 210, align: "left", sortable: true },
-  { header: "Docket No", accessor: "docketNo", defaultWidth: 130, align: "left", sortable: true },
-  { header: "TM No", accessor: "tmNo", defaultWidth: 115, align: "left", sortable: true },
-  { header: "EMD Amt", accessor: "emdAmt", defaultWidth: 130, align: "right", sortable: true },
-  { header: "BG Amt Local", accessor: "bgAmtLocal", defaultWidth: 130, align: "right", sortable: true },
-  { header: "BG Amt FC", accessor: "bgAmtFc", defaultWidth: 110, align: "right", sortable: true },
-  { header: "Issue DT", accessor: "issueDt", defaultWidth: 135, align: "center", sortable: true },
-  { header: "BG Date", accessor: "bgDate", defaultWidth: 135, align: "center", sortable: true },
-  { header: "Expiry Date", accessor: "expiryDate", defaultWidth: 135, align: "center", sortable: true },
-  { header: "Claim Date", accessor: "claimDate", defaultWidth: 135, align: "center", sortable: true },
-  { header: "Expected Refund Date", accessor: "expectedRefundDateOrRefundedDate", defaultWidth: 170, align: "center", sortable: true },
-  { header: "Tran Type", accessor: "trantype", defaultWidth: 110, align: "center", sortable: true },
-  { header: "Bank Name", accessor: "bankName", defaultWidth: 160, align: "left", sortable: true },
-  { header: "Party Code", accessor: "partyCode", defaultWidth: 110, align: "left", sortable: true },
-  { header: "Staff Name", accessor: "staffName", defaultWidth: 140, align: "left", sortable: true },
-  { header: "Status", accessor: "status", defaultWidth: 130, align: "center", sortable: true },
-  { header: "Match", accessor: "match", defaultWidth: 100, align: "center" },
-  { header: "BG Match", accessor: "bgMatch", defaultWidth: 100, align: "center" },
-  { header: "Status Price Done", accessor: "statusPriceAssDone", defaultWidth: 150, align: "left" },
-  { header: "Permanent", accessor: "permanent", defaultWidth: 110, align: "center" },
-  { header: "CH/DD No", accessor: "chDdNo", defaultWidth: 130, align: "left" },
-  { header: "A/C Holder", accessor: "acHolder", defaultWidth: 140, align: "left" },
-  { header: "Status As Per Sujib", accessor: "statusAsPerSujibDaAndOther", defaultWidth: 200, align: "left" },
-  { header: "Can Be Refunded", accessor: "canBeRefunded", defaultWidth: 130, align: "center" },
-  { header: "Rank", accessor: "rank", defaultWidth: 90, align: "center" },
-  { header: "PO Issue Status", accessor: "poIssueStatus", defaultWidth: 140, align: "left" },
-  { header: "AOC Status", accessor: "aocAwardOfContractStatus", defaultWidth: 180, align: "left" },
-  { header: "Refundable/Not", accessor: "refundableOrNot", defaultWidth: 130, align: "center" },
-  { header: "Refunded/Pending", accessor: "statusRefundedPending", defaultWidth: 140, align: "center", sortable: true },
-  { header: "Status of Tender", accessor: "statusOfTender", defaultWidth: 150, align: "left" },
-  { header: "Conditions for Refund", accessor: "conditionsForRefund", defaultWidth: 200, align: "left" },
-  { header: "Certificate By Party", accessor: "certificateByParty", defaultWidth: 180, align: "left", sortable: true },
-  { header: "Certificate By Utility", accessor: "certificateByUtility", defaultWidth: 180, align: "left", sortable: true },
-  { header: "Remarks", accessor: "remarks", defaultWidth: 200, align: "left" },
-  { header: "Contact No", accessor: "contactNo", defaultWidth: 180, align: "left" },
-  { header: "Contact Email", accessor: "contactEmailId", defaultWidth: 250, align: "left" },
-  { header: "Address", accessor: "address", defaultWidth: 220, align: "left" },
-  { header: "Last Email Sent", accessor: "lastEmailSent", defaultWidth: 170, align: "left" },
-  { header: "Last Email Sent At", accessor: "lastEmailSentAt", defaultWidth: 170, align: "center", sortable: true },
-  { header: "Email Draft", accessor: "emailDraft", defaultWidth: 120, align: "center" },
+  { header: "Docket No", accessor: "docketNo", defaultWidth: 200, align: "left", sortable: true },
+  { header: "TM No", accessor: "tmNo", defaultWidth: 200, align: "left", sortable: true },
+  { header: "EMD Amt", accessor: "emdAmt", defaultWidth: 200, align: "right", sortable: true },
+  { header: "BG Amt Local", accessor: "bgAmtLocal", defaultWidth: 200, align: "right", sortable: true },
+  { header: "BG Amt FC", accessor: "bgAmtFc", defaultWidth: 200, align: "right", sortable: true },
+  { header: "Issue DT", accessor: "issueDt", defaultWidth: 200, align: "center", sortable: true },
+  { header: "BG Date", accessor: "bgDate", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Expiry Date", accessor: "expiryDate", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Claim Date", accessor: "claimDate", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Expected Refund Date", accessor: "expectedRefundDateOrRefundedDate", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Tran Type", accessor: "trantype", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Bank Name", accessor: "bankName", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Party Code", accessor: "partyCode", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Staff Name", accessor: "staffName", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Status", accessor: "status", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Match", accessor: "match", defaultWidth: 200, align: "center", sortable: true },
+  { header: "BG Match", accessor: "bgMatch", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Status Price Done", accessor: "statusPriceAssDone", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Permanent", accessor: "permanent", defaultWidth: 200, align: "center", sortable: true },
+  { header: "CH/DD No", accessor: "chDdNo", defaultWidth: 200, align: "left", sortable: true },
+  { header: "A/C Holder", accessor: "acHolder", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Status As Per Sujib", accessor: "statusAsPerSujibDaAndOther", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Can Be Refunded", accessor: "canBeRefunded", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Rank", accessor: "rank", defaultWidth: 200, align: "center", sortable: true },
+  { header: "PO Issue Status", accessor: "poIssueStatus", defaultWidth: 200, align: "left", sortable: true },
+  { header: "AOC Status", accessor: "aocAwardOfContractStatus", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Refundable/Not", accessor: "refundableOrNot", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Refunded/Pending", accessor: "statusRefundedPending", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Status of Tender", accessor: "statusOfTender", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Conditions for Refund", accessor: "conditionsForRefund", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Certificate By Party", accessor: "certificateByParty", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Certificate By Utility", accessor: "certificateByUtility", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Remarks", accessor: "remarks", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Contact No", accessor: "contactNo", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Contact Email", accessor: "contactEmailId", defaultWidth: 250, align: "left", sortable: true },
+  { header: "Address", accessor: "address", defaultWidth: 220, align: "left", sortable: true },
+  { header: "Last Email Sent", accessor: "lastEmailSent", defaultWidth: 200, align: "left", sortable: true },
+  { header: "Last Email Sent At", accessor: "lastEmailSentAt", defaultWidth: 200, align: "center", sortable: true },
+  { header: "Email Draft", accessor: "emailDraft", defaultWidth: 200, align: "center" },
   { header: "Tender Conclusion Reason", accessor: "reason", defaultWidth: 280, align: "left", sortable: true },
-  { header: "Linked Tenders", accessor: "tenderMergeds", defaultWidth: 150, align: "center" },
-  { header: "Action", accessor: "action", defaultWidth: 140, align: "center" },
+  { header: "Linked Tenders", accessor: "tenderMergeds", defaultWidth: 200, align: "center" },
+  { header: "Action", accessor: "action", defaultWidth: 200, align: "center" },
 ];
 
 const SKIP = new Set(["action","emailDraft"]);
@@ -81,6 +82,15 @@ function parseEmdAmt(v: unknown): number {
   if (v == null || v === "") return 0;
   const n = parseFloat(String(v).replace(/[₹,\s]/g, ""));
   return isNaN(n) ? 0 : n;
+}
+const EMD_DATE_COLS = new Set(["issueDt","bgDate","expiryDate","claimDate","expectedRefundDateOrRefundedDate"]);
+function formatEmdDate(v: unknown): string {
+  if (v == null || String(v).trim() === "") return "-";
+  const lib = parseDateLib(v as any);
+  const d = lib ?? new Date(String(v));
+  if (!d || isNaN(d.getTime())) return String(v);
+  const fmt = formatDateISTShort(d);
+  return fmt === "-" ? String(v) : fmt;
 }
 
 export default function EmdMergedPage(){
@@ -184,8 +194,8 @@ export default function EmdMergedPage(){
   const processedRecords=useMemo(()=>{ let r=getFilteredRecordsExcept(null); if(sortColumn){ r=[...r].sort((a,b)=>{ const va=(a as any)[sortColumn!]; const vb=(b as any)[sortColumn!]; if(sortColumn==="bgAmtLocal"||sortColumn==="bgAmtFc"||sortColumn==="emdAmt"){ const na=parseAmt(va), nb=parseAmt(vb); return sortDirection==="asc"?na-nb:nb-na; } if(sortColumn==="bgDate"||sortColumn==="expiryDate"||sortColumn==="claimDate"||sortColumn==="issueDt"||sortColumn==="expectedRefundDateOrRefundedDate"||sortColumn==="lastEmailSentAt"){ const da=parseDate(va), db=parseDate(vb); if(da===db) return 0; return sortDirection==="asc"?da-db:db-da; } if(va==null&&vb==null) return 0; if(va==null) return sortDirection==="asc"?-1:1; if(vb==null) return sortDirection==="asc"?1:-1; return sortDirection==="asc"?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va)); }); } return r; },[getFilteredRecordsExcept,sortColumn,sortDirection]);
   const totalRecords=processedRecords.length; const totalPages=Math.ceil(totalRecords/rowsPerPage)||1; const activePage=Math.min(currentPage,totalPages);
   const paginatedRecords=useMemo(()=>{ const s=(activePage-1)*rowsPerPage; return processedRecords.slice(s,s+rowsPerPage); },[processedRecords,activePage,rowsPerPage]);
-  const handleExportExcel=useCallback(()=>{ const exportData=processedRecords.map(rec=>{ const o:Record<string,string>={}; for(const col of COLS){ if(col.accessor==="action") continue; const raw=(rec as any)[col.accessor]; o[col.header]=col.accessor==="lastEmailSentAt"&&raw?formatDateTimeIST(raw as string):String(raw??""); } return o; }); const ws=XLSX.utils.json_to_sheet(exportData); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"EMD Merged"); XLSX.writeFile(wb,`EMD_Merged_${new Date().toISOString().slice(0,10)}.xlsx`); },[processedRecords]);
-  const handleExportCSV=useCallback(()=>{ const cols=COLS.filter(c=>c.accessor!=="action"); const headers=cols.map(c=>c.header).join(","); const rows=processedRecords.map(rec=>cols.map(col=>{ const raw=(rec as any)[col.accessor]; let v=col.accessor==="lastEmailSentAt"&&raw?formatDateTimeIST(raw as string):String(raw??""); if(v.includes(",")||v.includes('"')||v.includes("\n")) v=`"${v.replace(/"/g,'""')}"`; return v; }).join(",")); const csv=[headers,...rows].join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`EMD_Merged_${new Date().toISOString().split("T")[0]}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },[processedRecords]);
+  const handleExportExcel=useCallback(()=>{ const exportData=processedRecords.map(rec=>{ const o:Record<string,string>={}; for(const col of COLS){ if(col.accessor==="action") continue; const raw=(rec as any)[col.accessor]; if(EMD_DATE_COLS.has(String(col.accessor))&&raw) o[col.header]=formatEmdDate(raw); else o[col.header]=col.accessor==="lastEmailSentAt"&&raw?formatDateTimeIST(raw as string):String(raw??""); } return o; }); const ws=XLSX.utils.json_to_sheet(exportData); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"EMD Merged"); XLSX.writeFile(wb,`EMD_Merged_${new Date().toISOString().slice(0,10)}.xlsx`); },[processedRecords]);
+  const handleExportCSV=useCallback(()=>{ const cols=COLS.filter(c=>c.accessor!=="action"); const headers=cols.map(c=>c.header).join(","); const rows=processedRecords.map(rec=>cols.map(col=>{ const raw=(rec as any)[col.accessor]; let v=""; if(EMD_DATE_COLS.has(String(col.accessor))&&raw) v=formatEmdDate(raw); else v=col.accessor==="lastEmailSentAt"&&raw?formatDateTimeIST(raw as string):String(raw??""); if(v.includes(",")||v.includes('"')||v.includes("\n")) v=`"${v.replace(/"/g,'""')}"`; return v; }).join(",")); const csv=[headers,...rows].join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`EMD_Merged_${new Date().toISOString().split("T")[0]}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },[processedRecords]);
 
   if(loading) return <div style={{display:"flex",flex:1,alignItems:"center",justifyContent:"center",minHeight:"500px",color:"#0a2540",fontWeight:700,flexDirection:"column",gap:"15px"}}><div style={{width:"40px",height:"40px",border:"4px solid #e1e6eb",borderTopColor:"#1a73e8",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}></div><span>Loading EMD...</span><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>;
   if(error) return <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"400px",gap:"12px"}}><p style={{color:"#c5221f",fontWeight:600}}>Failed to load EMD: {error.message}</p><button onClick={refresh} style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"8px 16px",background:"#0a2540",color:"white",borderRadius:"6px",fontWeight:600}}><RefreshCw size={14}/> Retry</button></div>;
@@ -273,6 +283,9 @@ export default function EmdMergedPage(){
                         }
                         if(col.accessor==="lastEmailSentAt"){
                           const v=(row as any)[col.accessor]; const fmt=v?formatDateTimeIST(v as string):""; const disp=fmt&&fmt.trim()!==""?fmt:"-"; return <td key={String(col.accessor)} title={v?String(v):disp}><div className="cell-scroll-wrap" style={{height:"auto",maxHeight:"96px"}}>{disp==="-"?<span style={{color:"#b0b8c1"}}>-</span>:disp}</div></td>;
+                        }
+                        if(EMD_DATE_COLS.has(String(col.accessor))){
+                          const raw=(row as any)[col.accessor]; const disp=formatEmdDate(raw); return <td key={String(col.accessor)} className="col-center" title={String(raw??disp)}><div className="cell-scroll-wrap" style={{height:"auto",maxHeight:"96px"}}>{disp==="-"?<span style={{color:"#b0b8c1"}}>-</span>:disp}</div></td>;
                         }
                         if(col.accessor==="tenderMergeds"){
                           const arr=(row as any).tenderMergeds as {id:number;docketNo:string|null}[]|undefined; const c=arr?.length??0; return <td key={String(col.accessor)} className="col-center" title={arr?.map(a=>a.docketNo||a.id).join(", ")||""}>{c===0?<span style={{color:"#b0b8c1"}}>-</span>:<span className="status-badge submitted">{c} linked</span>}</td>;

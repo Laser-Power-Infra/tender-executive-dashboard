@@ -75,6 +75,14 @@ export function isFinancialOpenRow(row: Record<string, unknown>): boolean {
   return FINANCIAL_OPEN_STATUSES.includes(status);
 }
 
+export function isFinancialNotOpenRow(row: Record<string, unknown>): boolean {
+  if (row.participated !== "true") return false;
+  if (row.reverseAuctionApplicable === "true") return false;
+  const status = String(row.currentStatus ?? "").trim().toUpperCase();
+  if (!TECHNICAL_OPEN_STATUSES.includes(status)) return false;
+  return !FINANCIAL_OPEN_STATUSES.includes(status);
+}
+
 export function isWeL1Row(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
@@ -224,6 +232,7 @@ function matchesSingleFilter(
   if (filter === "contractReceived") return isContractReceivedRow(row);
   if (filter === "contractPending") return isContractPendingRow(row);
   if (filter === "financialOpen") return isFinancialOpenRow(row);
+  if (filter === "financialNotOpen") return isFinancialNotOpenRow(row);
   return true;
 }
 

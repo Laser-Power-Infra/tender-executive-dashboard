@@ -5,7 +5,7 @@ import type { ColumnFilterState, ColumnFilterType } from "@/lib/types";
 
 type DeadlinePreset = "thisWeek" | "thisMonth" | "thisYear";
 
-type ParticipationFilter = "participated" | "notParticipated" | "upcomingRa" | "participatedWithRa" | "participatedWithoutRa" | "yetToOpenRa" | "bidOpeningPendingExclRa" | "participatedTotal" | "raDone" | "raPending" | "technicalOpen" | "technicalNotOpen" | "weL1" | "weLost" | "expRaDate" | "contractReceived" | "contractPending" | "financialOpen";
+type ParticipationFilter = "participated" | "notParticipated" | "upcomingRa" | "participatedWithRa" | "participatedWithoutRa" | "yetToOpenRa" | "bidOpeningPendingExclRa" | "participatedTotal" | "raDone" | "raPending" | "technicalOpen" | "technicalNotOpen" | "weL1" | "weLost" | "expRaDate" | "contractReceived" | "contractPending" | "financialOpen" | "financialNotOpen";
 type AnalyticsFilter = "aiYes" | "aiYesUnallocated" | "apmYesAllocated" | "apmYesUnallocated" | null;
 
 interface FiltersState {

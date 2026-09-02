@@ -146,6 +146,12 @@ export function ParticipationFlowChart({
         String(r.currentStatus ?? "").trim().toUpperCase(),
       ),
     );
+    const financialNotOpen = technicalOpen.filter(
+      (r) =>
+        !["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED"].includes(
+          String(r.currentStatus ?? "").trim().toUpperCase(),
+        ),
+    );
     const financialWeL1 = financialOpen.filter(
       (r) => String(r.ourRank ?? "").trim() === "1",
     );
@@ -171,6 +177,7 @@ export function ParticipationFlowChart({
       contractReceived: contractReceived.length,
       contractPending: contractPending.length,
       financialOpen: financialOpen.length,
+      financialNotOpen: financialNotOpen.length,
       financialWeL1: financialWeL1.length,
       financialWeLost: financialWeLost.length,
       financialContractReceived: financialContractReceived.length,
@@ -192,6 +199,7 @@ export function ParticipationFlowChart({
       contractReceived: "weL1",
       contractPending: "weL1",
       financialOpen: "technicalOpen",
+      financialNotOpen: "technicalOpen",
     };
 
     const childrenMap: Partial<Record<ParticipationFilter, ParticipationFilter[]>> = {
@@ -200,7 +208,7 @@ export function ParticipationFlowChart({
       raDone: ["weL1", "weLost"],
       raPending: ["expRaDate"],
       weL1: ["contractReceived", "contractPending"],
-      technicalOpen: ["financialOpen"],
+      technicalOpen: ["financialOpen", "financialNotOpen"],
       financialOpen: ["weL1", "weLost"],
     };
 
@@ -450,82 +458,97 @@ export function ParticipationFlowChart({
             </button>
 
             <VerticalConnector />
+            <BranchConnector />
 
-            <div>
-              <button
-                type="button"
-                onClick={() => handleNodeClick("financialOpen")}
-                className={nodeClass(isActive("financialOpen"))}
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                  Financial Open
-                </div>
-                <div className="text-lg font-bold text-amber-400 leading-tight">
-                  {counts.financialOpen}
-                </div>
-              </button>
-
-              <VerticalConnector />
-              <BranchConnector />
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => handleFinancialWeClick("weL1")}
-                    className={nodeClass(isActive("weL1"))}
-                  >
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                      We L1
-                    </div>
-                    <div className="text-lg font-bold text-emerald-400 leading-tight">
-                      {counts.financialWeL1}
-                    </div>
-                  </button>
-
-                  <VerticalConnector />
-                  <BranchConnector />
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleFinancialWeClick("contractReceived")}
-                      className={nodeClass(isActive("contractReceived"))}
-                    >
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                        Contract Received
-                      </div>
-                      <div className="text-lg font-bold text-emerald-300 leading-tight">
-                        {counts.financialContractReceived}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleFinancialWeClick("contractPending")}
-                      className={nodeClass(isActive("contractPending"))}
-                    >
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                        Contract Pending
-                      </div>
-                      <div className="text-lg font-bold text-orange-400 leading-tight">
-                        {counts.financialContractPending}
-                      </div>
-                    </button>
-                  </div>
-                </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
                 <button
                   type="button"
-                  onClick={() => handleFinancialWeClick("weLost")}
-                  className={nodeClass(isActive("weLost"))}
+                  onClick={() => handleNodeClick("financialOpen")}
+                  className={nodeClass(isActive("financialOpen"))}
                 >
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                    We Lost
+                    Financial Open
                   </div>
-                  <div className="text-lg font-bold text-rose-400 leading-tight">
-                    {counts.financialWeLost}
+                  <div className="text-lg font-bold text-amber-400 leading-tight">
+                    {counts.financialOpen}
                   </div>
                 </button>
+
+                <VerticalConnector />
+                <BranchConnector />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => handleFinancialWeClick("weL1")}
+                      className={nodeClass(isActive("weL1"))}
+                    >
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                        We L1
+                      </div>
+                      <div className="text-lg font-bold text-emerald-400 leading-tight">
+                        {counts.financialWeL1}
+                      </div>
+                    </button>
+
+                    <VerticalConnector />
+                    <BranchConnector />
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleFinancialWeClick("contractReceived")}
+                        className={nodeClass(isActive("contractReceived"))}
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                          Contract Received
+                        </div>
+                        <div className="text-lg font-bold text-emerald-300 leading-tight">
+                          {counts.financialContractReceived}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFinancialWeClick("contractPending")}
+                        className={nodeClass(isActive("contractPending"))}
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                          Contract Pending
+                        </div>
+                        <div className="text-lg font-bold text-orange-400 leading-tight">
+                          {counts.financialContractPending}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleFinancialWeClick("weLost")}
+                    className={nodeClass(isActive("weLost"))}
+                  >
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                      We Lost
+                    </div>
+                    <div className="text-lg font-bold text-rose-400 leading-tight">
+                      {counts.financialWeLost}
+                    </div>
+                  </button>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => handleNodeClick("financialNotOpen")}
+                className={nodeClass(isActive("financialNotOpen"))}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
+                  Financial Not Open
+                </div>
+                <div className="text-lg font-bold text-slate-300 leading-tight">
+                  {counts.financialNotOpen}
+                </div>
+              </button>
             </div>
           </div>
           <button

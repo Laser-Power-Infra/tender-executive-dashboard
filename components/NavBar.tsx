@@ -27,6 +27,7 @@ const links: Array<{ href: string; label: string; isExternal?: boolean }> = [
   { href: "/emd", label: "EMD Merged" },
   { href: "/emd-details-cash", label: "EMD Cash" },
   { href: "/emd-details-bg", label: "EMD BG" },
+  { href: "/credentials", label: "Links and Password" },
   { href: "/activity", label: "Activity" },
   { href: "/sop", label: "SOP" },
   // { href: "/merge-conflict", label: "Merge Conflict" },

@@ -1146,3 +1146,21 @@ model SopDailyLog {
   @@index([sopResponsibilityId])
   @@map("sop_daily_logs")
 }
+model Credential {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  category        String?
+  websites        String?
+  states          String?
+  userId          String?
+  password        String?
+  mobileNo        String?
+  profilePassword String?
+  dscName         String?
+  dscPassword     String?
+  otherRef        String?  @db.Text
+
+  @@index([category])
+  @@map("credentials")
+}
