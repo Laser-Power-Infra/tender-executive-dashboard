@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withLog } from "@/lib/activity-logger";
+import { auth } from "@/auth";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    if (!["admin", "developer"].includes((session.user as any).role)) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
     const { id } = await params;
     const body = await req.json();
     const updated = await updateCredentialWithLog(id, body);
@@ -74,6 +80,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    if (!["admin", "developer"].includes((session.user as any).role)) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
     const { id } = await params;
     const deleted = await deleteCredentialWithLog(id);
     return NextResponse.json({ success: true, data: deleted });

@@ -142,11 +142,13 @@ const EDITABLE = new Set([
 interface Props {
   selectedCategory?: string | "ALL";
   onAdd?: () => void;
+  canEdit?: boolean;
 }
 
 export default function CredentialsTable({
   selectedCategory = "ALL",
   onAdd,
+  canEdit = true,
 }: Props) {
   const dispatch = useAppDispatch();
   const { data, updating } = useAppSelector((s) => s.credentials);
@@ -664,6 +666,13 @@ export default function CredentialsTable({
                 <tr key={String(row.id)} className="tender-row">
                   {COLS.map((col) => {
                     if (col.accessor === "actions") {
+                      if (!canEdit) {
+                        return (
+                          <td key={String(col.accessor)} className="col-center">
+                            <span style={{ color: "#b0b8c1", fontSize: "11px" }}>-</span>
+                          </td>
+                        );
+                      }
                       const isDeleting = !!updating[`${row.id}-delete`];
                       return (
                         <td key={String(col.accessor)} className="col-center">
@@ -716,7 +725,9 @@ export default function CredentialsTable({
                         <td key={String(col.accessor)}>
                           <Select
                             value={rawVal || undefined}
+                            disabled={!canEdit || isSavingCat}
                             onValueChange={async (v: string | null) => {
+                              if (!canEdit) return;
                               const newVal = v ?? "";
                               if (newVal === rawVal) return;
                               try {
@@ -775,6 +786,13 @@ export default function CredentialsTable({
                       );
                     }
                     if (isEditing) {
+                      if (!canEdit) {
+                        return (
+                          <td key={String(col.accessor)} title={display}>
+                            <div style={{ padding: "4px 6px", fontSize: "12px" }}>{display === "-" ? <span style={{ color: "#b0b8c1" }}>-</span> : display}</div>
+                          </td>
+                        );
+                      }
                       return (
                         <td key={String(col.accessor)}>
                           <div
@@ -832,6 +850,15 @@ export default function CredentialsTable({
                       );
                     }
                     if (col.accessor === "websites") {
+                      if (!canEdit) {
+                        return (
+                          <td key={String(col.accessor)} title={display}>
+                            <div style={{ whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-word", lineHeight: "1.4", fontSize: "12px", padding: "4px 6px" }}>
+                              {display === "-" ? <span style={{ color: "#b0b8c1" }}>-</span> : display}
+                            </div>
+                          </td>
+                        );
+                      }
                       return (
                         <td key={String(col.accessor)} title={display}>
                           <div
@@ -912,24 +939,26 @@ export default function CredentialsTable({
                                 <Eye size={14} />
                               )}
                             </button>
-                            <button
-                              onClick={() => {
-                                setEditing({
-                                  id: row.id,
-                                  field: String(col.accessor),
-                                });
-                                setDraft(display === "—" ? "" : display);
-                              }}
-                              style={{
-                                padding: "4px",
-                                border: "none",
-                                background: "transparent",
-                                cursor: "pointer",
-                                display: "inline-flex",
-                              }}
-                            >
-                              <Pencil size={12} />
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => {
+                                  setEditing({
+                                    id: row.id,
+                                    field: String(col.accessor),
+                                  });
+                                  setDraft(display === "—" ? "" : display);
+                                }}
+                                style={{
+                                  padding: "4px",
+                                  border: "none",
+                                  background: "transparent",
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                }}
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       );
@@ -938,6 +967,7 @@ export default function CredentialsTable({
                       <td key={String(col.accessor)} title={display}>
                         <div
                           onClick={() => {
+                            if (!canEdit) return;
                             setEditing({
                               id: row.id,
                               field: String(col.accessor),
@@ -948,7 +978,7 @@ export default function CredentialsTable({
                             display: "flex",
                             alignItems: "center",
                             gap: "6px",
-                            cursor: "pointer",
+                            cursor: canEdit ? "pointer" : "default",
                             padding: "4px 6px",
                             borderRadius: "4px",
                           }}
@@ -968,10 +998,7 @@ export default function CredentialsTable({
                               display
                             )}
                           </span>
-                          <Pencil
-                            size={12}
-                            style={{ flexShrink: 0, opacity: 0.4 }}
-                          />
+                          {canEdit && <Pencil size={12} style={{ flexShrink: 0, opacity: 0.4 }} />}
                           {isSaving ? (
                             <span
                               style={{ fontSize: "10px", color: "#64748b" }}

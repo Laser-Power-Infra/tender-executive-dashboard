@@ -14,14 +14,16 @@ interface Props {
   selected: string | "ALL";
   onSelect: (c: string | "ALL") => void;
   onAdd?: () => void;
+  canEdit?: boolean;
 }
 
-export function CredentialsSidebar({ stats, totalRows, selected, onSelect, onAdd }: Props) {
+export function CredentialsSidebar({ stats, totalRows, selected, onSelect, onAdd, canEdit = true }: Props) {
+  const showAdd = !!onAdd && canEdit;
   const totalCategories = stats.length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      {onAdd && (
+      {showAdd && onAdd && (
         <button
           onClick={onAdd}
           style={{

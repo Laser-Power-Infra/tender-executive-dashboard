@@ -5,6 +5,7 @@ import { fetchCredentials, createCredential } from "@/lib/slices/credentialsSlic
 import CredentialsTable from "@/components/CredentialsTable";
 import { CredentialsSidebar, CategoryStat } from "@/components/CredentialsSidebar";
 import { RefreshCw, Eraser, Eye, EyeOff } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import "@/app/SupplyHistory.css";
@@ -13,6 +14,8 @@ import { CATEGORY_OPTIONS, STATE_OPTIONS } from "@/lib/credentialsOptions";
 
 export default function CredentialsPage() {
   const dispatch = useAppDispatch();
+  const { data: session } = useSession();
+  const canEdit = session?.user?.role === "admin" || session?.user?.role === "developer";
   const { data, loading, error, creating } = useAppSelector((s) => s.credentials);
   const [selectedCategory, setSelectedCategory] = useState<string | "ALL">("ALL");
   const [showAdd, setShowAdd] = useState(false);
@@ -95,7 +98,7 @@ export default function CredentialsPage() {
           <span style={{ fontSize: "10px", background: "rgba(255,255,255,0.12)", padding: "2px 6px", borderRadius: "10px" }}>{data.length} rows</span>
         </div>
         <div className="supply-sidebar-body">
-          <CredentialsSidebar stats={categoryStats} totalRows={data.length} selected={selectedCategory} onSelect={setSelectedCategory} onAdd={() => setShowAdd(true)} />
+          <CredentialsSidebar stats={categoryStats} totalRows={data.length} selected={selectedCategory} onSelect={setSelectedCategory} onAdd={canEdit ? () => setShowAdd(true) : undefined} canEdit={canEdit} />
         </div>
         <div className="supply-sidebar-footer">
           <button className="supply-refresh-sidebar-btn" onClick={() => setSelectedCategory("ALL")}>
@@ -115,7 +118,7 @@ export default function CredentialsPage() {
           </div>
         </header>
         <main className="supply-body" style={{ padding: "12px", display: "flex", flexDirection: "column", minHeight: 0 }}>
-          <CredentialsTable selectedCategory={selectedCategory} onAdd={() => setShowAdd(true)} />
+          <CredentialsTable selectedCategory={selectedCategory} onAdd={canEdit ? () => setShowAdd(true) : undefined} canEdit={canEdit} />
         </main>
       </div>
       {showAdd && (

@@ -49,6 +49,11 @@ const createCredentialWithLog = withLog(createCredential, (result) => ({
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    if (!["admin", "developer"].includes((session.user as any).role)) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
     const body = await req.json();
     const result = await createCredentialWithLog(body);
     return NextResponse.json({ success: true, data: result }, { status: 201 });
