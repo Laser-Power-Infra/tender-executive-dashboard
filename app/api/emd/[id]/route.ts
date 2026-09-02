@@ -10,7 +10,7 @@ function isValidEmailsCSV(v: string) {
   return v.split(",").map((s) => s.trim()).filter(Boolean).every((e) => EMAIL_RE.test(e));
 }
 
-async function updateEmdMergedFields(id: string, data: { reason?: string | null; contactEmailId?: string | null; contactNo?: string | null; status?: string | null; remarks?: string | null; tmNo?: string | null; docketNo?: string | null }) {
+async function updateEmdMergedFields(id: string, data: { reason?: string | null; contactEmailId?: string | null; contactNo?: string | null; status?: string | null; remarks?: string | null; tmNo?: string | null; docketNo?: string | null; bgNo?: string | null }) {
   const updateData: any = {};
   if (data.reason !== undefined) {
     const reason = data.reason === "" ? null : data.reason;
@@ -46,6 +46,10 @@ async function updateEmdMergedFields(id: string, data: { reason?: string | null;
     const raw = data.docketNo === "" ? null : (data.docketNo as string)?.trim() ?? null;
     updateData.docketNo = raw;
   }
+  if (data.bgNo !== undefined) {
+    const raw = data.bgNo === "" ? null : (data.bgNo as string)?.trim() ?? null;
+    updateData.bgNo = raw;
+  }
   if (Object.keys(updateData).length === 0) throw new Error("No fields to update");
   const updated = await prisma.emdMerged.update({ where: { id }, data: updateData });
   return updated;
@@ -71,6 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if ("remarks" in body) data.remarks = body.remarks as string | null;
     if ("tmNo" in body) data.tmNo = body.tmNo as string | null;
     if ("docketNo" in body) data.docketNo = body.docketNo as string | null;
+    if ("bgNo" in body) data.bgNo = body.bgNo as string | null;
     const updated = await updateWithLog(id, data);
     return NextResponse.json({ success: true, data: updated });
   } catch (err: any) {
