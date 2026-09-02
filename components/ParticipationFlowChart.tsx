@@ -281,7 +281,7 @@ export function ParticipationFlowChart({
     participationFilters.includes(filter);
 
   const nodeClass = (active: boolean) =>
-    `w-full rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer border ${
+    `w-full h-fit self-start rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer border ${
       active
         ? "bg-blue-500/20 border-blue-400/50"
         : "bg-white/10 border-white/10 hover:bg-white/20"
@@ -313,7 +313,7 @@ export function ParticipationFlowChart({
         <VerticalConnector />
         <BranchConnector />
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 items-start">
           <div>
             <button
               type="button"
@@ -331,7 +331,7 @@ export function ParticipationFlowChart({
             <VerticalConnector />
             <BranchConnector />
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 items-start">
               <div>
                 <button
                   type="button"
@@ -349,7 +349,7 @@ export function ParticipationFlowChart({
                 <VerticalConnector />
                 <BranchConnector />
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 items-start">
                   <button
                     type="button"
                     onClick={() => handleNodeClick("contractReceived")}
@@ -442,7 +442,7 @@ export function ParticipationFlowChart({
         <VerticalConnector />
         <BranchConnector />
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 items-start">
           <div>
             <button
               type="button"
@@ -460,7 +460,7 @@ export function ParticipationFlowChart({
             <VerticalConnector />
             <BranchConnector />
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 items-start">
               <div>
                 <button
                   type="button"
@@ -478,7 +478,7 @@ export function ParticipationFlowChart({
                 <VerticalConnector />
                 <BranchConnector />
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 items-start">
                   <div>
                     <button
                       type="button"
@@ -496,7 +496,7 @@ export function ParticipationFlowChart({
                     <VerticalConnector />
                     <BranchConnector />
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2 items-start">
                       <button
                         type="button"
                         onClick={() => handleFinancialWeClick("contractReceived")}
