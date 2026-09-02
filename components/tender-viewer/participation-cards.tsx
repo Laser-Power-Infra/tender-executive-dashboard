@@ -124,6 +124,48 @@ export function isContractPendingRow(row: Record<string, unknown>): boolean {
   );
 }
 
+/**
+ * Financial-branch variants of the We L1 / We Lost / contract nodes.
+ *
+ * The plain isWeL1Row/isContractReceivedRow predicates are branch-agnostic -
+ * they only produce branch-correct results because the flow chart AND-s them
+ * with their whole ancestor chain. These four are self-contained so the two
+ * subtrees of the flow chart can be selected independently of each other.
+ */
+function isFinancialBranchRow(row: Record<string, unknown>): boolean {
+  if (row.participated !== "true") return false;
+  if (row.reverseAuctionApplicable === "true") return false;
+  const status = String(row.currentStatus ?? "").trim().toUpperCase();
+  return FINANCIAL_OPEN_STATUSES.includes(status);
+}
+
+export function isFinancialWeL1Row(row: Record<string, unknown>): boolean {
+  return isFinancialBranchRow(row) && String(row.ourRank ?? "").trim() === "1";
+}
+
+export function isFinancialWeLostRow(row: Record<string, unknown>): boolean {
+  return isFinancialBranchRow(row) && String(row.ourRank ?? "").trim() !== "1";
+}
+
+export function isFinancialContractReceivedRow(
+  row: Record<string, unknown>,
+): boolean {
+  return (
+    isFinancialWeL1Row(row) &&
+    row.contractNo != null &&
+    String(row.contractNo).trim() !== ""
+  );
+}
+
+export function isFinancialContractPendingRow(
+  row: Record<string, unknown>,
+): boolean {
+  return (
+    isFinancialWeL1Row(row) &&
+    (row.contractNo == null || String(row.contractNo).trim() === "")
+  );
+}
+
 export function isNotParticipatedRow(
   row: Record<string, unknown>,
 ): boolean {
@@ -210,30 +252,49 @@ export function isBidOpeningPendingExclRaRow(row: Record<string, unknown>): bool
   return true;
 }
 
+type ParticipationPredicate = (row: Record<string, unknown>) => boolean;
+
+/**
+ * Exhaustive map from filter key to predicate. Declared as a full Record so
+ * that adding a member to ParticipationFilter is a compile error until it is
+ * handled here - the previous if-chain fell through to `return true`, which
+ * made a forgotten key silently match every row.
+ */
+const PARTICIPATION_PREDICATES: Record<
+  ParticipationFilter,
+  ParticipationPredicate
+> = {
+  participated: isParticipatedRow,
+  participatedTotal: isParticipatedTotalRow,
+  notParticipated: isNotParticipatedRow,
+  upcomingRa: isUpcomingRaRow,
+  participatedWithRa: isParticipatedWithRaRow,
+  participatedWithoutRa: isParticipatedWithoutRaRow,
+  yetToOpenRa: isYetToOpenRaRow,
+  bidOpeningPendingExclRa: isBidOpeningPendingExclRaRow,
+  raDone: isRaDoneRow,
+  raPending: isRaPendingRow,
+  technicalOpen: isTechnicalOpenRow,
+  technicalNotOpen: isTechnicalNotOpenRow,
+  weL1: isWeL1Row,
+  weLost: isWeLostRow,
+  expRaDate: isExpRaDateRow,
+  contractReceived: isContractReceivedRow,
+  contractPending: isContractPendingRow,
+  financialOpen: isFinancialOpenRow,
+  financialNotOpen: isFinancialNotOpenRow,
+  financialWeL1: isFinancialWeL1Row,
+  financialWeLost: isFinancialWeLostRow,
+  financialContractReceived: isFinancialContractReceivedRow,
+  financialContractPending: isFinancialContractPendingRow,
+};
+
 function matchesSingleFilter(
   row: Record<string, unknown>,
   filter: ParticipationFilter,
 ): boolean {
-  if (filter === "participated") return isParticipatedRow(row);
-  if (filter === "participatedTotal") return isParticipatedTotalRow(row);
-  if (filter === "notParticipated") return isNotParticipatedRow(row);
-  if (filter === "upcomingRa") return isUpcomingRaRow(row);
-  if (filter === "participatedWithRa") return isParticipatedWithRaRow(row);
-  if (filter === "participatedWithoutRa") return isParticipatedWithoutRaRow(row);
-  if (filter === "yetToOpenRa") return isYetToOpenRaRow(row);
-  if (filter === "bidOpeningPendingExclRa") return isBidOpeningPendingExclRaRow(row);
-  if (filter === "raDone") return isRaDoneRow(row);
-  if (filter === "raPending") return isRaPendingRow(row);
-  if (filter === "technicalOpen") return isTechnicalOpenRow(row);
-  if (filter === "technicalNotOpen") return isTechnicalNotOpenRow(row);
-  if (filter === "weL1") return isWeL1Row(row);
-  if (filter === "weLost") return isWeLostRow(row);
-  if (filter === "expRaDate") return isExpRaDateRow(row);
-  if (filter === "contractReceived") return isContractReceivedRow(row);
-  if (filter === "contractPending") return isContractPendingRow(row);
-  if (filter === "financialOpen") return isFinancialOpenRow(row);
-  if (filter === "financialNotOpen") return isFinancialNotOpenRow(row);
-  return true;
+  const predicate = PARTICIPATION_PREDICATES[filter];
+  return predicate ? predicate(row) : true;
 }
 
 export function matchesParticipationFilter(

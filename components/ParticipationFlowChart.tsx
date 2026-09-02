@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import {
   toggleParticipationFilter,
@@ -9,70 +9,244 @@ import {
 import { resetSelectedDateRange } from "@/lib/slices/filesSlice";
 import { deadlineMatchesRange } from "@/components/tender-viewer/participation-cards";
 import { dedupeByDocketNo } from "@/lib/docket";
+import {
+  FLOW_MODE_MIN_WIDTH,
+  layoutFlow,
+  layoutRail,
+  type FlowMode,
+} from "@/components/participation-flow/layout";
+import {
+  ancestorsOf,
+  descendantsOf,
+  flatten,
+  FLOW_TREES,
+  type FlowNode,
+} from "@/components/participation-flow/tree";
+import { FlowEdges } from "@/components/participation-flow/FlowEdges";
+import { FlowNodeCard } from "@/components/participation-flow/FlowNodeCard";
 
 interface ParticipationFlowChartProps {
   rows: Record<string, unknown>[];
   onClearAssociation?: () => void;
 }
 
-function VerticalConnector() {
-  return (
-    <svg width="100%" height="10" className="block">
-      <line
-        x1="50%"
-        y1="0"
-        x2="50%"
-        y2="10"
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
-    </svg>
+/** Counts keyed by FlowNode.id. */
+export type FlowCounts = Record<string, number>;
+
+/**
+ * Funnel counts. This is the original counting logic, unchanged in behaviour -
+ * only reshaped so the tree renderer can look a count up by node id.
+ */
+export function computeFlowCounts(
+  rows: Record<string, unknown>[],
+  from?: string,
+  to?: string,
+): FlowCounts {
+  const participatedRaw = rows.filter(
+    (r) =>
+      r.apm === "YES" &&
+      r.participated === "true" &&
+      deadlineMatchesRange(r, from, to),
   );
+  // Deduplicate by docketNo: same docket counts as a single tender.
+  const participated = dedupeByDocketNo(
+    participatedRaw as unknown as (Record<string, unknown> & { id?: unknown })[],
+  ) as unknown as typeof participatedRaw;
+
+  const withRa = participated.filter(
+    (r) => r.reverseAuctionApplicable === "true",
+  );
+  const withoutRa = participated.filter(
+    (r) => r.reverseAuctionApplicable !== "true",
+  );
+  const raDone = withRa.filter(
+    (r) => !!r.reverseAuctionStartDate && !!r.reverseAuctionEndDate,
+  );
+  const raPending = withRa.filter(
+    (r) => !r.reverseAuctionStartDate || !r.reverseAuctionEndDate,
+  );
+  const technicalOpen = withoutRa.filter((r) =>
+    [
+      "AWARDED",
+      "FINANCIAL EVALUATION",
+      "TENDER CANCELLED",
+      "TECHNICAL BID OPENED",
+    ].includes(String(r.currentStatus ?? "").toUpperCase()),
+  );
+  const technicalNotOpen = withoutRa.filter((r) => {
+    if (r.currentStatus == null) return true;
+    const s = String(r.currentStatus).trim();
+    return s === "" || s.toUpperCase() === "NOT EVALUATED";
+  });
+  const weL1 = raDone.filter((r) => String(r.ourRank ?? "").trim() === "1");
+  const weLost = raDone.filter((r) => String(r.ourRank ?? "").trim() !== "1");
+  const expRaDate = raPending.filter(
+    (r) => r.expectedRaDate != null && String(r.expectedRaDate).trim() !== "",
+  );
+  const contractReceived = weL1.filter(
+    (r) => r.contractNo != null && String(r.contractNo).trim() !== "",
+  );
+  const contractPending = weL1.filter(
+    (r) => r.contractNo == null || String(r.contractNo).trim() === "",
+  );
+  const financialOpen = technicalOpen.filter((r) =>
+    ["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED"].includes(
+      String(r.currentStatus ?? "").trim().toUpperCase(),
+    ),
+  );
+  const financialNotOpen = technicalOpen.filter(
+    (r) =>
+      !["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED"].includes(
+        String(r.currentStatus ?? "").trim().toUpperCase(),
+      ),
+  );
+  const financialWeL1 = financialOpen.filter(
+    (r) => String(r.ourRank ?? "").trim() === "1",
+  );
+  const financialWeLost = financialOpen.filter(
+    (r) => String(r.ourRank ?? "").trim() !== "1",
+  );
+  const financialContractReceived = financialWeL1.filter(
+    (r) => r.contractNo != null && String(r.contractNo).trim() !== "",
+  );
+  const financialContractPending = financialWeL1.filter(
+    (r) => r.contractNo == null || String(r.contractNo).trim() === "",
+  );
+
+  return {
+    withRa: withRa.length,
+    withoutRa: withoutRa.length,
+    raDone: raDone.length,
+    raPending: raPending.length,
+    technicalOpen: technicalOpen.length,
+    technicalNotOpen: technicalNotOpen.length,
+    weL1: weL1.length,
+    weLost: weLost.length,
+    expRaDate: expRaDate.length,
+    contractReceived: contractReceived.length,
+    contractPending: contractPending.length,
+    financialOpen: financialOpen.length,
+    financialNotOpen: financialNotOpen.length,
+    financialWeL1: financialWeL1.length,
+    financialWeLost: financialWeLost.length,
+    financialContractReceived: financialContractReceived.length,
+    financialContractPending: financialContractPending.length,
+  };
 }
 
-function BranchConnector() {
+/** Tracks the chart's own width so the layout can adapt to sidebar resizing. */
+function useMeasuredWidth() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) setWidth(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, width] as const;
+}
+
+interface SubtreeProps {
+  tree: FlowNode;
+  heading: string;
+  tone: string;
+  counts: FlowCounts;
+  mode: FlowMode;
+  containerWidth: number;
+  isActive: (filter: ParticipationFilter) => boolean;
+  onSelect: (tree: FlowNode, node: FlowNode) => void;
+}
+
+function FlowSubtree({
+  tree,
+  heading,
+  tone,
+  counts,
+  mode,
+  containerWidth,
+  isActive,
+  onSelect,
+}: SubtreeProps) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  const layout = useMemo(
+    () =>
+      mode === "flow" ? layoutFlow(tree) : layoutRail(tree, containerWidth),
+    [tree, mode, containerWidth],
+  );
+
+  const parentCountById = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const node of flatten(tree)) {
+      for (const kid of node.children ?? []) {
+        map[kid.id] = counts[node.id] ?? 0;
+      }
+    }
+    return map;
+  }, [tree, counts]);
+
+  const { edgeColors, activeIds, emptyIds } = useMemo(() => {
+    const colors: Record<string, string> = {};
+    const active = new Set<string>();
+    const empty = new Set<string>();
+    for (const node of flatten(tree)) {
+      colors[node.id] = node.edge;
+      if (isActive(node.filter)) active.add(node.id);
+      if ((counts[node.id] ?? 0) === 0) empty.add(node.id);
+    }
+    return { edgeColors: colors, activeIds: active, emptyIds: empty };
+  }, [tree, counts, isActive]);
+
   return (
-    <svg
-      width="100%"
-      height="12"
-      viewBox="0 0 200 12"
-      preserveAspectRatio="none"
-      className="block"
-    >
-      <circle cx="100" cy="0" r="2.5" fill="rgba(255,255,255,0.35)" />
-      <line
-        x1="100"
-        y1="0"
-        x2="100"
-        y2="2"
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
-      <line
-        x1="50"
-        y1="2"
-        x2="150"
-        y2="2"
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
-      <line
-        x1="50"
-        y1="2"
-        x2="50"
-        y2="12"
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
-      <line
-        x1="150"
-        y1="2"
-        x2="150"
-        y2="12"
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
-    </svg>
+    <div className="space-y-2">
+      <div
+        className={`text-[10px] font-semibold uppercase tracking-wider ${tone}`}
+      >
+        {heading}
+      </div>
+      <div className={mode === "flow" ? "overflow-x-auto pb-1" : ""}>
+        <div
+          className="relative"
+          style={{ width: layout.width, height: layout.height }}
+        >
+          <FlowEdges
+            layout={layout}
+            edgeColors={edgeColors}
+            activeIds={activeIds}
+            emptyIds={emptyIds}
+            hoveredId={hoveredId}
+          />
+          {layout.nodes.map((positioned) => {
+            const id = positioned.node.id;
+            const count = counts[id] ?? 0;
+            const parentCount = parentCountById[id];
+            const share =
+              parentCount === undefined || parentCount === 0
+                ? null
+                : Math.round((count / parentCount) * 100);
+            return (
+              <FlowNodeCard
+                key={id}
+                positioned={positioned}
+                mode={mode}
+                count={count}
+                share={share}
+                active={isActive(positioned.node.filter)}
+                onSelect={() => onSelect(tree, positioned.node)}
+                onHover={setHoveredId}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -88,483 +262,88 @@ export function ParticipationFlowChart({
     (s) => s.filters.participatedDateRange,
   );
 
-  const counts = useMemo(() => {
-    const participatedRaw = rows.filter(
-      (r) =>
-        r.apm === "YES" &&
-        r.participated === "true" &&
-        deadlineMatchesRange(
-          r,
-          participatedDateRange?.from,
-          participatedDateRange?.to,
-        ),
-    );
-    // Deduplicate by docketNo: same docket counts as single tender
-    const participated = dedupeByDocketNo(participatedRaw as unknown as (Record<string, unknown> & { id?: unknown })[]) as unknown as typeof participatedRaw;
+  const [containerRef, containerWidth] = useMeasuredWidth();
 
-    const withRa = participated.filter(
-      (r) => r.reverseAuctionApplicable === "true",
-    );
-    const withoutRa = participated.filter(
-      (r) => r.reverseAuctionApplicable !== "true",
-    );
-    const raDone = withRa.filter(
-      (r) => !!r.reverseAuctionStartDate && !!r.reverseAuctionEndDate,
-    );
-    const raPending = withRa.filter(
-      (r) => !r.reverseAuctionStartDate || !r.reverseAuctionEndDate,
-    );
-    const technicalOpen = withoutRa.filter((r) =>
-      ["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED", "TECHNICAL BID OPENED"].includes(
-        String(r.currentStatus ?? "").toUpperCase(),
+  const counts = useMemo(
+    () =>
+      computeFlowCounts(
+        rows,
+        participatedDateRange?.from,
+        participatedDateRange?.to,
       ),
-    );
-    const technicalNotOpen = withoutRa.filter((r) => {
-      if (r.currentStatus == null) return true;
-      const s = String(r.currentStatus).trim();
-      return s === "" || s.toUpperCase() === "NOT EVALUATED";
-    });
-    const weL1 = raDone.filter(
-      (r) => String(r.ourRank ?? "").trim() === "1",
-    );
-    const weLost = raDone.filter(
-      (r) => String(r.ourRank ?? "").trim() !== "1",
-    );
-    const expRaDate = raPending.filter(
-      (r) =>
-        r.expectedRaDate != null &&
-        String(r.expectedRaDate).trim() !== "",
-    );
-    const contractReceived = weL1.filter(
-      (r) => r.contractNo != null && String(r.contractNo).trim() !== "",
-    );
-    const contractPending = weL1.filter(
-      (r) => r.contractNo == null || String(r.contractNo).trim() === "",
-    );
-    const financialOpen = technicalOpen.filter((r) =>
-      ["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED"].includes(
-        String(r.currentStatus ?? "").trim().toUpperCase(),
-      ),
-    );
-    const financialNotOpen = technicalOpen.filter(
-      (r) =>
-        !["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED"].includes(
-          String(r.currentStatus ?? "").trim().toUpperCase(),
-        ),
-    );
-    const financialWeL1 = financialOpen.filter(
-      (r) => String(r.ourRank ?? "").trim() === "1",
-    );
-    const financialWeLost = financialOpen.filter(
-      (r) => String(r.ourRank ?? "").trim() !== "1",
-    );
-    const financialContractReceived = financialWeL1.filter(
-      (r) => r.contractNo != null && String(r.contractNo).trim() !== "",
-    );
-    const financialContractPending = financialWeL1.filter(
-      (r) => r.contractNo == null || String(r.contractNo).trim() === "",
-    );
-    return {
-      withRa: withRa.length,
-      withoutRa: withoutRa.length,
-      raDone: raDone.length,
-      raPending: raPending.length,
-      technicalOpen: technicalOpen.length,
-      technicalNotOpen: technicalNotOpen.length,
-      weL1: weL1.length,
-      weLost: weLost.length,
-      expRaDate: expRaDate.length,
-      contractReceived: contractReceived.length,
-      contractPending: contractPending.length,
-      financialOpen: financialOpen.length,
-      financialNotOpen: financialNotOpen.length,
-      financialWeL1: financialWeL1.length,
-      financialWeLost: financialWeLost.length,
-      financialContractReceived: financialContractReceived.length,
-      financialContractPending: financialContractPending.length,
-    };
-  }, [rows, participatedDateRange]);
+    [rows, participatedDateRange],
+  );
 
-  const handleNodeClick = (filter: ParticipationFilter) => {
-    const isActiveCurrently = participationFilters.includes(filter);
+  const isActive = useCallback(
+    (filter: ParticipationFilter) => participationFilters.includes(filter),
+    [participationFilters],
+  );
 
-    const parentMap: Partial<Record<ParticipationFilter, ParticipationFilter>> = {
-      raDone: "participatedWithRa",
-      raPending: "participatedWithRa",
-      technicalOpen: "participatedWithoutRa",
-      technicalNotOpen: "participatedWithoutRa",
-      weL1: "raDone",
-      weLost: "raDone",
-      expRaDate: "raPending",
-      contractReceived: "weL1",
-      contractPending: "weL1",
-      financialOpen: "technicalOpen",
-      financialNotOpen: "technicalOpen",
-    };
+  /**
+   * One handler for every node. Ancestry now comes from the tree data itself,
+   * replacing the two hand-maintained parentMap/childrenMap tables and the
+   * duplicate handleFinancialWeClick the previous version carried.
+   */
+  const handleSelect = useCallback(
+    (tree: FlowNode, node: FlowNode) => {
+      const turningOff = participationFilters.includes(node.filter);
 
-    const childrenMap: Partial<Record<ParticipationFilter, ParticipationFilter[]>> = {
-      participatedWithRa: ["raDone", "raPending"],
-      participatedWithoutRa: ["technicalOpen", "technicalNotOpen"],
-      raDone: ["weL1", "weLost"],
-      raPending: ["expRaDate"],
-      weL1: ["contractReceived", "contractPending"],
-      technicalOpen: ["financialOpen", "financialNotOpen"],
-      financialOpen: ["weL1", "weLost"],
-    };
-
-    // Deactivating parent → deactivate children first
-    if (!isActiveCurrently && childrenMap[filter]) {
-      for (const child of childrenMap[filter]) {
-        if (participationFilters.includes(child)) {
-          dispatch(toggleParticipationFilter(child));
-        }
-      }
-    }
-
-    // Activating child → ensure parent is active
-    const parent = parentMap[filter];
-    if (!isActiveCurrently && parent && !participationFilters.includes(parent)) {
-      dispatch(toggleParticipationFilter(parent));
-    }
-
-    // Always ensure participated base filter is active when any node is activated
-    if (!isActiveCurrently && !participationFilters.includes("participatedTotal")) {
-      dispatch(toggleParticipationFilter("participatedTotal"));
-    }
-
-    dispatch(toggleParticipationFilter(filter));
-    dispatch(resetSelectedDateRange());
-    onClearAssociation?.();
-  };
-
-  const handleFinancialWeClick = (filter: ParticipationFilter) => {
-    const isActiveCurrently = participationFilters.includes(filter);
-    if (!isActiveCurrently) {
-      // Ensure financial We L1 parent chain for contract children
-      if (
-        (filter === "contractReceived" || filter === "contractPending") &&
-        !participationFilters.includes("weL1")
-      ) {
-        if (!participationFilters.includes("financialOpen")) {
-          if (!participationFilters.includes("technicalOpen")) {
-            if (!participationFilters.includes("participatedWithoutRa")) {
-              dispatch(toggleParticipationFilter("participatedWithoutRa"));
-            }
-            dispatch(toggleParticipationFilter("technicalOpen"));
+      if (turningOff) {
+        // Clearing a node also clears everything below it, so the filter set
+        // can never be left narrowed by an orphaned descendant.
+        const doomed = [
+          node.filter,
+          ...descendantsOf(tree, node.id).map((n) => n.filter),
+        ];
+        for (const filter of doomed) {
+          if (participationFilters.includes(filter)) {
+            dispatch(toggleParticipationFilter(filter));
           }
-          dispatch(toggleParticipationFilter("financialOpen"));
         }
-        dispatch(toggleParticipationFilter("weL1"));
-      }
-      if (
-        (filter === "weL1" || filter === "weLost") &&
-        !participationFilters.includes("financialOpen")
-      ) {
-        if (!participationFilters.includes("technicalOpen")) {
-          if (!participationFilters.includes("participatedWithoutRa")) {
-            dispatch(toggleParticipationFilter("participatedWithoutRa"));
+      } else {
+        if (!participationFilters.includes("participatedTotal")) {
+          dispatch(toggleParticipationFilter("participatedTotal"));
+        }
+        const needed = [
+          ...ancestorsOf(tree, node.id).map((n) => n.filter),
+          node.filter,
+        ];
+        for (const filter of needed) {
+          if (!participationFilters.includes(filter)) {
+            dispatch(toggleParticipationFilter(filter));
           }
-          dispatch(toggleParticipationFilter("technicalOpen"));
         }
-        dispatch(toggleParticipationFilter("financialOpen"));
       }
-    }
-    if (!isActiveCurrently && !participationFilters.includes("participatedTotal")) {
-      dispatch(toggleParticipationFilter("participatedTotal"));
-    }
-    dispatch(toggleParticipationFilter(filter));
-    dispatch(resetSelectedDateRange());
-    onClearAssociation?.();
-  };
 
-  const isActive = (filter: ParticipationFilter) =>
-    participationFilters.includes(filter);
+      dispatch(resetSelectedDateRange());
+      onClearAssociation?.();
+    },
+    [dispatch, participationFilters, onClearAssociation],
+  );
 
-  const nodeClass = (active: boolean) =>
-    `w-full h-fit self-start rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer border ${
-      active
-        ? "bg-blue-500/20 border-blue-400/50"
-        : "bg-white/10 border-white/10 hover:bg-white/20"
-    }`;
+  const mode: FlowMode =
+    containerWidth >= FLOW_MODE_MIN_WIDTH ? "flow" : "rail";
 
   return (
-    <div className="space-y-4">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50 mb-1">
+    <div ref={containerRef} className="space-y-5">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50">
         Participation Flow
       </div>
 
-      <div className="space-y-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-300/80">
-          With RA
-        </div>
-        <button
-          type="button"
-          onClick={() => handleNodeClick("participatedWithRa")}
-          className={nodeClass(isActive("participatedWithRa"))}
-        >
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-            With RA
-          </div>
-          <div className="text-lg font-bold text-violet-400 leading-tight">
-            {counts.withRa}
-          </div>
-        </button>
-
-        <VerticalConnector />
-        <BranchConnector />
-
-        <div className="grid grid-cols-2 gap-2 items-start">
-          <div>
-            <button
-              type="button"
-              onClick={() => handleNodeClick("raDone")}
-              className={nodeClass(isActive("raDone"))}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                RA Done
-              </div>
-              <div className="text-lg font-bold text-green-400 leading-tight">
-                {counts.raDone}
-              </div>
-            </button>
-
-            <VerticalConnector />
-            <BranchConnector />
-
-            <div className="grid grid-cols-2 gap-2 items-start">
-              <div>
-                <button
-                  type="button"
-                  onClick={() => handleNodeClick("weL1")}
-                  className={nodeClass(isActive("weL1"))}
-                >
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                    We L1
-                  </div>
-                  <div className="text-lg font-bold text-emerald-400 leading-tight">
-                    {counts.weL1}
-                  </div>
-                </button>
-
-                <VerticalConnector />
-                <BranchConnector />
-
-                <div className="grid grid-cols-2 gap-2 items-start">
-                  <button
-                    type="button"
-                    onClick={() => handleNodeClick("contractReceived")}
-                    className={nodeClass(isActive("contractReceived"))}
-                  >
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                      Contract Received
-                    </div>
-                    <div className="text-lg font-bold text-emerald-300 leading-tight">
-                      {counts.contractReceived}
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleNodeClick("contractPending")}
-                    className={nodeClass(isActive("contractPending"))}
-                  >
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                      Contract Pending
-                    </div>
-                    <div className="text-lg font-bold text-orange-400 leading-tight">
-                      {counts.contractPending}
-                    </div>
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleNodeClick("weLost")}
-                className={nodeClass(isActive("weLost"))}
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                  We Lost
-                </div>
-                <div className="text-lg font-bold text-rose-400 leading-tight">
-                  {counts.weLost}
-                </div>
-              </button>
-            </div>
-          </div>
-          <div>
-            <button
-              type="button"
-              onClick={() => handleNodeClick("raPending")}
-              className={nodeClass(isActive("raPending"))}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                RA Pending
-              </div>
-              <div className="text-lg font-bold text-amber-400 leading-tight">
-                {counts.raPending}
-              </div>
-            </button>
-
-            <VerticalConnector />
-
-            <button
-              type="button"
-              onClick={() => handleNodeClick("expRaDate")}
-              className={nodeClass(isActive("expRaDate"))}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                Exp RA Date
-              </div>
-              <div className="text-lg font-bold text-sky-400 leading-tight">
-                {counts.expRaDate}
-              </div>
-            </button>
-          </div>
-        </div>
-        </div>
-
-      <div className="space-y-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-cyan-300/80">
-          Without RA
-        </div>
-        <button
-          type="button"
-          onClick={() => handleNodeClick("participatedWithoutRa")}
-          className={nodeClass(isActive("participatedWithoutRa"))}
-        >
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-            Without RA
-          </div>
-          <div className="text-lg font-bold text-cyan-400 leading-tight">
-            {counts.withoutRa}
-          </div>
-        </button>
-
-        <VerticalConnector />
-        <BranchConnector />
-
-        <div className="grid grid-cols-2 gap-2 items-start">
-          <div>
-            <button
-              type="button"
-              onClick={() => handleNodeClick("technicalOpen")}
-              className={nodeClass(isActive("technicalOpen"))}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                Technical Open
-              </div>
-              <div className="text-lg font-bold text-green-400 leading-tight">
-                {counts.technicalOpen}
-              </div>
-            </button>
-
-            <VerticalConnector />
-            <BranchConnector />
-
-            <div className="grid grid-cols-2 gap-2 items-start">
-              <div>
-                <button
-                  type="button"
-                  onClick={() => handleNodeClick("financialOpen")}
-                  className={nodeClass(isActive("financialOpen"))}
-                >
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                    Financial Open
-                  </div>
-                  <div className="text-lg font-bold text-amber-400 leading-tight">
-                    {counts.financialOpen}
-                  </div>
-                </button>
-
-                <VerticalConnector />
-                <BranchConnector />
-
-                <div className="grid grid-cols-2 gap-2 items-start">
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => handleFinancialWeClick("weL1")}
-                      className={nodeClass(isActive("weL1"))}
-                    >
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                        We L1
-                      </div>
-                      <div className="text-lg font-bold text-emerald-400 leading-tight">
-                        {counts.financialWeL1}
-                      </div>
-                    </button>
-
-                    <VerticalConnector />
-                    <BranchConnector />
-
-                    <div className="grid grid-cols-2 gap-2 items-start">
-                      <button
-                        type="button"
-                        onClick={() => handleFinancialWeClick("contractReceived")}
-                        className={nodeClass(isActive("contractReceived"))}
-                      >
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                          Contract Received
-                        </div>
-                        <div className="text-lg font-bold text-emerald-300 leading-tight">
-                          {counts.financialContractReceived}
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleFinancialWeClick("contractPending")}
-                        className={nodeClass(isActive("contractPending"))}
-                      >
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                          Contract Pending
-                        </div>
-                        <div className="text-lg font-bold text-orange-400 leading-tight">
-                          {counts.financialContractPending}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleFinancialWeClick("weLost")}
-                    className={nodeClass(isActive("weLost"))}
-                  >
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                      We Lost
-                    </div>
-                    <div className="text-lg font-bold text-rose-400 leading-tight">
-                      {counts.financialWeLost}
-                    </div>
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleNodeClick("financialNotOpen")}
-                className={nodeClass(isActive("financialNotOpen"))}
-              >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-                  Financial Not Open
-                </div>
-                <div className="text-lg font-bold text-slate-300 leading-tight">
-                  {counts.financialNotOpen}
-                </div>
-              </button>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => handleNodeClick("technicalNotOpen")}
-            className={nodeClass(isActive("technicalNotOpen"))}
-          >
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60 mb-1">
-              Technical Not Open
-            </div>
-            <div className="text-lg font-bold text-red-400 leading-tight">
-              {counts.technicalNotOpen}
-            </div>
-          </button>
-        </div>
-      </div>
+      {containerWidth > 0 &&
+        FLOW_TREES.map(({ tree, heading, tone }) => (
+          <FlowSubtree
+            key={tree.id}
+            tree={tree}
+            heading={heading}
+            tone={tone}
+            counts={counts}
+            mode={mode}
+            containerWidth={containerWidth}
+            isActive={isActive}
+            onSelect={handleSelect}
+          />
+        ))}
     </div>
   );
 }
