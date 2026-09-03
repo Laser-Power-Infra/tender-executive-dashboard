@@ -4,7 +4,8 @@ import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import { fetchCredentials, createCredential } from "@/lib/slices/credentialsSlice";
 import CredentialsTable from "@/components/CredentialsTable";
 import { CredentialsSidebar, CategoryStat } from "@/components/CredentialsSidebar";
-import { RefreshCw, Eraser, Eye, EyeOff } from "lucide-react";
+import { Eraser, Eye, EyeOff } from "lucide-react";
+import { DataErrorState, DataLoadingState, RefreshingBar } from "@/components/ui/data-state";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +17,7 @@ export default function CredentialsPage() {
   const dispatch = useAppDispatch();
   const { data: session } = useSession();
   const canEdit = session?.user?.role === "admin" || session?.user?.role === "developer";
-  const { data, loading, error, creating } = useAppSelector((s) => s.credentials);
+  const { data, loading, refreshing, error, creating } = useAppSelector((s) => s.credentials);
   const [selectedCategory, setSelectedCategory] = useState<string | "ALL">("ALL");
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState<Record<string, string>>({ category: "", states: "", websites: "", password: "", mobileNo: "", profilePassword: "", dscName: "", dscPassword: "", otherRef: "" });
@@ -47,7 +48,7 @@ export default function CredentialsPage() {
   }, [data, selectedCategory]);
 
   const handleRetry = () => {
-    dispatch(fetchCredentials());
+    dispatch(fetchCredentials({ force: true }));
   };
 
   const handleAdd = async () => {
@@ -71,27 +72,15 @@ export default function CredentialsPage() {
   };
 
   if (loading && data.length === 0) {
-    return (
-      <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", minHeight: "500px", color: "#0a2540", fontWeight: 700, flexDirection: "column", gap: "15px" }}>
-        <div style={{ width: "40px", height: "40px", border: "4px solid #e1e6eb", borderTopColor: "#1a73e8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }}></div>
-        <span>Loading credentials...</span>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      </div>
-    );
+    return <DataLoadingState label="Loading credentials..." />;
   }
   if (error && data.length === 0) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "400px", gap: "12px" }}>
-        <p style={{ color: "#c5221f", fontWeight: 600 }}>Failed to load: {error}</p>
-        <button onClick={handleRetry} style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", background: "#0a2540", color: "white", borderRadius: "6px", fontWeight: 600 }}>
-          <RefreshCw size={14} /> Retry
-        </button>
-      </div>
-    );
+    return <DataErrorState message={error} onRetry={handleRetry} />;
   }
 
   return (
-    <div className="supply-layout-container" style={{ height: "calc(100vh - 42px)" }}>
+    <div className="supply-layout-container" style={{ height: "calc(100vh - 42px)", position: "relative" }}>
+      <RefreshingBar active={refreshing} />
       <aside className="supply-sidebar">
         <div className="supply-sidebar-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span>Categories</span>

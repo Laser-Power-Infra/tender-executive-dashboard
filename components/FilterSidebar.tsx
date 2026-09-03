@@ -99,7 +99,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
       <div className="sidebar-content">
         <ParticipationCards variant="dark" rows={rows} onClearAssociation={() => onAssociationFilterChange?.(null)} />
         {showFlowChart ? (
-          <ParticipationFlowChart rows={rows} />
+          <ParticipationFlowChart rows={rows} onClearAssociation={() => onAssociationFilterChange?.(null)} />
         ) : (
           <>
             {/* Assigned To filter - replaces flow chart on executive pages */}

@@ -18,23 +18,37 @@ export interface CredentialRecord {
 
 interface CredentialsState {
   data: CredentialRecord[];
+  /** Blocking load - only true when there is nothing to show yet. */
   loading: boolean;
+  /** Background revalidation of data already on screen. */
+  refreshing: boolean;
   error: string | null;
   updating: Record<string, boolean>;
   creating: boolean;
+  /** Epoch ms of the last successful fetch, used to decide staleness. */
+  lastFetched: number | null;
 }
 
 const initialState: CredentialsState = {
   data: [],
   loading: false,
+  refreshing: false,
   error: null,
   updating: {},
   creating: false,
+  lastFetched: null,
 };
 
-export const fetchCredentials = createAsyncThunk(
+/** How long a fetched list is considered fresh enough to skip a refetch. */
+const STALE_AFTER_MS = 5 * 60 * 1000;
+
+export const fetchCredentials = createAsyncThunk<
+  CredentialRecord[],
+  { force?: boolean } | undefined,
+  { state: { credentials: CredentialsState } }
+>(
   "credentials/fetchAll",
-  async (_, { rejectWithValue }) => {
+  async (_arg, { rejectWithValue }) => {
     try {
       const res = await fetch("/api/credentials");
       const json = await res.json();
@@ -43,6 +57,18 @@ export const fetchCredentials = createAsyncThunk(
     } catch (err: any) {
       return rejectWithValue(err.message || "Failed to fetch credentials");
     }
+  },
+  {
+    // Skip the request entirely when a fresh list is already in the store, so
+    // navigating back to /credentials renders instantly instead of refetching
+    // and flashing a spinner. Explicit refreshes pass { force: true }.
+    condition: (arg, { getState }) => {
+      const state = getState().credentials;
+      if (state.loading || state.refreshing) return false;
+      if (arg?.force) return true;
+      if (state.data.length === 0 || state.lastFetched === null) return true;
+      return Date.now() - state.lastFetched > STALE_AFTER_MS;
+    },
   },
 );
 
@@ -107,15 +133,20 @@ export const credentialsSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchCredentials.pending, (state) => {
-        state.loading = true;
+        // Only block the page when there is nothing cached to show.
+        if (state.data.length === 0) state.loading = true;
+        else state.refreshing = true;
         state.error = null;
       })
       .addCase(fetchCredentials.fulfilled, (state, action) => {
         state.loading = false;
+        state.refreshing = false;
         state.data = action.payload;
+        state.lastFetched = Date.now();
       })
       .addCase(fetchCredentials.rejected, (state, action) => {
         state.loading = false;
+        state.refreshing = false;
         state.error = (action.payload as string) || "Failed to fetch";
       })
       .addCase(createCredential.pending, (state) => {

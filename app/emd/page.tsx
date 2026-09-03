@@ -1,6 +1,9 @@
 "use client";
-import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import { useEmdMerged, EmdMergedRecord } from "@/hooks/useEmdMerged";
+import React, { useMemo, useState, useRef, useCallback, useEffect, useDeferredValue } from "react";
+import { useEmdMerged } from "@/hooks/useEmdMerged";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import { updateEmdField } from "@/lib/slices/emdSlice";
+import type { EmdEditableField, EmdMergedRecord } from "@/lib/slices/emdSlice";
 import { RefreshCw, Search, Download, FileSpreadsheet, ChevronUp, ChevronDown, RotateCcw, X, Mail, Loader2, Check, Eye, Eraser } from "lucide-react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
@@ -8,6 +11,8 @@ import { TENDER_REASON_OPTIONS } from "@/lib/emdReasonOptions";
 import { EMD_STATUS_OPTIONS } from "@/lib/emdStatusOptions";
 import { EmdBgEmailDialog } from "@/components/emd/EmdBgEmailDialog";
 import { EmailDraftDialog } from "@/components/emd/EmailDraftDialog";
+import { EmdEditableCell } from "@/components/emd/EmdEditableCell";
+import { DataEmptyState, DataErrorState, DataLoadingState, RefreshingBar } from "@/components/ui/data-state";
 import { formatDateISTShort, formatDateTimeIST } from "@/lib/format-ist";
 import { parseDate as parseDateLib } from "@/lib/parse-date";
 import "@/app/SupplyHistory.css";
@@ -92,8 +97,14 @@ function formatEmdDate(v: unknown): string {
   return fmt === "-" ? String(v) : fmt;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function invalidEmails(v: string): string[] {
+  return v.split(",").map((x) => x.trim()).filter(Boolean).filter((e) => !EMAIL_RE.test(e));
+}
+
 export default function EmdMergedPage(){
-  const { data, loading, error, refresh } = useEmdMerged();
+  const dispatch = useAppDispatch();
+  const { data, loading, refreshing, error, refresh } = useEmdMerged();
   const [selectedStatus, setSelectedStatus] = useState<EmdStatus | "ALL">("ALL");
   const [globalSearch,setGlobalSearch]=useState("");
   const [sortColumn,setSortColumn]=useState<keyof EmdMergedRecord | "action" | null>("tenderNo");
@@ -105,34 +116,13 @@ export default function EmdMergedPage(){
   const [multiSelectFilters,setMultiSelectFilters]=useState<Record<string,string[]>>({});
   const [openDropdown,setOpenDropdown]=useState<string|null>(null);
   const dropdownRefs=useRef<Record<string,HTMLDivElement|null>>({});
-  const [localReasonMap,setLocalReasonMap]=useState<Record<string,string|null>>({});
-  const [localContactEmailMap,setLocalContactEmailMap]=useState<Record<string,string|null>>({});
-  const [localContactNoMap,setLocalContactNoMap]=useState<Record<string,string|null>>({});
-  const [localStatusMap,setLocalStatusMap]=useState<Record<string,string|null>>({});
-  const [localRemarksMap,setLocalRemarksMap]=useState<Record<string,string|null>>({});
-  const [localTmNoMap,setLocalTmNoMap]=useState<Record<string,string|null>>({});
-  const [localDocketNoMap,setLocalDocketNoMap]=useState<Record<string,string|null>>({});
-  const [localBgNoMap,setLocalBgNoMap]=useState<Record<string,string|null>>({});
-  const [updatingId,setUpdatingId]=useState<string|null>(null);
-  const [updatingContactEmailId,setUpdatingContactEmailId]=useState<string|null>(null);
-  const [updatingContactNoId,setUpdatingContactNoId]=useState<string|null>(null);
-  const [updatingStatusId,setUpdatingStatusId]=useState<string|null>(null);
-  const [updatingRemarksId,setUpdatingRemarksId]=useState<string|null>(null);
-  const [updatingTmNoId,setUpdatingTmNoId]=useState<string|null>(null);
-  const [updatingDocketNoId,setUpdatingDocketNoId]=useState<string|null>(null);
-  const [updatingBgNoId,setUpdatingBgNoId]=useState<string|null>(null);
-  const [editingContactEmailId,setEditingContactEmailId]=useState<string|null>(null);
-  const [draftContactEmail,setDraftContactEmail]=useState("");
-  const [editingContactNoId,setEditingContactNoId]=useState<string|null>(null);
-  const [draftContactNo,setDraftContactNo]=useState("");
-  const [editingRemarksId,setEditingRemarksId]=useState<string|null>(null);
-  const [draftRemarks,setDraftRemarks]=useState("");
-  const [editingTmNoId,setEditingTmNoId]=useState<string|null>(null);
-  const [draftTmNo,setDraftTmNo]=useState("");
-  const [editingDocketNoId,setEditingDocketNoId]=useState<string|null>(null);
-  const [draftDocketNo,setDraftDocketNo]=useState("");
-  const [editingBgNoId,setEditingBgNoId]=useState<string|null>(null);
-  const [draftBgNo,setDraftBgNo]=useState("");
+  // Typing stays instant; the expensive filter/sort pipeline below reads the
+  // deferred copies and catches up in a lower-priority render.
+  const deferredGlobalSearch=useDeferredValue(globalSearch);
+  const deferredColumnSearchText=useDeferredValue(columnSearchText);
+
+  /** In-flight field saves, keyed `${id}:${field}`, owned by the emd slice. */
+  const updating=useAppSelector(s=>s.emd.updating);
   const [sendingId,setSendingId]=useState<string|null>(null);
   const [dialogOpen,setDialogOpen]=useState(false);
   const [dialogRow,setDialogRow]=useState<EmdDetailsBgRecord|null>(null);
@@ -140,17 +130,12 @@ export default function EmdMergedPage(){
   const [draftHtml,setDraftHtml]=useState<string|null>(null);
   const [draftTitle,setDraftTitle]=useState("");
   const scrollContainerRef=useRef<HTMLDivElement>(null);
-  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isValidEmails = (v: string) => {
-    const s = v.trim();
-    if (!s) return true;
-    return s.split(",").map((x) => x.trim()).filter(Boolean).every((e) => EMAIL_RE.test(e));
-  };
-  const invalidEmails = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean).filter((e) => !EMAIL_RE.test(e));
   const resizingColumnRef=useRef<string|null>(null), startXRef=useRef(0), startWidthRef=useRef(0);
   const handleResizeStart=(e:React.MouseEvent, acc:string, w:number)=>{ e.preventDefault(); e.stopPropagation(); resizingColumnRef.current=acc; startXRef.current=e.clientX; startWidthRef.current=w; const onMove=(ev:MouseEvent)=>{ if(!resizingColumnRef.current) return; const diff=ev.clientX-startXRef.current; const nw=Math.max(60,startWidthRef.current+diff); setColumnWidths(p=>({...p,[resizingColumnRef.current!]:nw})); }; const onUp=()=>{ resizingColumnRef.current=null; document.removeEventListener("mousemove",onMove); document.removeEventListener("mouseup",onUp); document.body.style.cursor="default"; }; document.addEventListener("mousemove",onMove); document.addEventListener("mouseup",onUp); document.body.style.cursor="col-resize"; };
   const handleSort=(col:any)=>{ if(col==="action") return; const cfg=COLS.find(c=>String(c.accessor)===String(col)); if(!cfg?.sortable) return; if(sortColumn===col) setSortDirection(p=>p==="asc"?"desc":"asc"); else { setSortColumn(col); setSortDirection("desc"); } setCurrentPage(1); };
-  const mergedData=useMemo(()=>data.map(r=>{ let n:any=r; if(localReasonMap[r.id]!==undefined) n={...n,reason:localReasonMap[r.id]}; if(localContactEmailMap[r.id]!==undefined) n={...n,contactEmailId:localContactEmailMap[r.id]}; if(localContactNoMap[r.id]!==undefined) n={...n,contactNo:localContactNoMap[r.id]}; if(localStatusMap[r.id]!==undefined) n={...n,status:localStatusMap[r.id]}; if(localRemarksMap[r.id]!==undefined) n={...n,remarks:localRemarksMap[r.id]}; if(localTmNoMap[r.id]!==undefined) n={...n,tmNo:localTmNoMap[r.id]}; if(localDocketNoMap[r.id]!==undefined) n={...n,docketNo:localDocketNoMap[r.id]}; if(localBgNoMap[r.id]!==undefined) n={...n,bgNo:localBgNoMap[r.id]}; return n as EmdMergedRecord; }),[data,localReasonMap,localContactEmailMap,localContactNoMap,localStatusMap,localRemarksMap,localTmNoMap,localDocketNoMap,localBgNoMap]);
+  // The emd slice applies optimistic edits to its own data and rolls them back
+  // on failure, so there is no overlay to merge here any more.
+  const mergedData=data;
 
   const sidebarStats: Record<EmdStatus, EmdStats> = useMemo(() => {
     const init = (): EmdStats => ({ count: 0, totalEmd: 0, customerCount: 0 });
@@ -172,14 +157,24 @@ export default function EmdMergedPage(){
     return mergedData.filter((r) => normalizeStatus(r.statusRefundedPending) === selectedStatus);
   }, [mergedData, selectedStatus]);
 
-  const handleReasonChange=useCallback(async(id:string,v:string)=>{ const prev=(mergedData.find(r=>r.id===id)?.reason??null) as string|null; setLocalReasonMap(m=>({...m,[id]:v||null})); setUpdatingId(id); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason:v||null})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("Reason updated"); }catch(e:any){ setLocalReasonMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingId(null); } },[mergedData]);
-  const handleContactEmailSave=useCallback(async(id:string)=>{ const raw=draftContactEmail.trim(); if(raw!==""&&!isValidEmails(raw)){ const bad=invalidEmails(raw).join(", "); toast.error(`Invalid email(s): ${bad}`); return; } const prev=(mergedData.find(r=>r.id===id) as any)?.contactEmailId??null; const next=raw===""?null:raw; setLocalContactEmailMap(m=>({...m,[id]:next})); setUpdatingContactEmailId(id); setEditingContactEmailId(null); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({contactEmailId:next})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("Contact email updated"); }catch(e:any){ setLocalContactEmailMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingContactEmailId(null); } },[draftContactEmail,mergedData]);
-  const handleContactNoSave=useCallback(async(id:string)=>{ const raw=draftContactNo.trim(); const prev=(mergedData.find(r=>r.id===id) as any)?.contactNo??null; const next=raw===""?null:raw; setLocalContactNoMap(m=>({...m,[id]:next})); setUpdatingContactNoId(id); setEditingContactNoId(null); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({contactNo:next})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("Contact no updated"); }catch(e:any){ setLocalContactNoMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingContactNoId(null); } },[draftContactNo,mergedData]);
-  const handleStatusChange=useCallback(async(id:string,v:string)=>{ const prev=(mergedData.find(r=>r.id===id)?.status??null) as string|null; setLocalStatusMap(m=>({...m,[id]:v||null})); setUpdatingStatusId(id); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:v||null})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("Status updated"); }catch(e:any){ setLocalStatusMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingStatusId(null); } },[mergedData]);
-  const handleRemarksSave=useCallback(async(id:string)=>{ const raw=draftRemarks.trim(); const prev=(mergedData.find(r=>r.id===id) as any)?.remarks??null; const next=raw===""?null:raw; setLocalRemarksMap(m=>({...m,[id]:next})); setUpdatingRemarksId(id); setEditingRemarksId(null); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({remarks:next})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("Remarks updated"); }catch(e:any){ setLocalRemarksMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingRemarksId(null); } },[draftRemarks,mergedData]);
-  const handleTmNoSave=useCallback(async(id:string)=>{ const raw=draftTmNo.trim(); const prev=(mergedData.find(r=>r.id===id) as any)?.tmNo??null; const next=raw===""?null:raw; setLocalTmNoMap(m=>({...m,[id]:next})); setUpdatingTmNoId(id); setEditingTmNoId(null); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({tmNo:next})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("TM No updated"); }catch(e:any){ setLocalTmNoMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingTmNoId(null); } },[draftTmNo,mergedData]);
-  const handleDocketNoSave=useCallback(async(id:string)=>{ const raw=draftDocketNo.trim(); const prev=(mergedData.find(r=>r.id===id) as any)?.docketNo??null; const next=raw===""?null:raw; setLocalDocketNoMap(m=>({...m,[id]:next})); setUpdatingDocketNoId(id); setEditingDocketNoId(null); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({docketNo:next})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("Docket No updated"); }catch(e:any){ setLocalDocketNoMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingDocketNoId(null); } },[draftDocketNo,mergedData]);
-  const handleBgNoSave=useCallback(async(id:string)=>{ const raw=draftBgNo.trim(); const prev=(mergedData.find(r=>r.id===id) as any)?.bgNo??null; const next=raw===""?null:raw; setLocalBgNoMap(m=>({...m,[id]:next})); setUpdatingBgNoId(id); setEditingBgNoId(null); try{ const res=await fetch(`/api/emd/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bgNo:next})}); const j=await res.json(); if(!res.ok||!j.success) throw new Error(j.error||"Failed"); toast.success("BG No updated"); }catch(e:any){ setLocalBgNoMap(m=>({...m,[id]:prev})); toast.error(e.message); } finally{ setUpdatingBgNoId(null); } },[draftBgNo,mergedData]);
+  /** Optimistic PATCH of one field, with the toast kept at the UI layer. */
+  const saveField=useCallback(async(id:string,field:EmdEditableField,value:string|null,successMsg:string)=>{
+    try{
+      await dispatch(updateEmdField({id,field,value})).unwrap();
+      toast.success(successMsg);
+    }catch(e:unknown){
+      toast.error(typeof e==="string"?e:"Failed to update");
+    }
+  },[dispatch]);
+
+  const handleReasonChange=useCallback((id:string,v:string)=>{ void saveField(id,"reason",v||null,"Reason updated"); },[saveField]);
+  const handleStatusChange=useCallback((id:string,v:string)=>{ void saveField(id,"status",v||null,"Status updated"); },[saveField]);
+  const handleContactEmailSave=useCallback((id:string,next:string|null)=>{ void saveField(id,"contactEmailId",next,"Contact email updated"); },[saveField]);
+  const handleContactNoSave=useCallback((id:string,next:string|null)=>{ void saveField(id,"contactNo",next,"Contact no updated"); },[saveField]);
+  const handleRemarksSave=useCallback((id:string,next:string|null)=>{ void saveField(id,"remarks",next,"Remarks updated"); },[saveField]);
+  const handleTmNoSave=useCallback((id:string,next:string|null)=>{ void saveField(id,"tmNo",next,"TM No updated"); },[saveField]);
+  const handleDocketNoSave=useCallback((id:string,next:string|null)=>{ void saveField(id,"docketNo",next,"Docket No updated"); },[saveField]);
+  const handleBgNoSave=useCallback((id:string,next:string|null)=>{ void saveField(id,"bgNo",next,"BG No updated"); },[saveField]);
 
   const handleSendEmail=useCallback(async(row:EmdMergedRecord)=>{ if(!row.reason){ toast.error("Please select Tender Conclusion Reason before sending email"); return; } const bgRow: EmdDetailsBgRecord = { id: row.id, trantype: row.trantype, bankName: row.bankName, partyCode: row.partyCode, partyName: row.customerName, staffName: row.staffName, bgNo: row.bgNo, bgDate: row.bgDate, bgAmtLocal: row.bgAmtLocal, bgAmtFc: row.bgAmtFc, expiryDate: row.expiryDate, claimDate: row.claimDate, remark: null, status: row.status, remarks: row.remarks, contactNo: row.contactNo, contactEmailId: row.contactEmailId, address: row.address, tenderNo1: null, tenderNo: row.tenderNo, tenderNo2: null, match: row.match, bgMatch: row.bgMatch, statusPriceAssDone: row.statusPriceAssDone, tmNo: row.tmNo, docketNo: row.docketNo, lastEmailSent: row.lastEmailSent, emailDraft: row.emailDraft, lastEmailSentAt: row.lastEmailSentAt, reason: row.reason, createdAt: row.createdAt, updatedAt: row.updatedAt } as any; setDialogRow(bgRow); setDialogOpen(true); },[]);
   const handleViewDraft=useCallback((row:EmdMergedRecord)=>{ setDraftHtml(row.emailDraft??null); setDraftTitle(row.bgNo||row.tenderNo||row.customerName||row.id.slice(0,8)); setDraftOpen(true); },[]);
@@ -190,9 +185,9 @@ export default function EmdMergedPage(){
   const selectAllFilter=useCallback((acc:string,vals:string[])=>{ const all=[...vals,"(Blank)"]; setMultiSelectFilters(p=>({...p,[acc]:all})); setCurrentPage(1); },[]);
   useEffect(()=>{ if(!openDropdown) return; const h=(e:MouseEvent)=>{ const el=dropdownRefs.current[openDropdown]; if(el&&!el.contains(e.target as Node)) setOpenDropdown(null); }; document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h); },[openDropdown]);
 
-  const baseStageFiltered=useMemo(()=>{ let r:EmdMergedRecord[]=statusFiltered; if(globalSearch.trim()!==""){ const q=globalSearch.toLowerCase().trim(); r=r.filter(x=>COLS.some(c=>{ if(c.accessor==="action") return false; const v=(x as any)[c.accessor]; if(v==null) return false; return String(v).toLowerCase().includes(q);})); } return r; },[statusFiltered,globalSearch]);
+  const baseStageFiltered=useMemo(()=>{ let r:EmdMergedRecord[]=statusFiltered; if(deferredGlobalSearch.trim()!==""){ const q=deferredGlobalSearch.toLowerCase().trim(); r=r.filter(x=>COLS.some(c=>{ if(c.accessor==="action") return false; const v=(x as any)[c.accessor]; if(v==null) return false; return String(v).toLowerCase().includes(q);})); } return r; },[statusFiltered,deferredGlobalSearch]);
   type Pred={key:string;test:(r:EmdMergedRecord)=>boolean};
-  const columnPredicates=useMemo<Pred[]>(()=>{ const p:Pred[]=[]; for(const [acc,sel] of Object.entries(multiSelectFilters)){ if(sel.length===0) continue; p.push({key:acc,test:(r)=>{ const s=String((r as any)[acc]??""); if(!s.trim()) return sel.includes("(Blank)"); return sel.includes(s); }}); } for(const [acc,q] of Object.entries(columnSearchText)){ if(!q.trim()) continue; const qq=q.toLowerCase().trim(); p.push({key:acc,test:(r)=>String((r as any)[acc]??"").toLowerCase().includes(qq)}); } return p; },[multiSelectFilters,columnSearchText]);
+  const columnPredicates=useMemo<Pred[]>(()=>{ const p:Pred[]=[]; for(const [acc,sel] of Object.entries(multiSelectFilters)){ if(sel.length===0) continue; p.push({key:acc,test:(r)=>{ const s=String((r as any)[acc]??""); if(!s.trim()) return sel.includes("(Blank)"); return sel.includes(s); }}); } for(const [acc,q] of Object.entries(deferredColumnSearchText)){ if(!q.trim()) continue; const qq=q.toLowerCase().trim(); p.push({key:acc,test:(r)=>String((r as any)[acc]??"").toLowerCase().includes(qq)}); } return p; },[multiSelectFilters,deferredColumnSearchText]);
   const getFilteredRecordsExcept=useCallback((ex:string|null)=>{ if(columnPredicates.length===0) return baseStageFiltered; return baseStageFiltered.filter(r=>{ for(const pr of columnPredicates){ if(pr.key===ex) continue; if(!pr.test(r)) return false; } return true; }); },[baseStageFiltered,columnPredicates]);
   const uniqueValueCache=useMemo(()=>{ const c:Record<string,string[]>={}; if(!openDropdown||SKIP.has(openDropdown)) return c; const set=new Set<string>(); for(const r of getFilteredRecordsExcept(openDropdown)){ const v=String((r as any)[openDropdown]??""); if(v.trim()!=="") set.add(v); } c[openDropdown]=Array.from(set).sort((a,b)=>a.localeCompare(b)); return c; },[openDropdown,getFilteredRecordsExcept]);
   const processedRecords=useMemo(()=>{ let r=getFilteredRecordsExcept(null); if(sortColumn){ r=[...r].sort((a,b)=>{ const va=(a as any)[sortColumn!]; const vb=(b as any)[sortColumn!]; if(sortColumn==="bgAmtLocal"||sortColumn==="bgAmtFc"||sortColumn==="emdAmt"){ const na=parseAmt(va), nb=parseAmt(vb); return sortDirection==="asc"?na-nb:nb-na; } if(sortColumn==="bgDate"||sortColumn==="expiryDate"||sortColumn==="claimDate"||sortColumn==="issueDt"||sortColumn==="expectedRefundDateOrRefundedDate"||sortColumn==="lastEmailSentAt"){ const da=parseDate(va), db=parseDate(vb); if(da===db) return 0; return sortDirection==="asc"?da-db:db-da; } if(va==null&&vb==null) return 0; if(va==null) return sortDirection==="asc"?-1:1; if(vb==null) return sortDirection==="asc"?1:-1; return sortDirection==="asc"?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va)); }); } return r; },[getFilteredRecordsExcept,sortColumn,sortDirection]);
@@ -201,11 +196,15 @@ export default function EmdMergedPage(){
   const handleExportExcel=useCallback(()=>{ const exportData=processedRecords.map(rec=>{ const o:Record<string,string>={}; for(const col of COLS){ if(col.accessor==="action") continue; const raw=(rec as any)[col.accessor]; if(EMD_DATE_COLS.has(String(col.accessor))&&raw) o[col.header]=formatEmdDate(raw); else o[col.header]=col.accessor==="lastEmailSentAt"&&raw?formatDateTimeIST(raw as string):String(raw??""); } return o; }); const ws=XLSX.utils.json_to_sheet(exportData); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"EMD Merged"); XLSX.writeFile(wb,`EMD_Merged_${new Date().toISOString().slice(0,10)}.xlsx`); },[processedRecords]);
   const handleExportCSV=useCallback(()=>{ const cols=COLS.filter(c=>c.accessor!=="action"); const headers=cols.map(c=>c.header).join(","); const rows=processedRecords.map(rec=>cols.map(col=>{ const raw=(rec as any)[col.accessor]; let v=""; if(EMD_DATE_COLS.has(String(col.accessor))&&raw) v=formatEmdDate(raw); else v=col.accessor==="lastEmailSentAt"&&raw?formatDateTimeIST(raw as string):String(raw??""); if(v.includes(",")||v.includes('"')||v.includes("\n")) v=`"${v.replace(/"/g,'""')}"`; return v; }).join(",")); const csv=[headers,...rows].join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`EMD_Merged_${new Date().toISOString().split("T")[0]}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },[processedRecords]);
 
-  if(loading) return <div style={{display:"flex",flex:1,alignItems:"center",justifyContent:"center",minHeight:"500px",color:"#0a2540",fontWeight:700,flexDirection:"column",gap:"15px"}}><div style={{width:"40px",height:"40px",border:"4px solid #e1e6eb",borderTopColor:"#1a73e8",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}></div><span>Loading EMD...</span><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>;
-  if(error) return <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"400px",gap:"12px"}}><p style={{color:"#c5221f",fontWeight:600}}>Failed to load EMD: {error.message}</p><button onClick={refresh} style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"8px 16px",background:"#0a2540",color:"white",borderRadius:"6px",fontWeight:600}}><RefreshCw size={14}/> Retry</button></div>;
+  // Only block the page when there is nothing cached to show; a refresh keeps
+  // the existing rows on screen behind the RefreshingBar instead of unmounting
+  // the whole table into a spinner.
+  if(loading && data.length===0) return <DataLoadingState label="Loading EMD..." />;
+  if(error && data.length===0) return <DataErrorState message={error} onRetry={refresh} label="Failed to load EMD" />;
 
   return (
-    <div className="supply-layout-container" style={{height:"calc(100vh - 42px)"}}>
+    <div className="supply-layout-container" style={{height:"calc(100vh - 42px)",position:"relative"}}>
+      <RefreshingBar active={refreshing} />
       <aside className="supply-sidebar">
         <div className="supply-sidebar-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span>EMD Merged</span><span style={{fontSize:"10px",background:"rgba(255,255,255,0.12)",padding:"2px 6px",borderRadius:"10px"}}>{data.length} rows</span></div>
         <div className="supply-sidebar-body">
@@ -237,7 +236,7 @@ export default function EmdMergedPage(){
                   </th>
                 ))}</tr></thead>
                 <tbody>
-                  {paginatedRecords.length===0? <tr><td colSpan={COLS.length} style={{textAlign:"center",padding:"40px",color:"rgba(0,0,0,0.4)"}}>No matching records found.</td></tr> : paginatedRecords.map(row=>(
+                  {paginatedRecords.length===0? <tr><td colSpan={COLS.length}><DataEmptyState /></td></tr> : paginatedRecords.map(row=>(
                     <tr key={String(row.id)} className="tender-row">
                       {COLS.map(col=>{
                         if(col.accessor==="action"){
@@ -245,46 +244,75 @@ export default function EmdMergedPage(){
                           return <td key={String(col.accessor)} className="col-center" style={{background:"#fff"}}><button onClick={()=>handleSendEmail(row)} disabled={!hasReason||isSending} title={!hasReason?"Select Reason first":"Send email"} style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"6px 12px",background:hasReason?"#0a2540":"#cbd5e1",color:"white",borderRadius:"6px",fontWeight:600,fontSize:"12px",border:"none",cursor:hasReason?"pointer":"not-allowed",opacity:isSending?0.7:1}}>{isSending?<Loader2 size={14} className="animate-spin"/>:<Mail size={14}/>} {isSending?"Sending...":"Send Email"}</button></td>;
                         }
                         if(col.accessor==="reason"){
-                          const isUpdating=updatingId===row.id;
+                          const isUpdating=!!updating[`${row.id}:reason`];
                           return <td key={String(col.accessor)}><select value={row.reason??""} onChange={e=>handleReasonChange(row.id,e.target.value)} disabled={isUpdating} onClick={e=>e.stopPropagation()} style={{width:"100%",padding:"6px 8px",borderRadius:"6px",border:"1px solid #dadce0",fontSize:"12px",background:isUpdating?"#f1f3f4":"white"}}><option value="">Select reason...</option>{TENDER_REASON_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}</select></td>;
                         }
                         if(col.accessor==="contactEmailId"){
-                          const isUpdating=updatingContactEmailId===row.id; const isEditing=editingContactEmailId===row.id;
-                          if(isEditing) return <td key={String(col.accessor)}><div className="flex items-start gap-1" onClick={e=>e.stopPropagation()}><textarea autoFocus value={draftContactEmail} onChange={e=>setDraftContactEmail(e.target.value)} placeholder="email1@company.com, email2@company.com" rows={2} style={{flex:1,padding:"6px 8px",borderRadius:"6px",border:`1px solid ${draftContactEmail&&!isValidEmails(draftContactEmail)?"#ef4444":"#dadce0"}`,fontSize:"12px",resize:"vertical",minHeight:"56px"}}/><div className="flex flex-col gap-1"><button onClick={()=>handleContactEmailSave(row.id)} disabled={isUpdating||(draftContactEmail.trim()!==""&&!isValidEmails(draftContactEmail))} style={{padding:"6px",borderRadius:"4px",background:"#0a2540",color:"white",border:"none"}}><Check size={12}/></button><button onClick={()=>{ setEditingContactEmailId(null); setDraftContactEmail(""); }} disabled={isUpdating} style={{padding:"6px",borderRadius:"4px",background:"#e5e7eb",border:"none"}}><X size={12}/></button></div></div>{draftContactEmail&&!isValidEmails(draftContactEmail)&&<div style={{fontSize:"10px",color:"#dc2626",marginTop:"4px"}}>Invalid: {invalidEmails(draftContactEmail).join(", ")}</div>}</td>;
-                          const display=row.contactEmailId?String(row.contactEmailId):""; const isInvalid=display!==""&&!isValidEmails(display);
-                          return <td key={String(col.accessor)}><div onClick={()=>{ setEditingContactEmailId(row.id); setDraftContactEmail(display); }} title={display||"Click to add (comma separated)"} style={{padding:"6px 8px",borderRadius:"6px",border:isInvalid?"1px solid #ef4444":"1px solid transparent",background:isUpdating?"#f1f3f4":isInvalid?"#fef2f2":"transparent",cursor:"pointer",fontSize:"12px",minHeight:"28px",display:"flex",alignItems:"center"}}>{isUpdating?<Loader2 size={12} className="animate-spin mr-1"/>:null}{display?<span style={{color:isInvalid?"#dc2626":undefined,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>:<span style={{color:"#9ca3af"}}>— Add email</span>}</div></td>;
+                          return <td key={String(col.accessor)}><EmdEditableCell
+                            value={row.contactEmailId?String(row.contactEmailId):""}
+                            updating={!!updating[`${row.id}:contactEmailId`]}
+                            placeholder="email1@company.com, email2@company.com"
+                            emptyLabel="— Add email"
+                            emptyTitle="Click to add (comma separated)"
+                            validate={invalidEmails}
+                            onSave={next=>handleContactEmailSave(row.id,next)}
+                          /></td>;
                         }
                         if(col.accessor==="contactNo"){
-                          const isUpdating=updatingContactNoId===row.id; const isEditing=editingContactNoId===row.id;
-                          if(isEditing) return <td key={String(col.accessor)}><div className="flex items-start gap-1" onClick={e=>e.stopPropagation()}><textarea autoFocus value={draftContactNo} onChange={e=>setDraftContactNo(e.target.value)} placeholder="e.g. 9876543210, 9123456789" rows={2} style={{flex:1,padding:"6px 8px",borderRadius:"6px",border:"1px solid #dadce0",fontSize:"12px",resize:"vertical",minHeight:"56px"}}/><div className="flex flex-col gap-1"><button onClick={()=>handleContactNoSave(row.id)} disabled={isUpdating} style={{padding:"6px",borderRadius:"4px",background:"#0a2540",color:"white",border:"none"}}><Check size={12}/></button><button onClick={()=>{ setEditingContactNoId(null); setDraftContactNo(""); }} disabled={isUpdating} style={{padding:"6px",borderRadius:"4px",background:"#e5e7eb",border:"none"}}><X size={12}/></button></div></div></td>;
-                          const display=row.contactNo?String(row.contactNo):"";
-                          return <td key={String(col.accessor)}><div onClick={()=>{ setEditingContactNoId(row.id); setDraftContactNo(display); }} title={display||"Click to add (comma separated)"} style={{padding:"6px 8px",borderRadius:"6px",border:"1px solid transparent",background:isUpdating?"#f1f3f4":"transparent",cursor:"pointer",fontSize:"12px",minHeight:"28px",display:"flex",alignItems:"center"}}>{isUpdating?<Loader2 size={12} className="animate-spin mr-1"/>:null}{display?<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>:<span style={{color:"#9ca3af"}}>— Add no</span>}</div></td>;
+                          return <td key={String(col.accessor)}><EmdEditableCell
+                            value={row.contactNo?String(row.contactNo):""}
+                            updating={!!updating[`${row.id}:contactNo`]}
+                            placeholder="e.g. 9876543210, 9123456789"
+                            emptyLabel="— Add no"
+                            emptyTitle="Click to add (comma separated)"
+                            onSave={next=>handleContactNoSave(row.id,next)}
+                          /></td>;
                         }
                         if(col.accessor==="status"){
-                          const isUpdating=updatingStatusId===row.id;
+                          const isUpdating=!!updating[`${row.id}:status`];
                           const val=(row.status??"").trim().toUpperCase();
                           const selectVal=EMD_STATUS_OPTIONS.includes(val as any) ? val : (row.status??"");
                           return <td key={String(col.accessor)}><select value={selectVal} onChange={e=>handleStatusChange(row.id,e.target.value)} disabled={isUpdating} onClick={e=>e.stopPropagation()} style={{width:"100%",padding:"6px 8px",borderRadius:"6px",border:"1px solid #dadce0",fontSize:"12px",background:isUpdating?"#f1f3f4":"white"}}><option value="">Select status...</option>{EMD_STATUS_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}{row.status && !(EMD_STATUS_OPTIONS as readonly string[]).includes((row.status as string).trim().toUpperCase()) && <option value={row.status}>{row.status}</option>}</select></td>;
                         }
                         if(col.accessor==="remarks"){
-                          const isUpdating=updatingRemarksId===row.id; const isEditing=editingRemarksId===row.id;
-                          if(isEditing) return <td key={String(col.accessor)}><div className="flex items-start gap-1" onClick={e=>e.stopPropagation()}><textarea autoFocus value={draftRemarks} onChange={e=>setDraftRemarks(e.target.value)} placeholder="Remarks" rows={2} style={{flex:1,padding:"6px 8px",borderRadius:"6px",border:"1px solid #dadce0",fontSize:"12px",resize:"vertical",minHeight:"56px"}}/><div className="flex flex-col gap-1"><button onClick={()=>handleRemarksSave(row.id)} disabled={isUpdating} style={{padding:"6px",borderRadius:"4px",background:"#0a2540",color:"white",border:"none"}}><Check size={12}/></button><button onClick={()=>{ setEditingRemarksId(null); setDraftRemarks(""); }} disabled={isUpdating} style={{padding:"6px",borderRadius:"4px",background:"#e5e7eb",border:"none"}}><X size={12}/></button></div></div></td>;
-                          const display=row.remarks?String(row.remarks):""; return <td key={String(col.accessor)}><div onClick={()=>{ setEditingRemarksId(row.id); setDraftRemarks(display); }} title={display||"Click to edit"} style={{padding:"6px 8px",borderRadius:"6px",border:"1px solid transparent",background:isUpdating?"#f1f3f4":"transparent",cursor:"pointer",fontSize:"12px",minHeight:"28px",display:"flex",alignItems:"center"}}>{isUpdating?<Loader2 size={12} className="animate-spin mr-1"/>:null}{display?<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>:<span style={{color:"#9ca3af"}}>— Add</span>}</div></td>;
+                          return <td key={String(col.accessor)}><EmdEditableCell
+                            value={row.remarks?String(row.remarks):""}
+                            updating={!!updating[`${row.id}:remarks`]}
+                            placeholder="Remarks"
+                            emptyLabel="— Add"
+                            emptyTitle="Click to edit"
+                            onSave={next=>handleRemarksSave(row.id,next)}
+                          /></td>;
                         }
                         if(col.accessor==="tmNo"){
-                          const isUpdating=updatingTmNoId===row.id; const isEditing=editingTmNoId===row.id;
-                          if(isEditing) return <td key={String(col.accessor)}><div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}><input autoFocus value={draftTmNo} onChange={e=>setDraftTmNo(e.target.value)} placeholder="TM No" style={{flex:1,padding:"6px 8px",borderRadius:"6px",border:"1px solid #dadce0",fontSize:"12px"}}/><button onClick={()=>handleTmNoSave(row.id)} disabled={isUpdating} style={{padding:"4px",borderRadius:"4px",background:"#0a2540",color:"white",border:"none"}}><Check size={12}/></button><button onClick={()=>{ setEditingTmNoId(null); setDraftTmNo(""); }} disabled={isUpdating} style={{padding:"4px",borderRadius:"4px",background:"#e5e7eb",border:"none"}}><X size={12}/></button></div></td>;
-                          const display=row.tmNo?String(row.tmNo):""; return <td key={String(col.accessor)}><div onClick={()=>{ setEditingTmNoId(row.id); setDraftTmNo(display); }} title={display||"Click to edit"} style={{padding:"6px 8px",borderRadius:"6px",border:"1px solid transparent",background:isUpdating?"#f1f3f4":"transparent",cursor:"pointer",fontSize:"12px",minHeight:"28px",display:"flex",alignItems:"center"}}>{isUpdating?<Loader2 size={12} className="animate-spin mr-1"/>:null}{display?<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>:<span style={{color:"#9ca3af"}}>— Add</span>}</div></td>;
+                          return <td key={String(col.accessor)}><EmdEditableCell
+                            value={row.tmNo?String(row.tmNo):""}
+                            updating={!!updating[`${row.id}:tmNo`]}
+                            placeholder="TM No"
+                            emptyLabel="— Add"
+                            emptyTitle="Click to edit"
+                            onSave={next=>handleTmNoSave(row.id,next)}
+                          /></td>;
                         }
                         if(col.accessor==="docketNo"){
-                          const isUpdating=updatingDocketNoId===row.id; const isEditing=editingDocketNoId===row.id;
-                          if(isEditing) return <td key={String(col.accessor)}><div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}><input autoFocus value={draftDocketNo} onChange={e=>setDraftDocketNo(e.target.value)} placeholder="Docket No" style={{flex:1,padding:"6px 8px",borderRadius:"6px",border:"1px solid #dadce0",fontSize:"12px"}}/><button onClick={()=>handleDocketNoSave(row.id)} disabled={isUpdating} style={{padding:"4px",borderRadius:"4px",background:"#0a2540",color:"white",border:"none"}}><Check size={12}/></button><button onClick={()=>{ setEditingDocketNoId(null); setDraftDocketNo(""); }} disabled={isUpdating} style={{padding:"4px",borderRadius:"4px",background:"#e5e7eb",border:"none"}}><X size={12}/></button></div></td>;
-                          const display=row.docketNo?String(row.docketNo):""; return <td key={String(col.accessor)}><div onClick={()=>{ setEditingDocketNoId(row.id); setDraftDocketNo(display); }} title={display||"Click to edit"} style={{padding:"6px 8px",borderRadius:"6px",border:"1px solid transparent",background:isUpdating?"#f1f3f4":"transparent",cursor:"pointer",fontSize:"12px",minHeight:"28px",display:"flex",alignItems:"center"}}>{isUpdating?<Loader2 size={12} className="animate-spin mr-1"/>:null}{display?<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>:<span style={{color:"#9ca3af"}}>— Add</span>}</div></td>;
+                          return <td key={String(col.accessor)}><EmdEditableCell
+                            value={row.docketNo?String(row.docketNo):""}
+                            updating={!!updating[`${row.id}:docketNo`]}
+                            placeholder="Docket No"
+                            emptyLabel="— Add"
+                            emptyTitle="Click to edit"
+                            onSave={next=>handleDocketNoSave(row.id,next)}
+                          /></td>;
                         }
                         if(col.accessor==="bgNo"){
-                          const isUpdating=updatingBgNoId===row.id; const isEditing=editingBgNoId===row.id;
-                          if(isEditing) return <td key={String(col.accessor)}><div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}><input autoFocus value={draftBgNo} onChange={e=>setDraftBgNo(e.target.value)} placeholder="BG No" style={{flex:1,padding:"6px 8px",borderRadius:"6px",border:"1px solid #dadce0",fontSize:"12px"}}/><button onClick={()=>handleBgNoSave(row.id)} disabled={isUpdating} style={{padding:"4px",borderRadius:"4px",background:"#0a2540",color:"white",border:"none"}}><Check size={12}/></button><button onClick={()=>{ setEditingBgNoId(null); setDraftBgNo(""); }} disabled={isUpdating} style={{padding:"4px",borderRadius:"4px",background:"#e5e7eb",border:"none"}}><X size={12}/></button></div></td>;
-                          const display=row.bgNo?String(row.bgNo):""; return <td key={String(col.accessor)}><div onClick={()=>{ setEditingBgNoId(row.id); setDraftBgNo(display); }} title={display||"Click to edit"} style={{padding:"6px 8px",borderRadius:"6px",border:"1px solid transparent",background:isUpdating?"#f1f3f4":"transparent",cursor:"pointer",fontSize:"12px",minHeight:"28px",display:"flex",alignItems:"center"}}>{isUpdating?<Loader2 size={12} className="animate-spin mr-1"/>:null}{display?<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>:<span style={{color:"#9ca3af"}}>— Add</span>}</div></td>;
+                          return <td key={String(col.accessor)}><EmdEditableCell
+                            value={row.bgNo?String(row.bgNo):""}
+                            updating={!!updating[`${row.id}:bgNo`]}
+                            placeholder="BG No"
+                            emptyLabel="— Add"
+                            emptyTitle="Click to edit"
+                            onSave={next=>handleBgNoSave(row.id,next)}
+                          /></td>;
                         }
                         if(col.accessor==="emailDraft"){
                           const hasDraft=Boolean((row as any).emailDraft&&String((row as any).emailDraft).trim()!=="");
