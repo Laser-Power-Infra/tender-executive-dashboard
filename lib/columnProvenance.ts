@@ -100,6 +100,22 @@ const postParticipationExcludeAccessors = new Set<string>([
   "reportings", "website", "raQualificationRule", "startupExemption",
   "minimumAverageAnnualTurnover", "yearsOfPastExperience", "ePbgDurationMonths",
   "beneficiaryBankDetails",
+  // new verbatim columns — PRE only per requirement (keep all prior unchanged)
+  "documentFees",
+  "contractPeriod",
+  "bidOfferValidity",
+  "bidValidityExpired",
+  "location",
+  "documentRequiredFromSeller",
+  "pastPerformance",
+  "typeOfBid",
+  "technicalClarificationTimeAllowed",
+  "mediationClause",
+  "arbitrationClause",
+  "oemAverageTurnover",
+  "ePbgPercentage",
+  "msmeExemption",
+  "msePurchasePreference",
 ]);
 
 const postParticipationHiddenAccessors = new Set<string>([
