@@ -5,6 +5,7 @@ import uploadReducer from "@/lib/slices/uploadSlice";
 import filtersReducer from "@/lib/slices/filtersSlice";
 import utilityReducer from "@/lib/slices/utilitySlice";
 import credentialsReducer from "@/lib/slices/credentialsSlice";
+import emdReducer from "@/lib/slices/emdSlice";
 
 export const makeStore = () =>
   configureStore({
@@ -15,6 +16,7 @@ export const makeStore = () =>
       filters: filtersReducer,
       utility: utilityReducer,
       credentials: credentialsReducer,
+      emd: emdReducer,
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
