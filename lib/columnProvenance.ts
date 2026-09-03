@@ -67,6 +67,21 @@ const FULL_COLUMNS: string[] = [
   "minimumAverageAnnualTurnover",
   "yearsOfPastExperience",
   "ePbgDurationMonths",
+  "documentFees",
+  "contractPeriod",
+  "bidOfferValidity",
+  "bidValidityExpired",
+  "location",
+  "documentRequiredFromSeller",
+  "pastPerformance",
+  "typeOfBid",
+  "technicalClarificationTimeAllowed",
+  "mediationClause",
+  "arbitrationClause",
+  "oemAverageTurnover",
+  "ePbgPercentage",
+  "msmeExemption",
+  "msePurchasePreference",
 ];
 
 const postParticipationAccessors = new Set<string>([

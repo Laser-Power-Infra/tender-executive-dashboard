@@ -60,7 +60,7 @@ export interface EpcTenderRecord {
   emdValidity: Date | null;
   loiPoNoAndDate: string | null;
   remarks: string | null;
-  bidValidityExpired: boolean;
+  bidValidityExpired: boolean | null;
   diffPercentFromL1: number | null;
   diffPercentFromL2: number | null;
   reason: string | null;
@@ -109,6 +109,21 @@ export interface EpcTenderRecord {
   minimumAverageAnnualTurnover?: string | null;
   yearsOfPastExperience?: string | null;
   ePbgDurationMonths?: string | null;
+  // verbatim tender_merged fields — each separate column per requirement
+  documentFees?: string | null;
+  contractPeriod?: string | null;
+  bidOfferValidity?: string | null;
+  location?: string | null;
+  documentRequiredFromSeller?: string | null;
+  pastPerformance?: string | null;
+  typeOfBid?: string | null;
+  technicalClarificationTimeAllowed?: string | null;
+  mediationClause?: string | null;
+  arbitrationClause?: string | null;
+  oemAverageTurnover?: string | null;
+  ePbgPercentage?: string | null;
+  msmeExemption?: string | null;
+  msePurchasePreference?: string | null;
   emd?: string | null;
   bgDate?: string | null;
   bgExpiryDate?: string | null;
