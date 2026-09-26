@@ -10,6 +10,7 @@ import { AttachmentModal } from "./AttachmentModal";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import type { AppDispatch } from "@/lib/store";
 import { updateTenderDocketNo, updateTenderBgNoUtrNo, updateTenderRemarks, updateTenderBeneficiaryBankDetails, updateTenderReason, updateTenderLoiPoNoAndDate, updateTenderCompetitors, updateTenderCell, updateTenderStatusAndAction, updateTenderMergedField, updateWebsiteMapping, uploadTenderDocument, triggerReverseAuctionWebhook } from "@/lib/slices/tendersSlice";
+import { EPC_BOOLEAN_COLUMNS, EPC_UNIQUE_OPTION_SKIP } from "@/lib/epc-column-map";
 import { toast } from "sonner";
 import {
   Search,
@@ -80,14 +81,10 @@ const formatMoney = (v: unknown): string => {
 
 // Static filter metadata. Hoisted to module scope so it keeps a stable identity
 // across renders and can be used safely in useMemo dependency arrays.
-const BOOLEAN_COLUMNS = new Set(["participated", "reverseAuctionApplicable"]);
-const SKIP_FILTER_COLUMNS = new Set([
-  "lastDateOfSubmission", "attachmentUrl", "files", "boqChart",
-  "rawMaterials",
-  "proposedErpItemName", "remarks", "tenderUpdateStatus", "nextAction",
-  "itemCategory", "publishedDate", "assignedDate", "itemSchedules",
-  "reverseAuctionStartDate",
-]);
+// Shared with the SQL layer so a column cannot be filterable in one and not
+// the other. See lib/epc-column-map.ts.
+const BOOLEAN_COLUMNS = EPC_BOOLEAN_COLUMNS;
+const SKIP_FILTER_COLUMNS = EPC_UNIQUE_OPTION_SKIP;
 
 const TENDER_UPDATE_STATUS_FILTER_OPTIONS: Array<[string, string]> = [
   ["OPEN", "Open"],
@@ -769,8 +766,58 @@ const RaDateInput: React.FC<{
   );
 };
 
+/**
+ * Every filter this table owns, as the page needs to see it.
+ *
+ * The table keeps writing to its own state; this is the mirror it hands up so
+ * the page can translate it into a TenderQuery. Same values, one direction.
+ */
+export interface EpcTableFilters {
+  multiSelectFilters: Record<string, string[]>;
+  columnSearchText: Record<string, string>;
+  startDate: string;
+  endDate: string;
+  datePreset: "" | "thisWeek" | "thisMonth" | "thisYear";
+  raStartFrom: string;
+  raStartTo: string;
+  raEndFrom: string;
+  raEndTo: string;
+  remarksTextFilter: string;
+  remarksDropdownFilter: string;
+  proposedErpItemTextFilter: string;
+  proposedErpItemCategoryFilter: string;
+}
+
+/**
+ * Opt-in server mode: filtering, sorting, paging and the dropdown values all
+ * come from Postgres. Omit the prop and the table behaves exactly as before,
+ * which is what variant="party" and every in-memory caller still rely on.
+ */
+export interface EpcServerMode {
+  /** Docket groups matching the filters, not rows - the page unit is a group. */
+  total: number;
+  page: number;
+  pageSize: number;
+  sort: { column: string; direction: "asc" | "desc" } | null;
+  loading: boolean;
+  associations: { id: number; name: string; email: string }[];
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+  onSortChange: (
+    sort: { column: string; direction: "asc" | "desc" } | null,
+  ) => void;
+  onFiltersChange: (filters: EpcTableFilters) => void;
+  /** Cached values for a column; null until the facet resolves. */
+  getFacetOptions: (accessor: string) => string[] | null;
+  /** Called when a dropdown opens, so values are fetched on demand. */
+  requestFacet: (accessor: string) => void;
+  /** Every record the filters match, for the CSV export. */
+  getAllFilteredRows: () => Promise<EpcTenderRecord[]>;
+}
+
 interface TenderTableProps {
   records: EpcTenderRecord[];
+  server?: EpcServerMode;
   priceBasisFilter?: string;
   setPriceBasisFilter?: (val: string) => void;
   aluminiumMin?: string;
@@ -812,6 +859,7 @@ interface ColumnDef {
 
 export const TenderTable: React.FC<TenderTableProps> = ({
   records,
+  server,
   priceBasisFilter,
   setPriceBasisFilter,
   aluminiumMin,
@@ -1712,11 +1760,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       )
         .unwrap()
         .then(() => {
-          const rowIndex = tenderData?.rows.findIndex(
+          const streamedIndex = tenderData?.rows.findIndex(
             (r) => String(r.id) === String(params.tenderMergedId),
           ) ?? -1;
-          const oldValue = rowIndex >= 0
-            ? String(tenderData!.rows[rowIndex]?.catalogueDone ?? "")
+          const rowIndex = streamedIndex >= 0 ? streamedIndex : params.tenderMergedId;
+          const oldValue = streamedIndex >= 0
+            ? String(tenderData!.rows[streamedIndex]?.catalogueDone ?? "")
             : "";
           dispatch(
             updateTenderCell({
@@ -1817,14 +1866,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       const reduxRow = tenderData?.rows.find(
         (r) => String(r.id) === String(record.id),
       );
-      const assignedIds = (reduxRow?.assignedTo ?? "")
+      const assignedIds = String(reduxRow?.assignedTo ?? record.assignedTo ?? "")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean)
         .map(Number);
-      const firstAssoc = tenderData?.associations.find((a) =>
-        assignedIds.includes(a.id),
-      );
+      const associations = server?.associations ?? tenderData?.associations ?? [];
+      const firstAssoc = associations.find((a) => assignedIds.includes(a.id));
       return {
         tenderMergedId: Number(record.id ?? 0),
         organization: record.nameOfTheClient ?? null,
@@ -1840,7 +1888,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
         associateEmail: firstAssoc?.email ?? null,
       };
     },
-    [tenderData],
+    [tenderData, server],
   );
 
   const handleUpdate = async (
@@ -1931,10 +1979,18 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   };
 
   const [globalSearch, setGlobalSearch] = useState<string>("");
-  const [sortColumn, setSortColumn] = useState<
+  const [localSortColumn, setLocalSortColumn] = useState<
     keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument" | "itemSchedules" | null
   >("lastDateOfSubmission");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [localSortDirection, setLocalSortDirection] = useState<"asc" | "desc">("desc");
+  const sortColumn = (server
+    ? (server.sort?.column ?? null)
+    : localSortColumn) as typeof localSortColumn;
+  const sortDirection = server
+    ? (server.sort?.direction ?? "desc")
+    : localSortDirection;
+  const setSortColumn = setLocalSortColumn;
+  const setSortDirection = setLocalSortDirection;
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>(defaultEndDate ?? "");
   const [datePreset, setDatePreset] = useState<
@@ -1945,8 +2001,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const [raEndFrom, setRaEndFrom] = useState<string>("");
   const [raEndTo, setRaEndTo] = useState<string>("");
 
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [rowsPerPage, setRowsPerPage] = useState<number>(50);
+  const [localPage, setLocalPage] = useState<number>(1);
+  const [localRowsPerPage, setLocalRowsPerPage] = useState<number>(50);
+
+  // In server mode the store owns the page and the sort, so the table reads
+  // them back instead of keeping a second copy that could drift.
+  const currentPage = server ? server.page : localPage;
+  const rowsPerPage = server ? server.pageSize : localRowsPerPage;
+  const setCurrentPage = server ? server.onPageChange : setLocalPage;
+  const setRowsPerPage = server ? server.onPageSizeChange : setLocalRowsPerPage;
 
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] =
@@ -1966,6 +2029,60 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     useState<string>("");
   const [proposedErpItemCategoryFilter, setProposedErpItemCategoryFilter] =
     useState<string>("All");
+
+  // In server mode the table still owns its filter widgets, but the page needs
+  // the values to build the SQL query - so they are mirrored upward on change.
+  const onFiltersChange = server?.onFiltersChange;
+  useEffect(() => {
+    if (!onFiltersChange) return;
+    onFiltersChange({
+      multiSelectFilters,
+      columnSearchText,
+      startDate,
+      endDate,
+      datePreset,
+      raStartFrom,
+      raStartTo,
+      raEndFrom,
+      raEndTo,
+      remarksTextFilter,
+      remarksDropdownFilter,
+      proposedErpItemTextFilter,
+      proposedErpItemCategoryFilter,
+    });
+  }, [
+    onFiltersChange,
+    multiSelectFilters,
+    columnSearchText,
+    startDate,
+    endDate,
+    datePreset,
+    raStartFrom,
+    raStartTo,
+    raEndFrom,
+    raEndTo,
+    remarksTextFilter,
+    remarksDropdownFilter,
+    proposedErpItemTextFilter,
+    proposedErpItemCategoryFilter,
+  ]);
+
+  /** Opening a dropdown is what triggers the facet fetch in server mode. */
+  const toggleDropdown = (accessor: string) => {
+    const next = openDropdown === accessor ? null : accessor;
+    setOpenDropdown(next);
+    if (next && server) server.requestFacet(next);
+  };
+
+  // Checking a value refetches the page, which can make the open dropdown's
+  // cached options stale. Ask again while it is open rather than rendering an
+  // empty list; the thunk de-dupes, so this settles after one request.
+  const serverFacetMissing =
+    !!server && !!openDropdown && server.getFacetOptions(openDropdown) === null;
+  useEffect(() => {
+    if (!server || !openDropdown || !serverFacetMissing) return;
+    server.requestFacet(openDropdown);
+  }, [server, openDropdown, serverFacetMissing]);
 
   const toggleFilter = (accessor: string, value: string) => {
     setMultiSelectFilters((prev) => {
@@ -2209,7 +2326,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   // unconditional `[...records]` copy it used to open with.
   // ---------------------------------------------------------------------------
 
+  // Server mode: the rows in `records` are already the filtered, sorted page,
+  // so every in-memory stage below is skipped rather than re-run on 50 rows.
   const baseStageFiltered = useMemo(() => {
+    if (server) return records;
     let result: EpcTenderRecord[] = records;
 
     if (globalSearch.trim() !== "") {
@@ -2276,12 +2396,14 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     raStartTo,
     raEndFrom,
     raEndTo,
+    server,
   ]);
 
   type ColumnPredicate = { key: string; test: (r: EpcTenderRecord) => boolean };
 
   const columnPredicates = useMemo<ColumnPredicate[]>(() => {
     const preds: ColumnPredicate[] = [];
+    if (server) return preds;
 
     for (const [accessor, selected] of Object.entries(multiSelectFilters)) {
       if (selected.length === 0) continue;
@@ -2348,6 +2470,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     remarksDropdownFilter,
     proposedErpItemCategoryFilter,
     proposedErpItemTextFilter,
+    server,
   ]);
 
   const getFilteredRecordsExcept = useCallback(
@@ -2376,6 +2499,13 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const uniqueValueCache = useMemo(() => {
     const cache: Record<string, string[]> = {};
     if (!openDropdown || SKIP_FILTER_COLUMNS.has(openDropdown)) return cache;
+    if (server) {
+      // null means the facet has not resolved yet; an empty list would read as
+      // "this column has no values" and hide every option.
+      const facet = server.getFacetOptions(openDropdown);
+      if (facet) cache[openDropdown] = facet;
+      return cache;
+    }
     const values = new Set<string>();
     for (const r of getFilteredRecordsExcept(openDropdown)) {
       const v = String(r[openDropdown as keyof EpcTenderRecord] ?? "");
@@ -2383,9 +2513,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     }
     cache[openDropdown] = Array.from(values).sort();
     return cache;
-  }, [openDropdown, getFilteredRecordsExcept]);
+  }, [openDropdown, getFilteredRecordsExcept, server]);
 
   const tenderStatusOptions = useMemo(() => {
+    // The static list is the authority in server mode: there is no dataset-wide
+    // scan to prune it with, and the column defaults to OPEN when empty.
+    if (server) return TENDER_UPDATE_STATUS_FILTER_OPTIONS;
     const codes = new Set<string>();
     for (const r of getFilteredRecordsExcept("tenderUpdateStatus")) {
       if (r.tenderUpdateStatus) codes.add(String(r.tenderUpdateStatus));
@@ -2393,17 +2526,22 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     return TENDER_UPDATE_STATUS_FILTER_OPTIONS.filter(([code]) =>
       codes.has(code),
     );
-  }, [getFilteredRecordsExcept]);
+  }, [getFilteredRecordsExcept, server]);
 
   const nextActionOptions = useMemo(() => {
+    if (server) return NEXT_ACTION_FILTER_OPTIONS;
     const codes = new Set<string>();
     for (const r of getFilteredRecordsExcept("nextAction")) {
       if (r.nextAction) codes.add(String(r.nextAction));
     }
     return NEXT_ACTION_FILTER_OPTIONS.filter(([code]) => codes.has(code));
-  }, [getFilteredRecordsExcept]);
+  }, [getFilteredRecordsExcept, server]);
 
   const uniqueRemarks = useMemo(() => {
+    // ponytail: the client kept only remarks seen more than once. The facet
+    // returns every distinct value; add a HAVING count(*) > 1 facet variant if
+    // the list ever gets unwieldy.
+    if (server) return server.getFacetOptions("remarks") ?? [];
     const counts: Record<string, number> = {};
     for (const r of getFilteredRecordsExcept("remarks")) {
       const val = r.remarks ? r.remarks.trim() : "";
@@ -2412,7 +2550,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     return Object.keys(counts)
       .filter((key) => counts[key] > 1)
       .sort();
-  }, [getFilteredRecordsExcept]);
+  }, [getFilteredRecordsExcept, server]);
 
   const handleOpenAttachmentModal = (files: any[]) => {
     setSelectedFiles(files);
@@ -2487,6 +2625,12 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleSort = (
     column: keyof EpcTenderRecord | "rawMaterials" | "files" | "boqChart" | "merged_office_consignees" | "tenderDocument" | "itemSchedules",
   ) => {
+    if (server) {
+      const nextDirection =
+        sortColumn === column && sortDirection === "desc" ? "asc" : "desc";
+      server.onSortChange({ column: String(column), direction: nextDirection });
+      return;
+    }
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
@@ -2497,6 +2641,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   };
 
   const handleClearSort = () => {
+    if (server) {
+      server.onSortChange(null);
+      return;
+    }
     setSortColumn(null);
     setSortDirection("desc");
     setCurrentPage(1);
@@ -2504,6 +2652,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
 
   // 5. Processing Data (Filtering & Sorting)
   const processedRecords = useMemo(() => {
+    // Server mode: Postgres already filtered and sorted this page.
+    if (server) return records;
     // Start from the prop; every .filter() below already returns a fresh array.
     // A copy is only needed if nothing filtered, since the sort below is in-place.
     let result: EpcTenderRecord[] = records;
@@ -2773,28 +2923,33 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   }, [processedRecords]);
 
   // 7. Pagination Calculations (by groups)
-  const totalRecords = processedGroups.length;
+  // In server mode the count is DISTINCT docket over the whole filtered set,
+  // which is the same unit this page slices by.
+  const totalRecords = server ? server.total : processedGroups.length;
   const totalPages = Math.ceil(totalRecords / rowsPerPage) || 1;
 
   // Adjust current page if out of bounds
   const activePage = Math.min(currentPage, totalPages);
 
   const paginatedGroups = useMemo(() => {
+    // The server already sent exactly this page's groups.
+    if (server) return processedGroups;
     const startIndex = (activePage - 1) * rowsPerPage;
     return processedGroups.slice(startIndex, startIndex + rowsPerPage);
-  }, [processedGroups, activePage, rowsPerPage]);
+  }, [processedGroups, activePage, rowsPerPage, server]);
 
   // Reset page when search, sort, date filters, or row limit changes
   useEffect(() => {
+    if (server) return; // the slice resets the page when a filter changes
     setCurrentPage(1);
-  }, [globalSearch, sortColumn, sortDirection, rowsPerPage, startDate, endDate, datePreset, raStartFrom, raStartTo, raEndFrom, raEndTo]);
+  }, [globalSearch, sortColumn, sortDirection, rowsPerPage, startDate, endDate, datePreset, raStartFrom, raStartTo, raEndFrom, raEndTo, server]);
 
   // 7. Scrolling is managed natively by the browser's layout engine
 
   // 8. Export Data Exporters
-  const getCSVData = () => {
+  const getCSVData = (source: EpcTenderRecord[] = processedRecords) => {
     const headers = visibleColumns.map((c) => c.header).join(",");
-    const rows = processedRecords.map((rec) => {
+    const rows = source.map((rec) => {
       return visibleColumns
         .map((col) => {
           let val: any;
@@ -2838,8 +2993,11 @@ export const TenderTable: React.FC<TenderTableProps> = ({
     return [headers, ...rows].join("\n");
   };
 
-  const handleExportCSV = () => {
-    const csvContent = getCSVData();
+  const handleExportCSV = async () => {
+    // Server mode exports everything the filters match, not just the page.
+    const csvContent = getCSVData(
+      server ? await server.getAllFilteredRows() : processedRecords,
+    );
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2858,7 +3016,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
   const handleExportExcel = async () => {
     // Lazy: ~400KB parser stays out of this route's chunk until a user exports.
     const XLSX = await import("xlsx");
-    const exportData = processedRecords.map((rec) => {
+    const source = server ? await server.getAllFilteredRows() : processedRecords;
+    const exportData = source.map((rec) => {
       const obj: Record<string, string | number> = {};
       for (const col of visibleColumns) {
         let val: any;
@@ -2992,21 +3151,23 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           <span className="record-count-badge" title={`${processedRecords.length} total records`}>
             {totalRecords} {totalRecords === 1 ? "Tender" : "Tenders"}
           </span>
-          <div className="global-search-container">
-            <span
-              className="search-icon"
-              style={{ display: "inline-flex", alignItems: "center" }}
-            >
-              <Search size={16} />
-            </span>
-            <input
-              type="text"
-              className="global-search-input"
-              placeholder="Search..."
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-            />
-          </div>
+          {!server && (
+            <div className="global-search-container">
+              <span
+                className="search-icon"
+                style={{ display: "inline-flex", alignItems: "center" }}
+              >
+                <Search size={16} />
+              </span>
+              <input
+                type="text"
+                className="global-search-input"
+                placeholder="Search..."
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
+              />
+            </div>
+          )}
         </div>
         <div className="toolbar-right">
           {sortColumn && (
@@ -3460,9 +3621,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         <button
                           className="multiselect-trigger-btn"
                           onClick={() =>
-                            setOpenDropdown(
-                              openDropdown === col.accessor ? null : col.accessor,
-                            )
+                            toggleDropdown(col.accessor)
                           }
                         >
                           {(!multiSelectFilters[col.accessor] ||
@@ -3553,9 +3712,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         <button
                           className="multiselect-trigger-btn"
                           onClick={() =>
-                            setOpenDropdown(
-                              openDropdown === col.accessor ? null : col.accessor,
-                            )
+                            toggleDropdown(col.accessor)
                           }
                         >
                           {(!multiSelectFilters[col.accessor] ||
@@ -3646,9 +3803,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                         <button
                           className="multiselect-trigger-btn"
                           onClick={() =>
-                            setOpenDropdown(
-                              openDropdown === col.accessor ? null : col.accessor,
-                            )
+                            toggleDropdown(col.accessor)
                           }
                         >
                           {(!multiSelectFilters[col.accessor] ||
@@ -4941,7 +5096,10 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               } else {
                                 const reduxRow = tenderData?.rows.find(r => String(r.id) === String(record.id));
                                 const reduxIndex = reduxRow != null ? tenderData!.rows.indexOf(reduxRow) : -1;
-                                const updKey = `${reduxIndex}-participated`;
+                                // Server mode has no streamed dataset to index
+                                // into; the id keys the saving flag instead.
+                                const rowIdx = server ? Number(record.id) : reduxIndex;
+                                const updKey = `${rowIdx}-participated`;
                                 const isUpdating = !!updatingCells[updKey];
 
                                 cellContent = (
@@ -4951,13 +5109,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                       disabled={isUpdating}
                                       onClick={() => {
                                         if (!record.id) return;
-                                        if (reduxIndex < 0) {
+                                        if (!server && reduxIndex < 0) {
                                           toast.error("Record not found in store. Please refresh and try again.");
                                           return;
                                         }
-                                        const oldVal = String(tenderData!.rows[reduxIndex]?.participated ?? "");
+                                        const oldVal = server
+                                          ? String(record.participated ?? "")
+                                          : String(tenderData!.rows[reduxIndex]?.participated ?? "");
                                         dispatch(updateTenderCell({
-                                          rowIndex: reduxIndex,
+                                          rowIndex: rowIdx,
                                           field: "participated",
                                           value: isYes ? "null" : "true",
                                           tenderMergedId: Number(record.id),
@@ -4989,13 +5149,15 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                       disabled={isUpdating}
                                       onClick={() => {
                                         if (!record.id) return;
-                                        if (reduxIndex < 0) {
+                                        if (!server && reduxIndex < 0) {
                                           toast.error("Record not found in store. Please refresh and try again.");
                                           return;
                                         }
-                                        const oldVal = String(tenderData!.rows[reduxIndex]?.participated ?? "");
+                                        const oldVal = server
+                                          ? String(record.participated ?? "")
+                                          : String(tenderData!.rows[reduxIndex]?.participated ?? "");
                                         dispatch(updateTenderCell({
-                                          rowIndex: reduxIndex,
+                                          rowIndex: rowIdx,
                                           field: "participated",
                                           value: isNo ? "null" : "false",
                                           tenderMergedId: Number(record.id),
@@ -5081,7 +5243,6 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                                     <SelectValue placeholder="None" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">None</SelectItem>
                                     {CURRENT_STATUS_OPTIONS.map(opt => (
                                       <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                                     ))}
@@ -5160,17 +5321,20 @@ export const TenderTable: React.FC<TenderTableProps> = ({
                               const isNo = catVal === "NO";
                               const reduxRow = tenderData?.rows.find(r => String(r.id) === String(record.id));
                               const reduxIndex = reduxRow != null ? tenderData!.rows.indexOf(reduxRow) : -1;
-                              const updKey = `${reduxIndex}-catalogueDone`;
+                              const rowIdx = server ? Number(record.id) : reduxIndex;
+                              const updKey = `${rowIdx}-catalogueDone`;
                               const isUpdating = !!updatingCells[updKey];
                               const dispatchCatalogue = (value: "YES" | "NO" | "NOT_DECIDED") => {
                                 if (!record.id) return;
-                                if (reduxIndex < 0) {
+                                if (!server && reduxIndex < 0) {
                                   toast.error("Record not found in store. Please refresh and try again.");
                                   return;
                                 }
-                                const oldVal = String(tenderData!.rows[reduxIndex]?.catalogueDone ?? "");
+                                const oldVal = server
+                                  ? String(record.catalogueDone ?? "")
+                                  : String(tenderData!.rows[reduxIndex]?.catalogueDone ?? "");
                                 dispatch(updateTenderCell({
-                                  rowIndex: reduxIndex,
+                                  rowIndex: rowIdx,
                                   field: "catalogueDone",
                                   value,
                                   tenderMergedId: Number(record.id),
@@ -5329,7 +5493,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           </button>
           <button
             className="page-btn"
-            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
             disabled={activePage === 1}
           >
             PREV
@@ -5373,7 +5537,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
           <button
             className="page-btn"
             onClick={() =>
-              setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+              setCurrentPage(Math.min(totalPages, activePage + 1))
             }
             disabled={activePage === totalPages}
           >

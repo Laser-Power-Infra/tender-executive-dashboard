@@ -84,7 +84,7 @@ const FIELDS: FieldDef[] = [
   { key: "ePbgDurationMonths", label: "e-PBG Duration (Months)", kind: "text", section: "BG / LOI / PO" },
 
   // Participation & Status
-  { key: "currentStatus", label: "Current Status", kind: "select", options: ["", ...CURRENT_STATUS_OPTIONS], section: "Participation & Status" },
+  { key: "currentStatus", label: "Current Status", kind: "select", options: [...CURRENT_STATUS_OPTIONS], section: "Participation & Status" },
   { key: "statusCategory", label: "Status Category", kind: "select", options: ["", "AOC", "FINANCIAL", "TECHNICAL"], section: "Participation & Status" },
   { key: "tenderUpdateStatus", label: "Tender Update Status", kind: "select", options: ["OPEN", "CLOSED"], section: "Participation & Status" },
   { key: "nextAction", label: "Next Action", kind: "select", options: ["", "UPDATE_FROM_AB_LETTER", "BG_REFUND_LETTER_TO_BE_SENT", "FOLLOW_UP_FOR_FINANCIAL_STATUS", "REVERSE_AUCTION_PENDING", "COUNTER_OFFER_YES", "COUNTER_OFFER_NO", "BID_VALIDITY_NOT_ACCEPTED"], section: "Participation & Status" },

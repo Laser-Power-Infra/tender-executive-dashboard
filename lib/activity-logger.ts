@@ -2,7 +2,8 @@ import "server-only"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
-type Action = "CREATE" | "UPDATE" | "DELETE" | "GENERATE_CERTIFICATE_PDF" | "READ"
+// Reads are deliberately not logged - only mutations.
+type Action = "CREATE" | "UPDATE" | "DELETE" | "GENERATE_CERTIFICATE_PDF"
 
 export type LogActivityParams = {
   action: Action

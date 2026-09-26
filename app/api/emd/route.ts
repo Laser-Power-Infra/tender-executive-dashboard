@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withLog } from "@/lib/activity-logger";
 
 export const runtime = "nodejs";
 
@@ -11,12 +10,6 @@ async function getEmdMerged() {
   });
   return rows;
 }
-
-const getEmdMergedWithLog = withLog(getEmdMerged, (result) => ({
-  action: "READ" as const,
-  tableName: "EmdMerged",
-  details: `Fetched ${result.length} EMD merged records`,
-}));
 
 export async function GET(req: NextRequest) {
   try {
@@ -30,7 +23,7 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json({ success: true, data: rows });
     }
-    const rows = await getEmdMergedWithLog();
+    const rows = await getEmdMerged();
     return NextResponse.json({ success: true, data: rows });
   } catch (err: any) {
     console.error("[API:GET /api/emd] failed:", err.message);

@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
+import { JWT } from "google-auth-library";
 import { prisma } from "@/lib/prisma";
 import { parseDate } from "@/lib/parse-date";
 
@@ -35,7 +36,7 @@ function getAuth() {
   if (!email || !key) {
     throw new Error("GDRIVE_CLIENT_EMAIL / GDRIVE_PRIVATE_KEY not configured");
   }
-  return new google.auth.JWT({
+  return new JWT({
     email,
     key: key.replace(/\\n/g, "\n"),
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
@@ -55,7 +56,7 @@ function toNumber(value: unknown): number | null {
 }
 
 async function main() {
-  const sheets = google.sheets({ version: "v4", auth: getAuth() });
+  const sheets = googleSheets({ version: "v4", auth: getAuth() });
 
   const meta = await sheets.spreadsheets.get({
     spreadsheetId: SPREADSHEET_ID,

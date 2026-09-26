@@ -193,3 +193,20 @@ export function descendantsOf(root: FlowNode, id: string): FlowNode[] {
   if (!found) return [];
   return (found.children ?? []).flatMap((kid) => flatten(kid));
 }
+
+/**
+ * Each flow node's filter preceded by its ancestors', keyed by the node's own
+ * filter. The branch-agnostic predicates (weLost, technicalOpen, weL1 ...) only
+ * mean the right thing ANDed with this chain, which is what handleSelect
+ * dispatches and what the counts query has to reproduce.
+ */
+export const PARTICIPATION_CHAINS: Partial<
+  Record<ParticipationFilter, ParticipationFilter[]>
+> = Object.fromEntries(
+  FLOW_TREES.flatMap(({ tree }) =>
+    flatten(tree).map((n) => [
+      n.filter,
+      [...ancestorsOf(tree, n.id).map((a) => a.filter), n.filter],
+    ]),
+  ),
+);

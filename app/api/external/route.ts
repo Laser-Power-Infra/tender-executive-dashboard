@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withLog } from "@/lib/activity-logger";
 
 export const runtime = "nodejs";
 
@@ -121,12 +120,6 @@ async function lookupTenders(identifiers: string[]) {
   return { tenders, notFound };
 }
 
-const lookupTendersWithLog = withLog(lookupTenders, (result, identifiers) => ({
-  action: "READ",
-  tableName: "TenderMerged",
-  details: `External lookup of ${identifiers.length} identifiers (${result.tenders.length} found, ${result.notFound.length} not found) with costing sheet details`,
-}));
-
 export async function POST(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -160,7 +153,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ tenders: [], notFound: [] });
   }
 
-  const { tenders, notFound } = await lookupTendersWithLog(normalized);
+  const { tenders, notFound } = await lookupTenders(normalized);
   console.log(tenders)
   return NextResponse.json({ tenders, notFound });
 }

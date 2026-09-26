@@ -1,28 +1,17 @@
 "use client";
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { TenderTable } from "@/components/TenderTable";
-import { useAppSelector } from "@/lib/hooks";
-import { TenderCalculations } from "@/services/tenderCalculations";
-import { selectNotParticipatedEpcRecords } from "@/lib/selectors/tenderSelectors";
-import { matchesRawMaterialRange } from "@/lib/rawMaterials";
-import { matchesEpcParticipationFilter } from "@/lib/participationFilter";
+import { useAppDispatch } from "@/lib/hooks";
+import { useEpcServerTable } from "@/lib/useEpcServerTable";
+import { clearScopeFilters } from "@/lib/slices/tenderPageSlice";
 import { Eraser, ExternalLink } from "lucide-react";
 import "../Dashboard.css";
 
+const SCOPE = "notParticipated" as const;
+
 export default function NotParticipated() {
-  const referenceDate = useMemo(() => new Date(), []);
-  const tenderSliceData = useAppSelector((s) => s.tenders.data);
-  const loadingTenders = useAppSelector((s) => s.tenders.loading);
-  // Progress counter lives outside `tenders.data`, so ticking it does not
-  // invalidate the derived-state chain below.
-  const streamedCount = useAppSelector((s) => s.tenders.streamedCount);
-  const participationFilters = useAppSelector(
-    (s) => s.filters.participationFilters,
-  );
-  // Filtering + mapping lives in a module-scope memoised selector so it is not
-  // recomputed over ~34k rows every time this route is re-mounted.
-  const mappedRecords = useAppSelector(selectNotParticipatedEpcRecords);
+  const dispatch = useAppDispatch();
   const todayStr = useMemo(() => {
     const d = new Date();
     const y = d.getFullYear();
@@ -36,46 +25,20 @@ export default function NotParticipated() {
   const [aluminiumMax, setAluminiumMax] = useState<string>("");
   const [copperMin, setCopperMin] = useState<string>("");
   const [copperMax, setCopperMax] = useState<string>("");
-  const [associationFilter, setAssociationFilter] = useState<string | null>(null);
 
-  const calculations = useMemo(() => new TenderCalculations(mappedRecords, referenceDate), [mappedRecords, referenceDate]);
-  const primaryDataset = useMemo(() => calculations.getPrimaryDataset(), [calculations]);
-
-  const baseFiltered = useMemo(() => {
-    let filtered = primaryDataset.filter(record => {
-      if (priceBasisFilter !== "All") {
-        const basis = (record.price || "Firm").toString().toLowerCase();
-        if (basis !== priceBasisFilter.toLowerCase()) return false;
-      }
-      if (!matchesRawMaterialRange(record, { aluMin: aluminiumMin, aluMax: aluminiumMax, cuMin: copperMin, cuMax: copperMax })) return false;
-      return true;
-    });
-    if (participationFilters.length > 0) {
-      filtered = filtered.filter((record) =>
-        matchesEpcParticipationFilter(record, participationFilters),
-      );
-    }
-    return filtered;
-  }, [primaryDataset, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax, participationFilters]);
-
-  const filteredRowsForSidebar = useMemo(() => baseFiltered as unknown as Record<string, unknown>[], [baseFiltered]);
-
-  const activeDataset = useMemo(() => {
-    if (!associationFilter) return baseFiltered;
-    return baseFiltered.filter((record) => {
-      const ids = String((record as unknown as Record<string, unknown>).assignedTo ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return ids.includes(associationFilter);
-    });
-  }, [baseFiltered, associationFilter]);
+  const table = useEpcServerTable(SCOPE, {
+    priceBasis: priceBasisFilter,
+    aluminiumMin,
+    aluminiumMax,
+    copperMin,
+    copperMax,
+  });
 
   const handleClearAllFilters = () => {
     setPriceBasisFilter("All");
     setAluminiumMin(""); setAluminiumMax("");
     setCopperMin(""); setCopperMax("");
-    setAssociationFilter(null);
+    dispatch(clearScopeFilters({ scope: SCOPE }));
     setClearTrigger(prev => prev + 1);
   };
 
@@ -86,9 +49,9 @@ export default function NotParticipated() {
           priceBasisFilter={priceBasisFilter} setPriceBasisFilter={setPriceBasisFilter}
           aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
           copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
-          rows={tenderSliceData?.rows ?? []}
-          filteredRows={filteredRowsForSidebar}
-          associationFilter={associationFilter} onAssociationFilterChange={setAssociationFilter}
+          serverCounts={table.counts}
+          associationList={table.associations}
+          associationFilter={table.associationFilter} onAssociationFilterChange={table.setAssociationFilter}
         />
       </div>
       <div className="dashboard-workspace">
@@ -110,22 +73,18 @@ export default function NotParticipated() {
           </div>
         </header>
         <main className="dashboard-body">
-          {loadingTenders || !tenderSliceData ? (
+          {table.loading ? (
             <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", minHeight: "500px", color: "#0a2540", fontWeight: 700, flexDirection: "column", gap: "15px" }}>
               <div style={{ width: "40px", height: "40px", border: "4px solid #e1e6eb", borderTopColor: "#1a73e8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }}></div>
-              <span style={{ fontSize: "16px", letterSpacing: "0.5px" }}>
-                Loading tender data{streamedCount > 0 ? ` (${streamedCount.toLocaleString()} rows)` : ""}...
-              </span>
+              <span style={{ fontSize: "16px", letterSpacing: "0.5px" }}>Loading tender data...</span>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : (
-            <>
-              <TenderTable records={activeDataset} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated", "reason"]} showPostParticipationColumns={true} showDeadlineOverBadge showReasonColumn
-                aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
-                copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
-                defaultEndDate={todayStr}
-              />
-            </>
+            <TenderTable records={table.records} server={table.server} clearTrigger={clearTrigger} readOnly={true} editableColumns={["participated", "reason"]} showPostParticipationColumns={true} showDeadlineOverBadge showReasonColumn
+              aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
+              copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
+              defaultEndDate={todayStr}
+            />
           )}
         </main>
         <footer className="dashboard-status-bar">

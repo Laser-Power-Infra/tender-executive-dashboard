@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
 import pLimit from "p-limit";
 import { prisma } from "@/lib/prisma";
 import { getGoogleClients } from "@/lib/gdrive";
@@ -131,7 +131,7 @@ export async function syncSupplyPartyContacts(
   try {
     const clients = getGoogleClients();
     oauth2Client = clients.oauth2Client;
-    sheets = google.sheets({ version: "v4", auth: oauth2Client });
+    sheets = googleSheets({ version: "v4", auth: oauth2Client });
   } catch (err: any) {
     console.warn(`[SupplyPartyContactSync] Failed to init Google OAuth clients: ${err.message}`);
     stats.errors++;

@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
+import { JWT } from "google-auth-library";
 import { prisma } from "@/lib/prisma";
 
 const SPREADSHEET_ID = "1oAInXk5UrZc9qXv3UMrJ5YGjkVNI-TFaiB38EG709KI";
@@ -15,7 +16,7 @@ function getAuth() {
   if (!email || !key) {
     throw new Error("GDRIVE_CLIENT_EMAIL / GDRIVE_PRIVATE_KEY not configured");
   }
-  return new google.auth.JWT({
+  return new JWT({
     email,
     key: key.replace(/\\n/g, "\n"),
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
@@ -28,7 +29,7 @@ function toNullString(value: unknown): string | null {
 }
 
 async function main() {
-  const sheets = google.sheets({ version: "v4", auth: getAuth() });
+  const sheets = googleSheets({ version: "v4", auth: getAuth() });
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,

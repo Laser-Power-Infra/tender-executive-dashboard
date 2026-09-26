@@ -1,4 +1,5 @@
-import { google } from "googleapis";
+import { drive as googleDrive } from "@googleapis/drive";
+import { OAuth2Client } from "google-auth-library";
 import { Readable } from "stream";
 import fs from "fs";
 import path from "path";
@@ -39,7 +40,7 @@ function getGoogleClients() {
   const { client_id, client_secret, redirect_uris } = clientInfo;
   const redirectUri = redirect_uris && redirect_uris[0] ? redirect_uris[0] : "http://localhost";
 
-  const oauth2Client = new google.auth.OAuth2(
+  const oauth2Client = new OAuth2Client(
     client_id,
     client_secret,
     redirectUri
@@ -70,7 +71,7 @@ function getGoogleClients() {
     }
   });
 
-  const drive = google.drive({ version: "v3", auth: oauth2Client });
+  const drive = googleDrive({ version: "v3", auth: oauth2Client });
 
   oauth2ClientInstance = oauth2Client;
   driveInstance = drive;

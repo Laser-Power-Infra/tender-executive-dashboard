@@ -22,10 +22,16 @@ import { Zap, Square } from "lucide-react";
 
 interface ConfirmAnalysisDialogProps {
   filteredRows: Record<string, unknown>[];
+  /**
+   * Supplied by /tenders, where `filteredRows` is only the visible page.
+   * Returns every row the filters match, so analysis is not silently capped.
+   */
+  loadRows?: () => Promise<Record<string, unknown>[]>;
 }
 
 export default function ConfirmAnalysisDialog({
   filteredRows,
+  loadRows,
 }: ConfirmAnalysisDialogProps) {
   const dispatch = useAppDispatch();
   const [open, setOpen] = useState(false);
@@ -43,7 +49,9 @@ export default function ConfirmAnalysisDialog({
       setIsAnalyzing(true);
       setAnalysisProgress({ done: 0, total: 0 });
 
-      const targets = filteredRows.filter((r) => {
+      const source = loadRows ? await loadRows() : filteredRows;
+
+      const targets = source.filter((r) => {
         const brief = String(r.tenderBrief ?? "");
         if (!brief || brief === "\u2014") return false;
         if (!checked && r.aiRelevanceValid) return false;
@@ -177,7 +185,7 @@ export default function ConfirmAnalysisDialog({
       setIsAnalyzing(false);
       setAnalysisProgress({ done: 0, total: 0 });
     },
-    [filteredRows, dispatch],
+    [filteredRows, loadRows, dispatch],
   );
 
   const handleStop = useCallback(() => {

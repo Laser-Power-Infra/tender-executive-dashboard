@@ -13,7 +13,6 @@ interface FiltersState {
   deadlinePreset: DeadlinePreset | null;
   deadlineDateFrom: string | null;
   deadlineDateTo: string | null;
-  globalFilter: string;
   sorting: SortingState;
   columnVisibility: VisibilityState;
   columnSizing: ColumnSizingState;
@@ -31,7 +30,6 @@ const initialState: FiltersState = {
   deadlinePreset: null,
   deadlineDateFrom: null,
   deadlineDateTo: null,
-  globalFilter: "",
   sorting: [],
   columnVisibility: {},
   columnSizing: {},
@@ -69,9 +67,6 @@ export const filtersSlice = createSlice({
       state.deadlinePreset = null;
       state.deadlineDateFrom = null;
       state.deadlineDateTo = null;
-    },
-    setGlobalFilter(state, action: PayloadAction<string>) {
-      state.globalFilter = action.payload;
     },
     setSorting(state, action: PayloadAction<SortingState>) {
       state.sorting = action.payload;
@@ -193,7 +188,6 @@ export const filtersSlice = createSlice({
       state.deadlineDateTo = null;
       state.typeFilter = "all";
       state.aiRelevanceFilter = "all";
-      state.globalFilter = "";
       state.participationFilters = [];
       state.participatedDateRange = null;
       state.analyticsFilter = null;
@@ -206,7 +200,6 @@ export const {
   setDeadlinePreset,
   setDeadlineDateRange,
   clearDeadlineFilter,
-  setGlobalFilter,
   setSorting,
   setColumnVisibility,
   setColumnSizing,

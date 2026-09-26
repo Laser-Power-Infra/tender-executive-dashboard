@@ -1,4 +1,5 @@
-import { google } from "googleapis";
+import { drive as googleDrive } from "@googleapis/drive";
+import { JWT } from "google-auth-library";
 
 function getAuth() {
   const email = process.env.GDRIVE_CLIENT_EMAIL;
@@ -6,7 +7,7 @@ function getAuth() {
   if (!email || !key) {
     throw new Error("GDRIVE_CLIENT_EMAIL or GDRIVE_PRIVATE_KEY not configured");
   }
-  return new google.auth.JWT({
+  return new JWT({
     email,
     key: key.replace(/\\n/g, "\n"),
     scopes: ["https://www.googleapis.com/auth/drive.readonly"],
@@ -27,7 +28,7 @@ export async function resolveDriveFileName(
   const fileId = extractFileId(url);
   if (!fileId) return null;
   try {
-    const drive = google.drive({ version: "v3", auth: getAuth() });
+    const drive = googleDrive({ version: "v3", auth: getAuth() });
     const res = await drive.files.get({ fileId, fields: "name" });
     return res.data.name ?? null;
   } catch {

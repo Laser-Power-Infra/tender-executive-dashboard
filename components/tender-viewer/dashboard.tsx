@@ -10,8 +10,6 @@ import React, {
 } from "react";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import {
-  fetchAllTenders,
-  appendTenders,
   updateTenderCell,
   updateTenderMergedField,
   updateTenderAssignments,
@@ -30,9 +28,22 @@ import {
   ColumnDef,
 } from "@/components/tender-viewer/optimized-tender-table/OptimizedTenderTable";
 import {
-  selectDashboardCardFilteredRows,
-  selectRowIndexMap,
-} from "@/lib/selectors/tenderSelectors";
+  clearStale,
+  setMergedGroups,
+  loadTenderFacet,
+  loadTenderPage,
+  loadTenderSummary,
+  selectTenderQuery,
+  setAssociationFilter as setAssociationFilterAction,
+  setPage,
+  setPageSize,
+  setSort,
+  tenderQueryKey,
+} from "@/lib/slices/tenderPageSlice";
+import type { FilterOption } from "@/lib/types";
+import type { TenderQuery } from "@/lib/tender-query";
+import { needsFacetQuery } from "@/lib/tender-filter-meta";
+import { fetchAllFilteredTenderRows } from "@/actions/tender-query";
 import { loadColumnConfig } from "@/lib/columnConfig";
 import { toast } from "sonner";
 import TenderSidebar from "@/components/tender-viewer/tender-sidebar";
@@ -246,14 +257,44 @@ function formatColumnName(name: string): string {
     .trim();
 }
 
+const EMPTY_FILTER_OPTIONS: Record<string, FilterOption[]> = {};
+
+/** This page's slot in the scope-keyed tenderPage slice. */
+const SCOPE = "tenders" as const;
+
 export default function Dashboard() {
   const dispatch = useAppDispatch();
   const selectedDateFrom = useAppSelector((s) => s.files.selectedDateFrom);
   const selectedDateTo = useAppSelector((s) => s.files.selectedDateTo);
   const files = useAppSelector((s) => s.files.items);
   const loadingFiles = useAppSelector((s) => s.files.loading);
-  const tenderData = useAppSelector((s) => s.tenders.data);
-  const loadingTenders = useAppSelector((s) => s.tenders.loading);
+  const pageRows = useAppSelector((s) => s.tenderPage.byScope.tenders.rows);
+  const pageColumns = useAppSelector((s) => s.tenderPage.byScope.tenders.columns);
+  const pageAssociations = useAppSelector((s) => s.tenderPage.byScope.tenders.associations);
+  const pageStatus = useAppSelector((s) => s.tenderPage.byScope.tenders.status);
+  const pageTotal = useAppSelector((s) => s.tenderPage.byScope.tenders.total);
+  const pageNumber = useAppSelector((s) => s.tenderPage.byScope.tenders.page);
+  const pageSize = useAppSelector((s) => s.tenderPage.byScope.tenders.pageSize);
+  const pageSort = useAppSelector((s) => s.tenderPage.byScope.tenders.sort);
+  const pageFacets = useAppSelector((s) => s.tenderPage.byScope.tenders.facets);
+  const pageSummary = useAppSelector((s) => s.tenderPage.byScope.tenders.summary);
+  const pageStale = useAppSelector((s) => s.tenderPage.byScope.tenders.stale);
+  const associationFilter = useAppSelector((s) => s.tenderPage.byScope.tenders.associationFilter);
+
+  // The table still consumes the same {columns, rows, associations} shape the
+  // streamed dataset had - it is just one page wide now.
+  const tenderData = useMemo(
+    () =>
+      pageColumns.length > 0
+        ? {
+            columns: pageColumns,
+            rows: pageRows as Record<string, string | undefined>[],
+            associations: pageAssociations,
+          }
+        : null,
+    [pageColumns, pageRows, pageAssociations],
+  );
+  const loadingTenders = pageStatus === "loading" && pageColumns.length === 0;
   const totalFiles = useAppSelector((s) => s.tenders.totalFiles);
   const completedFiles = useAppSelector((s) => s.tenders.completedFiles);
   const updatingCells = useAppSelector((s) => s.tenders.updatingCells);
@@ -280,13 +321,9 @@ export default function Dashboard() {
       createdAt: string;
     }[]
   >([]);
-  const [mergedGroups, setMergedGroups] = useState<
-    {
-      label: string;
-      separator: string;
-      fields: string[];
-    }[]
-  >([]);
+  // Merged column definitions live in the store so selectTenderQuery can send
+  // them to the server, which needs them to filter and sort those columns.
+  const mergedGroups = useAppSelector((s) => s.tenderPage.byScope.tenders.mergedGroups);
   const [feedbackRow, setFeedbackRow] = useState<Record<
     string,
     unknown
@@ -348,8 +385,11 @@ export default function Dashboard() {
     }
   });
 
+  // Kept so callers (parse completion, uploads) can force a reload; it now
+  // refetches the current page instead of the whole table.
   const refreshTenders = useCallback(() => {
-    dispatch(fetchAllTenders());
+    dispatch(clearStale({ scope: SCOPE }));
+    reloadRef.current?.();
   }, [dispatch]);
 
   const handleSyncDockets = useCallback(async () => {
@@ -375,16 +415,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (uploadResults && uploadResults.length > 0) {
-      const fileIds = uploadResults.map((r) => r.fileId);
-      dispatch(appendTenders(fileIds));
+      refreshTenders();
     }
-  }, [uploadResults, dispatch]);
+  }, [uploadResults, refreshTenders]);
 
   useEffect(() => {
     if (resultUploadVersion > 0) {
-      dispatch(fetchAllTenders());
+      refreshTenders();
     }
-  }, [resultUploadVersion, dispatch]);
+  }, [resultUploadVersion, refreshTenders]);
 
   useEffect(() => {
     loadColumnConfig()
@@ -393,12 +432,15 @@ export default function Dashboard() {
           setDisplayNameMap(getDisplayNameMap(mappings));
         }
         if (groups) {
-          setMergedGroups(
-            groups.map((g) => ({
-              label: g.label,
-              separator: g.separator,
-              fields: JSON.parse(g.fields),
-            })),
+          dispatch(
+            setMergedGroups({
+              scope: SCOPE,
+              groups: groups.map((g) => ({
+                label: g.label,
+                separator: g.separator,
+                fields: JSON.parse(g.fields) as string[],
+              })),
+            }),
           );
         }
         if (indices) {
@@ -563,73 +605,9 @@ export default function Dashboard() {
     [dispatch, refreshTenders],
   );
 
-  const selectFilterOptions = useMemo(() => {
-    if (loadingTenders || !tenderDataRef.current) return {};
-    const rows = tenderDataRef.current.rows;
-    if (rows.length === 0) return {};
-
-    const skipCols = new Set([
-      "reportings",
-      "evaluations",
-      "tenderFiles",
-      "rawMaterials",
-      "itemSchedules",
-      "proposedErpItemName",
-      "proposedErpQuantity",
-      "cva",
-      "competitors",
-      "agentReport",
-      "evaluationTableData",
-      "checklist",
-      "downloadLink",
-      "tenderFileUrl",
-      "costingFileUrl",
-      "website",
-      "assignedTo",
-      "beneficiaryBankDetails",
-      "applicableIndex",
-      "deadline",
-      "app",
-      "aps",
-      "apm",
-      "parseStatus",
-      "parseError",
-      "price",
-    ]);
-    const MAX_OPTIONS = 500;
-    const map: Record<string, { value: string; label: string }[]> = {};
-    for (const col of tenderDataRef.current.columns) {
-      const norm = col.toLowerCase().trim().replace(/\s+/g, " ");
-      if (
-        skipCols.has(col) ||
-        skipCols.has(norm) ||
-        col.includes("date") ||
-        col.includes("deadline") ||
-        col.includes("submission")
-      )
-        continue;
-      const vals = new Set<string>();
-      let overLimit = false;
-      for (const row of rows) {
-        const v = row[col];
-        if (v != null && v !== "") {
-          vals.add(String(v));
-          if (vals.size > MAX_OPTIONS) {
-            overLimit = true;
-            break;
-          }
-        }
-      }
-      if (overLimit) continue;
-      if (vals.size > 0) {
-        map[col] = Array.from(vals)
-          .sort((a, b) => a.localeCompare(b))
-          .map((v) => ({ value: v, label: v }));
-      }
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingTenders, tenderData?.columns, tenderData?.rows.length]);
+  // Filter dropdown values come from the database now, one column at a time,
+  // so the column definitions only carry their static options.
+  const selectFilterOptions: Record<string, FilterOption[]> = EMPTY_FILTER_OPTIONS;
 
   const orderedColumns = useMemo(() => {
     if (!tenderData) return [];
@@ -699,43 +677,22 @@ export default function Dashboard() {
   );
 
   const [showExclusionDropdown, setShowExclusionDropdown] = useState(false);
-  const [associationFilter, setAssociationFilter] = useState<string | null>(
-    null,
-  );
   const exclusionFilter = useAppSelector((s) => s.filters.exclusionFilter);
   const participationFilters = useAppSelector(
     (s) => s.filters.participationFilters,
   );
   const analyticsFilter = useAppSelector((s) => s.filters.analyticsFilter);
 
-  // Date range -> exclusion -> participation-card filtering runs in module-scope
-  // memoised selectors, so re-mounting this route does not re-walk ~34k rows.
-  const cardFilteredRows = useAppSelector(selectDashboardCardFilteredRows);
+  const setAssociationFilter = useCallback(
+    (value: string | null) => {
+      dispatch(setAssociationFilterAction({ scope: SCOPE, associationFilter: value }));
+    },
+    [dispatch],
+  );
 
-  const associationFilteredRows = useMemo(() => {
-    if (!associationFilter) return cardFilteredRows;
-    return cardFilteredRows.filter((row) => {
-      const ids = String(row.assignedTo ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return ids.includes(associationFilter);
-    });
-  }, [cardFilteredRows, associationFilter]);
-
-  const analyticsFilteredRows = useMemo(() => {
-    if (!analyticsFilter) return associationFilteredRows;
-    return associationFilteredRows.filter((row) => {
-      if (analyticsFilter === "aiYes") return row.aiRelevanceValid === "true";
-      if (analyticsFilter === "aiYesUnallocated")
-        return row.aiRelevanceValid === "true" && !row.assignedTo;
-      if (analyticsFilter === "apmYesAllocated")
-        return row.apm === "YES" && !!row.assignedTo;
-      if (analyticsFilter === "apmYesUnallocated")
-        return row.apm === "YES" && !row.assignedTo;
-      return true;
-    });
-  }, [associationFilteredRows, analyticsFilter]);
+  // Date range, exclusion, participation, association and analytics filtering
+  // all happen in SQL now, so the page needs no further narrowing.
+  const analyticsFilteredRows = pageRows as unknown as Record<string, unknown>[];
 
   const rowsWithMergedValues = useMemo(() => {
     if (mergedGroups.length === 0) return analyticsFilteredRows;
@@ -760,7 +717,141 @@ export default function Dashboard() {
     });
   }, [analyticsFilteredRows, mergedGroups]);
 
-  const rowIndexMap = useAppSelector(selectRowIndexMap);
+  // Row indices address the current page, which is exactly what the update
+  // thunks expect now that tenderData is the page.
+  const rowIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    pageRows.forEach((r, i) => {
+      map.set(`${String(r.type)}-${String(r.id)}`, i);
+    });
+    return map;
+  }, [pageRows]);
+
+  // One object per distinct filter combination. The equality check keeps the
+  // identity stable across unrelated dispatches, so the effect below only
+  // fires when something the server cares about actually changed.
+  const query = useAppSelector(
+    (s): TenderQuery =>
+      selectTenderQuery(s, SCOPE, s.filters.participationFilters.length === 0),
+    (a, b) => tenderQueryKey(a) === tenderQueryKey(b),
+  );
+  const queryKey = useMemo(() => tenderQueryKey(query), [query]);
+  const loadedKeyRef = useRef<string | null>(null);
+  const hasMetaRef = useRef(false);
+  hasMetaRef.current = pageColumns.length > 0;
+
+  const reload = useCallback(() => {
+    dispatch(loadTenderPage({ scope: SCOPE, query, includeMeta: !hasMetaRef.current }));
+    dispatch(loadTenderSummary({ scope: SCOPE, query }));
+    loadedKeyRef.current = queryKey;
+  }, [dispatch, query, queryKey]);
+
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+
+  useEffect(() => {
+    if (loadedKeyRef.current === queryKey) return;
+    reloadRef.current();
+  }, [queryKey]);
+
+  useEffect(() => {
+    if (!pageStale) return;
+    dispatch(clearStale({ scope: SCOPE }));
+    reloadRef.current();
+  }, [pageStale, dispatch]);
+
+  const mergedLabels = useMemo(
+    () => mergedGroups.map((g) => g.label),
+    [mergedGroups],
+  );
+
+  const requestFacet = useCallback(
+    (accessor: string) => {
+      // Hardcoded-option columns (Available / Not Available, Yes / No, the
+      // association list) never need a round trip.
+      if (!needsFacetQuery(accessor, mergedLabels)) return;
+      dispatch(loadTenderFacet({ scope: SCOPE, query, column: accessor }));
+    },
+    [dispatch, query, mergedLabels],
+  );
+
+  // null means "no options fetched for this column", which is different from
+  // "fetched and empty" - the table must not prune hardcoded options on null.
+  const getFacetOptions = useCallback(
+    (accessor: string): FilterOption[] | null => {
+      const entry = pageFacets[accessor];
+      if (!entry || entry.status !== "ready") return null;
+      return entry.options.map((v) => ({ value: v, label: v }));
+    },
+    [pageFacets],
+  );
+
+  const loadAllFilteredRows = useCallback(
+    async (cols: string[] | null) =>
+      (await fetchAllFilteredTenderRows(query, cols)) as unknown as Record<
+        string,
+        unknown
+      >[],
+    [query],
+  );
+
+  const loadRowsForExport = useCallback(
+    (cols: string[]) => loadAllFilteredRows(cols),
+    [loadAllFilteredRows],
+  );
+
+  const loadRowsForAnalysis = useCallback(
+    () =>
+      loadAllFilteredRows([
+        "tenderBrief",
+        "itemCategory",
+        "aiRelevanceValid",
+        "referenceNo",
+      ]),
+    [loadAllFilteredRows],
+  );
+
+  const serverMode = useMemo(
+    () => ({
+      total: pageTotal,
+      page: pageNumber,
+      pageSize,
+      sort: pageSort,
+      loading: pageStatus === "loading",
+      onPageChange: (p: number) => dispatch(setPage({ scope: SCOPE, page: p })),
+      onPageSizeChange: (n: number) => dispatch(setPageSize({ scope: SCOPE, pageSize: n })),
+      onSortChange: (next: { column: string; direction: "asc" | "desc" } | null) =>
+        dispatch(setSort({ scope: SCOPE, sort: next })),
+      getFacetOptions,
+      requestFacet,
+      getAllFilteredRows: loadRowsForExport,
+    }),
+    [
+      pageTotal,
+      pageNumber,
+      pageSize,
+      pageSort,
+      pageStatus,
+      dispatch,
+      getFacetOptions,
+      requestFacet,
+      loadRowsForExport,
+    ],
+  );
+
+  const sidebarAnalytics = useMemo(() => {
+    if (!pageSummary) return null;
+    const byId = new Map(pageSummary.personCounts.map((p) => [p.id, p.count]));
+    return {
+      aiYes: pageSummary.aiYes,
+      aiYesUnallocated: pageSummary.aiYesUnallocated,
+      apmYesAllocated: pageSummary.apmYesAllocated,
+      apmYesUnallocated: pageSummary.apmYesUnallocated,
+      personCounts: pageAssociations
+        .map((a) => ({ ...a, count: byId.get(a.id) ?? 0 }))
+        .filter((p) => p.count > 0),
+    };
+  }, [pageSummary, pageAssociations]);
 
   const columnDefs = useMemo(() => {
     if (!tenderDataRef.current) return [];
@@ -2143,7 +2234,10 @@ export default function Dashboard() {
           <Loader2 size={14} className={syncingDockets ? "animate-spin" : ""} />
           {syncingDockets ? " Syncing Dockets..." : " Sync Dockets"}
         </button> */}
-        <ConfirmAnalysisDialog filteredRows={filteredRows} />
+        <ConfirmAnalysisDialog
+          filteredRows={filteredRows}
+          loadRows={loadRowsForAnalysis}
+        />
         {feedbackRow && (
           <AiFeedbackDialog
             row={feedbackRow}
@@ -2223,6 +2317,7 @@ export default function Dashboard() {
     <div className="flex flex-1 overflow-hidden bg-[#f4f6f8]">
       <TenderSidebar
         rows={filteredRows}
+        analytics={sidebarAnalytics}
         associations={tenderData?.associations ?? []}
         associationFilter={associationFilter}
         onAssociationFilterChange={setAssociationFilter}
@@ -2260,6 +2355,7 @@ export default function Dashboard() {
           {!loadingTenders && tenderData && (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <OptimizedTenderTable
+                server={serverMode}
                 onFilteredRowsChange={handleFilteredRowsChange}
                 onParseComplete={refreshTenders}
                 extraToolbarActions={extraToolbarActions}

@@ -41,6 +41,16 @@ export function isRaPendingRow(row: Record<string, unknown>): boolean {
   );
 }
 
+/**
+ * ourRank is free text and the sheet records a first place as either "1" or
+ * "L1". Mirrors RANK_1 in lib/tender-query, which scripts/tenderQueryParity
+ * compares this against.
+ */
+function isRank1(row: Record<string, unknown>): boolean {
+  const rank = String(row.ourRank ?? "").trim().toUpperCase();
+  return rank === "1" || rank === "L1";
+}
+
 const TECHNICAL_OPEN_STATUSES = [
   "AWARDED",
   "FINANCIAL EVALUATION",
@@ -86,14 +96,14 @@ export function isFinancialNotOpenRow(row: Record<string, unknown>): boolean {
 export function isWeL1Row(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    String(row.ourRank ?? "").trim() === "1"
+    isRank1(row)
   );
 }
 
 export function isWeLostRow(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    String(row.ourRank ?? "").trim() !== "1"
+    !isRank1(row)
   );
 }
 
@@ -110,7 +120,7 @@ export function isExpRaDateRow(row: Record<string, unknown>): boolean {
 export function isContractReceivedRow(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    String(row.ourRank ?? "").trim() === "1" &&
+    isRank1(row) &&
     row.contractNo != null &&
     String(row.contractNo).trim() !== ""
   );
@@ -119,7 +129,7 @@ export function isContractReceivedRow(row: Record<string, unknown>): boolean {
 export function isContractPendingRow(row: Record<string, unknown>): boolean {
   return (
     row.participated === "true" &&
-    String(row.ourRank ?? "").trim() === "1" &&
+    isRank1(row) &&
     (row.contractNo == null || String(row.contractNo).trim() === "")
   );
 }
@@ -140,11 +150,11 @@ function isFinancialBranchRow(row: Record<string, unknown>): boolean {
 }
 
 export function isFinancialWeL1Row(row: Record<string, unknown>): boolean {
-  return isFinancialBranchRow(row) && String(row.ourRank ?? "").trim() === "1";
+  return isFinancialBranchRow(row) && isRank1(row);
 }
 
 export function isFinancialWeLostRow(row: Record<string, unknown>): boolean {
-  return isFinancialBranchRow(row) && String(row.ourRank ?? "").trim() !== "1";
+  return isFinancialBranchRow(row) && !isRank1(row);
 }
 
 export function isFinancialContractReceivedRow(
@@ -311,12 +321,18 @@ interface ParticipationCardsProps {
   rows: Record<string, unknown>[];
   variant?: "light" | "dark";
   onClearAssociation?: () => void;
+  /**
+   * Docket-deduped count from fetchParticipationCounts. When given, the client
+   * scan is skipped entirely - the pages that pass it hold no dataset to scan.
+   */
+  serverParticipated?: number | null;
 }
 
 export function ParticipationCards({
   rows,
   variant = "light",
   onClearAssociation,
+  serverParticipated = null,
 }: ParticipationCardsProps) {
   const dispatch = useAppDispatch();
   const participationFilters = useAppSelector(
@@ -327,6 +343,7 @@ export function ParticipationCards({
   );
 
   const counts = useMemo(() => {
+    if (serverParticipated != null) return { participated: serverParticipated };
     const participatedRaw = rows.filter(
       (row) =>
         isParticipatedRow(row) &&
@@ -344,7 +361,7 @@ export function ParticipationCards({
     return {
       participated: participated.length,
     };
-  }, [rows, participatedDateRange]);
+  }, [rows, participatedDateRange, serverParticipated]);
 
   const handleCardClick = (value: CardValue) => {
     dispatch(toggleParticipationFilter(value));

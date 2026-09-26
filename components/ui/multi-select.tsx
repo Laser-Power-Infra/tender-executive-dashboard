@@ -22,6 +22,8 @@ interface MultiSelectProps {
   includeBlank?: boolean;
   align?: "start" | "center" | "end";
   onSearchChange?: (text: string) => void;
+  /** Fires when the dropdown opens - used to fetch options on demand. */
+  onOpen?: () => void;
   triggerIcon?: React.ReactNode;
   triggerClassName?: string;
   className?: string;
@@ -42,6 +44,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
   includeBlank = true,
   align = "start",
   onSearchChange,
+  onOpen,
   triggerIcon = <ChevronDown className="size-3.5 shrink-0 opacity-60" />,
   triggerClassName,
   className,
@@ -54,6 +57,8 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
   onChangeRef.current = onChange;
   const onSearchChangeRef = useRef(onSearchChange);
   onSearchChangeRef.current = onSearchChange;
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
 
   const pendingRef = useRef<string[]>(value);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,6 +139,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
 
   const handleOpenChange = useCallback((o: boolean) => {
     setOpen(o);
+    if (o) onOpenRef.current?.();
     if (!o) setSearch("");
   }, []);
 

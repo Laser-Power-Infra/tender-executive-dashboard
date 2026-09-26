@@ -40,6 +40,15 @@ export function isCu(key: string): boolean {
   return k === "cu" || k.includes("copper");
 }
 
+/**
+ * SQL mirrors of isAlu / isCu, for the server-side rawMaterials filter.
+ * Applied to lower(btrim(key)) with Postgres `~`. Kept next to the functions
+ * above so the two definitions cannot drift apart.
+ */
+export const ALU_KEY_SQL_PATTERN = "^(al$|alumi(ni|n|mi)um)";
+export const ALU_KEY_SQL_EXCLUDE = "alloy";
+export const CU_KEY_SQL_PATTERN = "(^cu$|copper)";
+
 export function getRawMaterialNumeric(
   value: unknown,
   keyMatcher: (key: string) => boolean,

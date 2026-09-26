@@ -1,4 +1,5 @@
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
+import { JWT } from "google-auth-library";
 import { prisma } from "@/lib/prisma";
 
 const SHEET_NAME = "MASTER WEBSITES";
@@ -9,7 +10,7 @@ function getAuth() {
   if (!email || !key) {
     throw new Error("GDRIVE_CLIENT_EMAIL or GDRIVE_PRIVATE_KEY not configured");
   }
-  return new google.auth.JWT({
+  return new JWT({
     email,
     key: key.replace(/\\n/g, "\n"),
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
@@ -17,7 +18,7 @@ function getAuth() {
 }
 
 function getClient() {
-  return google.sheets({ version: "v4", auth: getAuth() });
+  return googleSheets({ version: "v4", auth: getAuth() });
 }
 
 export async function fetchMasterWebsites() {

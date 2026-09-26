@@ -1,12 +1,10 @@
 "use client";
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { TenderTable } from "@/components/TenderTable";
-import { useAppSelector, useAppDispatch } from "@/lib/hooks";
-import { TenderCalculations } from "@/services/tenderCalculations";
-import { selectHomeEpcRecords } from "@/lib/selectors/tenderSelectors";
-import { matchesRawMaterialRange } from "@/lib/rawMaterials";
-import { matchesEpcParticipationFilter } from "@/lib/participationFilter";
+import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import { useEpcServerTable } from "@/lib/useEpcServerTable";
+import { clearScopeFilters } from "@/lib/slices/tenderPageSlice";
 import { syncSheetToMerged, searchTendersByPartyThunk } from "@/lib/slices/tendersSlice";
 import { Eraser, ExternalLink, Database, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -17,22 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import "./Dashboard.css";
 
+const SCOPE = "home" as const;
+
 export default function Home() {
-  const referenceDate = useMemo(() => new Date("2026-06-25T12:00:00"), []);
   const dispatch = useAppDispatch();
   const { data: session } = useSession();
   const canSync = session?.user?.role === "admin" || session?.user?.role === "developer";
-  const tenderSliceData = useAppSelector((s) => s.tenders.data);
-  const loadingTenders = useAppSelector((s) => s.tenders.loading);
-  // Progress counter lives outside `tenders.data`, so ticking it does not
-  // invalidate the derived-state chain below.
-  const streamedCount = useAppSelector((s) => s.tenders.streamedCount);
-  const participationFilters = useAppSelector(
-    (s) => s.filters.participationFilters,
-  );
-  // Filtering + mapping lives in a module-scope memoised selector so it is not
-  // recomputed over ~34k rows every time this route is re-mounted.
-  const mappedRecords = useAppSelector(selectHomeEpcRecords);
+  const syncing = useAppSelector((s) => s.tenders.loading);
   const [clearTrigger, setClearTrigger] = useState<number>(0);
   const [cvaLoading, setCvaLoading] = useState(false);
   const [priceBasisFilter, setPriceBasisFilter] = useState<string>("All");
@@ -40,43 +29,18 @@ export default function Home() {
   const [aluminiumMax, setAluminiumMax] = useState<string>("");
   const [copperMin, setCopperMin] = useState<string>("");
   const [copperMax, setCopperMax] = useState<string>("");
-  const [associationFilter, setAssociationFilter] = useState<string | null>(null);
   const [partyQuery, setPartyQuery] = useState("");
   const [partySearchField, setPartySearchField] = useState<"erpPartyName" | "itemCode">("erpPartyName");
   const partySearch = useAppSelector((s) => s.tenders.partySearch);
 
-  const calculations = useMemo(() => new TenderCalculations(mappedRecords, referenceDate), [mappedRecords, referenceDate]);
-  const primaryDataset = useMemo(() => calculations.getPrimaryDataset(), [calculations]);
-
-  const baseFiltered = useMemo(() => {
-    let filtered = primaryDataset.filter(record => {
-      if (priceBasisFilter !== "All") {
-        const basis = (record.price || "Firm").toString().toLowerCase();
-        if (basis !== priceBasisFilter.toLowerCase()) return false;
-      }
-      if (!matchesRawMaterialRange(record, { aluMin: aluminiumMin, aluMax: aluminiumMax, cuMin: copperMin, cuMax: copperMax })) return false;
-      return true;
-    });
-    if (participationFilters.length > 0) {
-      filtered = filtered.filter((record) =>
-        matchesEpcParticipationFilter(record, participationFilters),
-      );
-    }
-    return filtered;
-  }, [primaryDataset, priceBasisFilter, aluminiumMin, aluminiumMax, copperMin, copperMax, participationFilters]);
-
-  const filteredRowsForSidebar = useMemo(() => baseFiltered as unknown as Record<string, unknown>[], [baseFiltered]);
-
-  const activeDataset = useMemo(() => {
-    if (!associationFilter) return baseFiltered;
-    return baseFiltered.filter((record) => {
-      const ids = String((record as unknown as Record<string, unknown>).assignedTo ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return ids.includes(associationFilter);
-    });
-  }, [baseFiltered, associationFilter]);
+  // Filtering, sorting, paging and the sidebar counts all run in Postgres.
+  const table = useEpcServerTable(SCOPE, {
+    priceBasis: priceBasisFilter,
+    aluminiumMin,
+    aluminiumMax,
+    copperMin,
+    copperMax,
+  });
 
   const handleRefresh = async () => {
     const result = await dispatch(syncSheetToMerged());
@@ -99,7 +63,7 @@ export default function Home() {
     setPriceBasisFilter("All");
     setAluminiumMin(""); setAluminiumMax("");
     setCopperMin(""); setCopperMax("");
-    setAssociationFilter(null);
+    dispatch(clearScopeFilters({ scope: SCOPE }));
     setClearTrigger(prev => prev + 1);
   };
 
@@ -110,9 +74,9 @@ export default function Home() {
           priceBasisFilter={priceBasisFilter} setPriceBasisFilter={setPriceBasisFilter}
           aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
           copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
-          rows={tenderSliceData?.rows ?? []}
-          filteredRows={filteredRowsForSidebar}
-          associationFilter={associationFilter} onAssociationFilterChange={setAssociationFilter}
+          serverCounts={table.counts}
+          associationList={table.associations}
+          associationFilter={table.associationFilter} onAssociationFilterChange={table.setAssociationFilter}
         />
       </div>
       <div className="dashboard-workspace">
@@ -125,8 +89,8 @@ export default function Home() {
           <div className="header-actions">
             <button className="clear-filters-btn" onClick={handleClearAllFilters} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Eraser size={14} /> Clear Filters</button>
             {canSync && (
-              <button className="erp-sync-btn" onClick={handleRefresh} disabled={loadingTenders} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                {loadingTenders ? <><RefreshCw size={14} /> Refreshing...</> : <><RefreshCw size={14} /> Refresh Dashboard</>}
+              <button className="erp-sync-btn" onClick={handleRefresh} disabled={syncing} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {syncing ? <><RefreshCw size={14} /> Refreshing...</> : <><RefreshCw size={14} /> Refresh Dashboard</>}
               </button>
             )}
             <button
@@ -153,16 +117,14 @@ export default function Home() {
               <TabsTrigger value="tenders-by-party">Tenders by Party</TabsTrigger>
             </TabsList>
             <TabsContent value="pre-participation" className="mt-2 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col h-[calc(100vh-144px)]">
-              {loadingTenders || !tenderSliceData ? (
+              {table.loading ? (
                 <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", minHeight: "500px", color: "#0a2540", fontWeight: 700, flexDirection: "column", gap: "15px" }}>
                   <div style={{ width: "40px", height: "40px", border: "4px solid #e1e6eb", borderTopColor: "#1a73e8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }}></div>
-                  <span style={{ fontSize: "16px", letterSpacing: "0.5px" }}>
-                    Loading tender data{streamedCount > 0 ? ` (${streamedCount.toLocaleString()} rows)` : ""}...
-                  </span>
+                  <span style={{ fontSize: "16px", letterSpacing: "0.5px" }}>Loading tender data...</span>
                   <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>
               ) : (
-                <TenderTable records={activeDataset} clearTrigger={clearTrigger} showTypeTestColumn
+                <TenderTable records={table.records} server={table.server} clearTrigger={clearTrigger} showTypeTestColumn
                   aluminiumMin={aluminiumMin} setAluminiumMin={setAluminiumMin} aluminiumMax={aluminiumMax} setAluminiumMax={setAluminiumMax}
                   copperMin={copperMin} setCopperMin={setCopperMin} copperMax={copperMax} setCopperMax={setCopperMax}
                 />

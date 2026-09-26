@@ -5,7 +5,7 @@ import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import { clearParticipationFilters } from "@/lib/slices/filtersSlice";
 import { ParticipationFlowChart } from "@/components/ParticipationFlowChart";
 import { FLOW_MODE_MIN_WIDTH } from "@/components/participation-flow/layout";
-import { SCENARIOS } from "./dummy-rows";
+import { SCENARIOS } from "./dummy-counts";
 import { Eraser, PanelLeft, Ruler } from "lucide-react";
 
 const WIDTH_PRESETS = [200, 260, 320, 440, 560, 720, 900];
@@ -61,7 +61,7 @@ export default function FlowChartPreviewPage() {
             <p className="text-xs text-slate-500">
               {scenario.description}{" "}
               <span className="font-medium text-slate-700">
-                {scenario.rows.length} rows
+                {Object.keys(scenario.counts).length} nodes
               </span>
             </p>
           </div>
@@ -123,7 +123,7 @@ export default function FlowChartPreviewPage() {
               Participation Filters
             </div>
             <div className="max-h-[78vh] overflow-y-auto px-5 py-4">
-              <ParticipationFlowChart rows={scenario.rows} />
+              <ParticipationFlowChart serverCounts={scenario.counts} />
             </div>
           </div>
 

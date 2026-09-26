@@ -18,6 +18,10 @@ import {
   RawMaterialsColumnFilter,
 } from "./filters";
 import {
+  STATIC_SELECT_SKIP,
+  UNIQUE_OPTION_SKIP,
+} from "@/lib/tender-filter-meta";
+import {
   countRawMaterials,
   anyRawMaterialInRange,
   isAlu,
@@ -135,37 +139,7 @@ function DebouncedColumnSearch({
 
 const EMPTY_SELECT_VALUES: string[] = [];
 
-const UNIQUE_OPTION_SKIP = new Set([
-  "reportings",
-  "tenderFiles",
-  "itemSchedules",
-  "proposedErpItemName",
-  "proposedErpQuantity",
-  "cva",
-  "competitors",
-  "evaluationTableData",
-  "checklist",
-  "downloadLink",
-  "costingFileUrl",
-  "beneficiaryBankDetails",
-  "applicableIndex",
-  "parseError",
-  "remarks",
-  "tenderFileUrl",
-  "website",
-  "rawMaterials",
-  "deadline",
-]);
 
-// Static select columns whose options are hardcoded and must not be pruned
-const STATIC_SELECT_SKIP = new Set([
-  "app",
-  "aps",
-  "apm",
-  "price",
-  "parseStatus",
-  "aiRelevanceValid",
-]);
 
 export interface ColumnDef<T> {
   header: string;
@@ -194,6 +168,29 @@ export interface ColumnDef<T> {
   provenance?: Array<"PRE" | "POST" | "NOT_PARTICIPATED">;
 }
 
+/**
+ * Opt-in server mode. When present the table renders the page it is handed and
+ * delegates filtering, sorting, paging and filter options to the caller.
+ * Without it the table keeps filtering in memory, which is what /items,
+ * /railways and the merge-conflict dashboard still rely on.
+ */
+export interface ServerTableMode {
+  total: number;
+  page: number;
+  pageSize: number;
+  sort: { column: string; direction: "asc" | "desc" } | null;
+  loading: boolean;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+  onSortChange: (sort: { column: string; direction: "asc" | "desc" } | null) => void;
+  /** Cached options for a column; null until requestFacet resolves. */
+  getFacetOptions: (accessor: string) => FilterOption[] | null;
+  /** Called when a dropdown opens, so options are fetched on demand. */
+  requestFacet: (accessor: string) => void;
+  /** Every row the filters match, for the Excel export. */
+  getAllFilteredRows: (columns: string[]) => Promise<Record<string, unknown>[]>;
+}
+
 export interface OptimizedTenderTableProps<T extends Record<string, unknown>> {
   columns: ColumnDef<T>[];
   rows: T[];
@@ -205,6 +202,7 @@ export interface OptimizedTenderTableProps<T extends Record<string, unknown>> {
   onFilteredRowsChange?: (rows: T[]) => void;
   onParseComplete?: () => void;
   disableDefaultDeadlineFilter?: boolean;
+  server?: ServerTableMode;
 }
 
 function OptimizedTenderTableInner<T extends Record<string, unknown>>({
@@ -218,15 +216,25 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
   onFilteredRowsChange,
   onParseComplete,
   disableDefaultDeadlineFilter = false,
+  server,
 }: OptimizedTenderTableProps<T>) {
   const [globalSearch, setGlobalSearch] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [rowsPerPage, setRowsPerPage] = useState<number>(50);
+  const [localPage, setLocalPage] = useState<number>(1);
+  const [localRowsPerPage, setLocalRowsPerPage] = useState<number>(50);
 
   const debouncedGlobalSearch = useDebouncedValue(globalSearch, 300);
 
-  const [sortColumn, setSortColumn] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [localSortColumn, setLocalSortColumn] = useState<string | null>(null);
+  const [localSortDirection, setLocalSortDirection] = useState<"asc" | "desc">("desc");
+
+  // In server mode paging and sorting live with the caller, so the table reads
+  // them back instead of keeping a second copy that could drift.
+  const currentPage = server ? server.page : localPage;
+  const rowsPerPage = server ? server.pageSize : localRowsPerPage;
+  const sortColumn = server ? (server.sort?.column ?? null) : localSortColumn;
+  const sortDirection = server ? (server.sort?.direction ?? "desc") : localSortDirection;
+  const setCurrentPage = server ? server.onPageChange : setLocalPage;
+  const setRowsPerPage = server ? server.onPageSizeChange : setLocalRowsPerPage;
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
     () => {
@@ -304,15 +312,18 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
       const col = columns.find((c) => String(c.accessor) === accessor);
       if (!col || col.filter?.type === "boolean") return;
 
-      if (sortColumn === accessor) {
-        setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-      } else {
-        setSortColumn(accessor);
-        setSortDirection("desc");
+      const direction: "asc" | "desc" =
+        sortColumn === accessor && sortDirection === "desc" ? "asc" : "desc";
+
+      if (server) {
+        server.onSortChange({ column: accessor, direction });
+        return;
       }
-      setCurrentPage(1);
+      setLocalSortColumn(accessor);
+      setLocalSortDirection(direction);
+      setLocalPage(1);
     },
-    [sortColumn, columns],
+    [sortColumn, sortDirection, columns, server],
   );
 
   const toggleRowExpansion = useCallback((keyValue: string) => {
@@ -347,6 +358,8 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
   );
 
   const searchFilteredRows = useMemo(() => {
+    // Server mode: rows are already the filtered page.
+    if (server) return rows;
     if (debouncedGlobalSearch.trim() === "") return rows;
     const searchLower = debouncedGlobalSearch.toLowerCase().trim();
     return rows.filter((row) => {
@@ -357,7 +370,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
         return String(val).toLowerCase().includes(searchLower);
       });
     });
-  }, [rows, columns, debouncedGlobalSearch]);
+  }, [rows, columns, debouncedGlobalSearch, server]);
 
   const applyColumnFilters = useCallback(
     (baseRows: T[], skipAccessor: string | null): T[] => {
@@ -549,6 +562,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
   );
 
   const processedRows = useMemo(() => {
+    if (server) return rows;
     let result = applyColumnFilters(searchFilteredRows, null);
 
     if (sortColumn) {
@@ -621,7 +635,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     }
 
     return result;
-  }, [searchFilteredRows, applyColumnFilters, sortColumn, sortDirection, columns, columnFilters, disableDefaultDeadlineFilter]);
+  }, [rows, server, searchFilteredRows, applyColumnFilters, sortColumn, sortDirection, columns, columnFilters, disableDefaultDeadlineFilter]);
 
   const gemTendersToDownload = useMemo(() => {
     return processedRows
@@ -664,15 +678,16 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
       }));
   }, [processedRows]);
 
-  const totalRecords = processedRows.length;
+  const totalRecords = server ? server.total : processedRows.length;
   const totalPages = Math.ceil(totalRecords / rowsPerPage) || 1;
 
   const activePage = Math.min(currentPage, totalPages);
 
   const paginatedRows = useMemo(() => {
+    if (server) return rows;
     const startIndex = (activePage - 1) * rowsPerPage;
     return processedRows.slice(startIndex, startIndex + rowsPerPage);
-  }, [processedRows, activePage, rowsPerPage]);
+  }, [server, rows, processedRows, activePage, rowsPerPage]);
 
   const visibleColumns = useMemo(() => {
     const filtered = columns.filter(
@@ -752,6 +767,8 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
 
   const uniqueSelectOptions = useMemo(() => {
     const map: Record<string, FilterOption[]> = {};
+    // Server mode fetches options per column, on demand, from the database.
+    if (server) return map;
 
     // Collect the eligible select columns up front.
     const selectCols: { accessorStr: string; accessor: keyof T }[] = [];
@@ -803,11 +820,13 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     }
     return map;
     // ponytail: per-active-column chain re-run; cache skip-variants if filters grow past ~3
-  }, [columns, searchFilteredRows, processedRows, applyColumnFilters, associations, columnFilters]);
+  }, [server, columns, searchFilteredRows, processedRows, applyColumnFilters, associations, columnFilters]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [globalSearch, rowsPerPage, columnFilters]);
+    // Server mode resets the page where the filters live.
+    if (server) return;
+    setLocalPage(1);
+  }, [server, globalSearch, localRowsPerPage, columnFilters]);
 
   const onFilteredRowsChangeRef = useRef(onFilteredRowsChange);
   onFilteredRowsChangeRef.current = onFilteredRowsChange;
@@ -824,12 +843,17 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     const visibleColumns = columns.filter(
       (c) => !c.hidden && columnVisibility[String(c.accessor)] !== false,
     );
-    const exportData = processedRows.map((row) => {
+    // Server mode holds one page, so the export asks for the whole filtered
+    // set rather than writing out whatever happens to be on screen.
+    const rowsToExport: Record<string, unknown>[] = server
+      ? await server.getAllFilteredRows(visibleColumns.map((c) => String(c.accessor)))
+      : (processedRows as unknown as Record<string, unknown>[]);
+    const exportData = rowsToExport.map((row) => {
       const obj: Record<string, string> = {};
       for (const col of visibleColumns) {
         const accessor = String(col.accessor);
         const label = col.header;
-        let val = String(row[accessor as keyof T] ?? "");
+        let val = String(row[accessor] ?? "");
         if (
           accessor === "itemSchedules" ||
           accessor === "proposedErpItemName" ||
@@ -867,7 +891,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
     XLSX.utils.book_append_sheet(wb, ws, "Tenders");
     const date = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `tenders-${date}.xlsx`);
-  }, [columns, processedRows, associations, columnVisibility]);
+  }, [columns, processedRows, associations, columnVisibility, server]);
 
   const handleDownloadPdfs = useCallback(async () => {
     if (gemTendersToDownload.length === 0) return;
@@ -1105,9 +1129,15 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           );
         case "select": {
           const configuredOptions = col.filter.options ?? [];
-          const computedOptions = uniqueSelectOptions[accessorStr] ?? [];
+          const facetOptions = server ? server.getFacetOptions(accessorStr) : null;
+          const computedOptions = server
+            ? (facetOptions ?? [])
+            : (uniqueSelectOptions[accessorStr] ?? []);
           let filteredConfigured = configuredOptions;
           if (
+            // Without loaded facet values there is nothing to prune against,
+            // and pruning would wipe the hardcoded options instead.
+            (!server || facetOptions !== null) &&
             !STATIC_SELECT_SKIP.has(accessorStr) &&
             !UNIQUE_OPTION_SKIP.has(accessorStr)
           ) {
@@ -1129,6 +1159,10 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           }
           return (
             <SelectColumnFilter
+              onOpen={
+                // requestFacet decides whether this column is worth a query.
+                server ? () => server.requestFacet(accessorStr) : undefined
+              }
               value={filterState?.select ?? EMPTY_SELECT_VALUES}
               onChange={(values) => {
                 if (col.filter?.searchable) {
@@ -1396,16 +1430,18 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           <span className="record-count-badge">
             {totalRecords} Records Total
           </span>
-          <div className="global-search-container">
-            <Search size={14} className="search-icon" />
-            <input
-              type="text"
-              className="global-search-input"
-              placeholder="Search..."
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-            />
-          </div>
+          {!server && (
+            <div className="global-search-container">
+              <Search size={14} className="search-icon" />
+              <input
+                type="text"
+                className="global-search-input"
+                placeholder="Search..."
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
+              />
+            </div>
+          )}
         </div>
         <div className="toolbar-right">
           <button className="export-btn" onClick={handleExportExcel}>
@@ -1712,7 +1748,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
           </button>
           <button
             className="page-btn"
-            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
             disabled={activePage === 1}
           >
             PREV
@@ -1753,9 +1789,7 @@ function OptimizedTenderTableInner<T extends Record<string, unknown>>({
 
           <button
             className="page-btn"
-            onClick={() =>
-              setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-            }
+            onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
             disabled={activePage === totalPages}
           >
             NEXT

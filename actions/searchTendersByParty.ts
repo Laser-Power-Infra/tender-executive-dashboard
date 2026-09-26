@@ -1,10 +1,11 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { withLog } from "@/lib/activity-logger";
 
-export const searchTendersByParty = withLog(
-  async (params: { query: string; field: "erpPartyName" | "itemCode" }) => {
+export async function searchTendersByParty(params: {
+  query: string;
+  field: "erpPartyName" | "itemCode";
+}) {
     const field = params.field;
     const rawQuery = (params.query ?? "").trim();
     if (!rawQuery) return [];
@@ -92,10 +93,4 @@ export const searchTendersByParty = withLog(
     });
 
     return rows;
-  },
-  (result, params) => ({
-    action: "READ" as const,
-    tableName: "TenderMerged",
-    details: `Search ${params.field}:"${params.query}" → ${Array.isArray(result) ? result.length : 0} rows (2-step org→erpPartyName)`,
-  }),
-);
+}

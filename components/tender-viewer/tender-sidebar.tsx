@@ -26,8 +26,22 @@ import { setSelectedDateRange, resetSelectedDateRange } from "@/lib/slices/files
 import { importEpcGoTenders } from "@/lib/slices/tendersSlice";
 import { setAnalyticsFilter } from "@/lib/slices/filtersSlice";
 
+export interface TenderSidebarAnalytics {
+  aiYes: number;
+  aiYesUnallocated: number;
+  apmYesAllocated: number;
+  apmYesUnallocated: number;
+  personCounts: { id: number; name: string; email: string; count: number }[];
+}
+
 interface TenderSidebarProps {
   rows?: Record<string, unknown>[];
+  /**
+   * Precomputed counts over the whole filtered set. Supplied by /tenders,
+   * where only one page of rows is in memory; without it the counts are
+   * derived from `rows` as before.
+   */
+  analytics?: TenderSidebarAnalytics | null;
   associations?: { id: number; name: string; email: string }[];
   associationFilter?: string | null;
   onAssociationFilterChange?: (val: string | null) => void;
@@ -35,6 +49,7 @@ interface TenderSidebarProps {
 
 export default function TenderSidebar({
   rows = [],
+  analytics: analyticsProp,
   associations = [],
   associationFilter = null,
   onAssociationFilterChange,
@@ -50,6 +65,7 @@ export default function TenderSidebar({
   // scan per association — O(associations x rows) with a split/filter chain
   // allocated per row per association.
   const analytics = useMemo(() => {
+    if (analyticsProp !== undefined) return analyticsProp;
     if (rows.length === 0) return null;
 
     let aiYes = 0;
@@ -93,7 +109,7 @@ export default function TenderSidebar({
         .map((a) => ({ ...a, count: countsById.get(String(a.id)) ?? 0 }))
         .filter((p) => p.count > 0),
     };
-  }, [rows, associations]);
+  }, [analyticsProp, rows, associations]);
 
   const selectedRange: DateRange | undefined =
     selectedDateFrom && selectedDateTo

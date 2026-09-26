@@ -35,15 +35,10 @@ async function getAllSop() {
   });
   return rows;
 }
-const getAllWithLog = withLog(getAllSop, (result) => ({
-  action: "READ" as const,
-  tableName: "SopResponsibility",
-  details: `Fetched ${result.length} SOP responsibilities`,
-}));
 
 export async function GET() {
   try {
-    const rows = await getAllWithLog();
+    const rows = await getAllSop();
     return NextResponse.json({ success: true, data: rows });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message, data: [] }, { status: 500 });

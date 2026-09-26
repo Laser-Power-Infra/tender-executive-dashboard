@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withLog } from "@/lib/activity-logger";
 
 export const runtime = "nodejs";
 
@@ -46,19 +45,13 @@ async function getLogs(params: { date?: string; from?: string; to?: string; sopI
   return rows;
 }
 
-const getLogsWithLog = withLog(getLogs, (result, params) => ({
-  action: "READ" as const,
-  tableName: "SopDailyLog",
-  details: `Fetched ${result.length} daily logs ${params.date ? `for ${params.date}` : ""}`,
-}));
-
 export async function GET(req: NextRequest) {
   try {
     const date = req.nextUrl.searchParams.get("date") || undefined;
     const from = req.nextUrl.searchParams.get("from") || undefined;
     const to = req.nextUrl.searchParams.get("to") || undefined;
     const sopId = req.nextUrl.searchParams.get("sopId") || undefined;
-    const rows = await getLogsWithLog({ date, from, to, sopId });
+    const rows = await getLogs({ date, from, to, sopId });
     return NextResponse.json({ success: true, data: rows });
   } catch (err: any) {
     const status = err.status || 500;

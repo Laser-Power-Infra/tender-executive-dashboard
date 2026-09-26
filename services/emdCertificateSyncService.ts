@@ -1,4 +1,5 @@
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
+import { JWT } from "google-auth-library";
 import pLimit from "p-limit";
 import { prisma } from "@/lib/prisma";
 
@@ -72,7 +73,7 @@ function getAuth() {
       "GDRIVE_CLIENT_EMAIL/GDRIVE_PRIVATE_KEY (or GOOGLE_CLIENT_EMAIL/GOOGLE_PRIVATE_KEY) not configured",
     );
   }
-  return new google.auth.JWT({
+  return new JWT({
     email: email.trim().replace(/^["']|["']$/g, ""),
     key: key.trim().replace(/^["']|["']$/g, "").replace(/\\n/g, "\n"),
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
@@ -115,7 +116,7 @@ export async function syncEmdCertificates(
   let rows: string[][] = [];
   try {
     const auth = getAuth();
-    const sheets = google.sheets({ version: "v4", auth });
+    const sheets = googleSheets({ version: "v4", auth });
     const range = `'${tabName}'!A:ZZ`;
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId,

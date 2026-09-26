@@ -16,18 +16,32 @@ import { fetchAllBomOptions } from "@/lib/slices/utilitySlice";
  */
 const TENDER_DATA_ROUTES = [
   "/",
-  "/tenders",
+  // "/tenders" is deliberately absent: it pages through the data server-side
+  // now, so streaming all ~34k rows there would be pure waste.
   "/post-participation",
   "/not-participated",
   "/merge-conflict",
 ];
 
-function needsTenderData(pathname: string | null): boolean {
+/**
+ * Routes that still need the whole table in the browser.
+ *
+ * The three executive dashboards page server-side now, so only the
+ * merge-conflict view - which compares rows against each other - still reads
+ * `state.tenders.data.rows`. They do still need the file list and the BOM
+ * options, which are small.
+ */
+const TENDER_STREAM_ROUTES = ["/merge-conflict"];
+
+function matchesRoute(routes: string[], pathname: string | null): boolean {
   if (!pathname) return false;
-  return TENDER_DATA_ROUTES.some(
-    (route) =>
-      route === "/" ? pathname === "/" : pathname.startsWith(route),
+  return routes.some((route) =>
+    route === "/" ? pathname === "/" : pathname.startsWith(route),
   );
+}
+
+function needsTenderData(pathname: string | null): boolean {
+  return matchesRoute(TENDER_DATA_ROUTES, pathname);
 }
 
 export function DataLoader({ children }: { children: React.ReactNode }) {
@@ -35,6 +49,7 @@ export function DataLoader({ children }: { children: React.ReactNode }) {
   const hasFiles = useAppSelector((s) => s.files.items.length > 0);
   const pathname = usePathname();
   const enabled = needsTenderData(pathname);
+  const needsStream = matchesRoute(TENDER_STREAM_ROUTES, pathname);
 
   // The tender stream is expensive enough that it must run at most once per
   // mount. `state.files.items` gets a fresh array identity on every
@@ -54,11 +69,11 @@ export function DataLoader({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!enabled || !hasFiles || tendersRequestedRef.current) return;
     tendersRequestedRef.current = true;
-    // Bom options fetch runs in parallel with tenders — populates utilitySlice
-    // for O(1) dropdown lookup.
-    dispatch(fetchAllTenders());
+    // Bom options populate utilitySlice for O(1) dropdown lookup, and every
+    // gated route needs them; only merge-conflict needs the row stream.
+    if (needsStream) dispatch(fetchAllTenders());
     dispatch(fetchAllBomOptions());
-  }, [hasFiles, dispatch, enabled]);
+  }, [hasFiles, dispatch, enabled, needsStream]);
 
   return <>{children}</>;
 }

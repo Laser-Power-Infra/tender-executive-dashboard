@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
 import pLimit from "p-limit";
 import { prisma } from "@/lib/prisma";
 import { getGoogleClients } from "@/lib/gdrive";
@@ -46,7 +46,7 @@ export async function syncContractQuotationNumbers(): Promise<ContractQuotationS
   };
 
   const { oauth2Client } = getGoogleClients();
-  const sheets = google.sheets({ version: "v4", auth: oauth2Client });
+  const sheets = googleSheets({ version: "v4", auth: oauth2Client });
 
   let sheetTitles: string[] = [];
   try {

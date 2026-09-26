@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withLog } from "@/lib/activity-logger";
 
 export const runtime = "nodejs";
 
@@ -39,12 +38,6 @@ async function getBomOptions(names?: string[]): Promise<Record<string, BomOption
   }
   return map;
 }
-
-const getBomOptionsWithLog = withLog(getBomOptions, (result, names) => ({
-  action: "READ" as const,
-  tableName: "Bom",
-  details: `Fetched Bom options${names && names.length ? ` for ${names.length} itemNames` : " (all)"} -> ${Object.keys(result).length} groups, ${Object.values(result).flat().length} rows`,
-}));
 
 export async function GET(req: NextRequest) {
   try {
@@ -91,7 +84,7 @@ export async function GET(req: NextRequest) {
       names = names.slice(0, 1000);
     }
 
-    const bomByItemName = await getBomOptionsWithLog(names);
+    const bomByItemName = await getBomOptions(names);
     return NextResponse.json({ bomByItemName }, { status: 200 });
   } catch (error) {
     console.error("[bom-options] error:", error);
@@ -125,7 +118,7 @@ export async function POST(req: NextRequest) {
         return true;
       });
     }
-    const bomByItemName = await getBomOptionsWithLog(itemNames);
+    const bomByItemName = await getBomOptions(itemNames);
     return NextResponse.json({ bomByItemName }, { status: 200 });
   } catch (error) {
     console.error("[bom-options POST] error:", error);

@@ -7,8 +7,6 @@ import {
   type ParticipationFilter,
 } from "@/lib/slices/filtersSlice";
 import { resetSelectedDateRange } from "@/lib/slices/filesSlice";
-import { deadlineMatchesRange } from "@/components/tender-viewer/participation-cards";
-import { dedupeByDocketNo } from "@/lib/docket";
 import {
   FLOW_MODE_MIN_WIDTH,
   layoutFlow,
@@ -26,122 +24,16 @@ import { FlowEdges } from "@/components/participation-flow/FlowEdges";
 import { FlowNodeCard } from "@/components/participation-flow/FlowNodeCard";
 
 interface ParticipationFlowChartProps {
-  rows: Record<string, unknown>[];
   onClearAssociation?: () => void;
+  /** Docket-deduped node counts from fetchParticipationCounts, keyed by node id. */
+  serverCounts?: FlowCounts | null;
 }
 
 /** Counts keyed by FlowNode.id. */
 export type FlowCounts = Record<string, number>;
 
-/**
- * Funnel counts. This is the original counting logic, unchanged in behaviour -
- * only reshaped so the tree renderer can look a count up by node id.
- */
-export function computeFlowCounts(
-  rows: Record<string, unknown>[],
-  from?: string,
-  to?: string,
-): FlowCounts {
-  const participatedRaw = rows.filter(
-    (r) =>
-      r.apm === "YES" &&
-      r.participated === "true" &&
-      deadlineMatchesRange(r, from, to),
-  );
-  // Deduplicate by docketNo before the RA split, so a docket whose rows
-  // disagree on reverseAuctionApplicable still counts on one side only.
-  const participated = dedupeByDocketNo(
-    participatedRaw as unknown as (Record<string, unknown> & { id?: unknown })[],
-  ) as unknown as typeof participatedRaw;
-
-  const withRa = participated.filter(
-    (r) => r.reverseAuctionApplicable === "true",
-  );
-  const withoutRa = participated.filter(
-    (r) => r.reverseAuctionApplicable !== "true",
-  );
-  const raDone = withRa.filter(
-    (r) => !!r.reverseAuctionStartDate && !!r.reverseAuctionEndDate,
-  );
-  const raPending = withRa.filter(
-    (r) => !r.reverseAuctionStartDate || !r.reverseAuctionEndDate,
-  );
-  const technicalOpen = withoutRa.filter((r) =>
-    [
-      "AWARDED",
-      "FINANCIAL EVALUATION",
-      "TENDER CANCELLED",
-      "TECHNICAL BID OPENED",
-    ].includes(String(r.currentStatus ?? "").toUpperCase()),
-  );
-  const technicalNotOpen = withoutRa.filter((r) => {
-    if (r.currentStatus == null) return true;
-    const s = String(r.currentStatus).trim();
-    return s === "" || s.toUpperCase() === "NOT EVALUATED";
-  });
-  const weL1 = raDone.filter((r) => String(r.ourRank ?? "").trim() === "1");
-  const weLost = raDone.filter((r) => String(r.ourRank ?? "").trim() !== "1");
-  const expRaDate = raPending.filter(
-    (r) => r.expectedRaDate != null && String(r.expectedRaDate).trim() !== "",
-  );
-  const contractReceived = weL1.filter(
-    (r) => r.contractNo != null && String(r.contractNo).trim() !== "",
-  );
-  const contractPending = weL1.filter(
-    (r) => r.contractNo == null || String(r.contractNo).trim() === "",
-  );
-  const financialOpen = technicalOpen.filter((r) =>
-    ["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED"].includes(
-      String(r.currentStatus ?? "").trim().toUpperCase(),
-    ),
-  );
-  const financialNotOpen = technicalOpen.filter(
-    (r) =>
-      !["AWARDED", "FINANCIAL EVALUATION", "TENDER CANCELLED"].includes(
-        String(r.currentStatus ?? "").trim().toUpperCase(),
-      ),
-  );
-  const financialWeL1 = financialOpen.filter(
-    (r) => String(r.ourRank ?? "").trim() === "1",
-  );
-  const financialWeLost = financialOpen.filter(
-    (r) => String(r.ourRank ?? "").trim() !== "1",
-  );
-  const financialContractReceived = financialWeL1.filter(
-    (r) => r.contractNo != null && String(r.contractNo).trim() !== "",
-  );
-  const financialContractPending = financialWeL1.filter(
-    (r) => r.contractNo == null || String(r.contractNo).trim() === "",
-  );
-
-  // Per-node dedupe is kept for deeper nodes: a docket can legitimately match
-  // sibling nodes (e.g. one row rank 1 and another rank 2), so it is counted
-  // once per node. The root split already ran on deduped rows above.
-  const countUnique = (arr: typeof participated) =>
-    dedupeByDocketNo(
-      arr as unknown as (Record<string, unknown> & { id?: unknown })[],
-    ).length;
-
-  return {
-    withRa: countUnique(withRa),
-    withoutRa: countUnique(withoutRa),
-    raDone: countUnique(raDone),
-    raPending: countUnique(raPending),
-    technicalOpen: countUnique(technicalOpen),
-    technicalNotOpen: countUnique(technicalNotOpen),
-    weL1: countUnique(weL1),
-    weLost: countUnique(weLost),
-    expRaDate: countUnique(expRaDate),
-    contractReceived: countUnique(contractReceived),
-    contractPending: countUnique(contractPending),
-    financialOpen: countUnique(financialOpen),
-    financialNotOpen: countUnique(financialNotOpen),
-    financialWeL1: countUnique(financialWeL1),
-    financialWeLost: countUnique(financialWeLost),
-    financialContractReceived: countUnique(financialContractReceived),
-    financialContractPending: countUnique(financialContractPending),
-  };
-}
+/** Stable identity, so an unanswered server query does not re-render the tree. */
+const EMPTY_COUNTS: FlowCounts = {};
 
 /** Tracks the chart's own width so the layout can adapt to sidebar resizing. */
 function useMeasuredWidth() {
@@ -260,28 +152,19 @@ function FlowSubtree({
 }
 
 export function ParticipationFlowChart({
-  rows,
   onClearAssociation,
+  serverCounts = null,
 }: ParticipationFlowChartProps) {
   const dispatch = useAppDispatch();
   const participationFilters = useAppSelector(
     (s) => s.filters.participationFilters,
   );
-  const participatedDateRange = useAppSelector(
-    (s) => s.filters.participatedDateRange,
-  );
-
   const [containerRef, containerWidth] = useMeasuredWidth();
 
-  const counts = useMemo(
-    () =>
-      computeFlowCounts(
-        rows,
-        participatedDateRange?.from,
-        participatedDateRange?.to,
-      ),
-    [rows, participatedDateRange],
-  );
+  // Server-only. There is no client fallback: it was a second implementation of
+  // the whole funnel that never ran in production (the EPC pages pass no rows)
+  // and that could not see the ancestor chain the counts query now applies.
+  const counts = serverCounts ?? EMPTY_COUNTS;
 
   const isActive = useCallback(
     (filter: ParticipationFilter) => participationFilters.includes(filter),
