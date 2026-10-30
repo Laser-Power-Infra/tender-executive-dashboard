@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
+import { toneShadow } from "./pop";
 
-export type BubbleTone = "lavender" | "mint" | "butter" | "coral";
+export type BubbleTone = "apricot" | "mint" | "butter" | "rose";
 
 // Static class strings so Tailwind sees every one.
 const TONES: Record<BubbleTone, string> = {
-  lavender: "bg-lavender-surface",
+  apricot: "bg-apricot-surface",
   mint: "bg-mint-surface",
   butter: "bg-butter-surface",
-  coral: "bg-coral-surface",
+  rose: "bg-rose-surface",
 };
 
 const TAILS = {
@@ -18,7 +19,7 @@ const TAILS = {
 /** Rounded bubble with a tail pointing at Pip, for things Pip says aloud. */
 export function SpeechBubble({
   children,
-  tone = "lavender",
+  tone = "apricot",
   tail = "bottom",
   className = "",
 }: {
@@ -31,7 +32,7 @@ export function SpeechBubble({
   const line = `var(--${tone}-line)`;
   return (
     <div
-      style={{ boxShadow: `0 0 0 1px ${line}, var(--shadow-pop)`, ["--tail-line" as string]: line }}
+      style={{ boxShadow: toneShadow(line), ["--tail-line" as string]: line }}
       className={`relative w-max max-w-72 rounded-2xl px-3.5 py-2 ${TONES[tone]} ${className}`}
     >
       {children}

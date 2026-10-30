@@ -2,8 +2,12 @@
 
 export const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
-// Pip speaks in lavender so its bubbles and chat stand apart from the page.
-export const PIP_SHADOW = "0 0 0 1px var(--lavender-line), var(--shadow-pop)";
+/** Outline plus a glow in the tone's own colour, so what Pip says lifts off the page. */
+export const toneShadow = (line: string) =>
+  `0 0 0 1px ${line}, 0 8px 28px color-mix(in srgb, ${line} 55%, transparent), var(--shadow-pop)`;
+
+// Pip speaks in apricot so its bubbles and chat stand apart from the page.
+export const PIP_SHADOW = toneShadow("var(--apricot-line)");
 
 /** Grows out of Pip's head; reduced motion fades only. */
 export function popIn(reduceMotion: boolean | null) {

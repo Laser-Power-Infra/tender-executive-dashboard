@@ -28,11 +28,11 @@
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
 
-  /* Companion palettes: Pip (lavender) and notifications. Never page chrome. */
-  --color-lavender-surface: var(--lavender-surface);
-  --color-lavender-line: var(--lavender-line);
-  --color-lavender-soft: var(--lavender-soft);
-  --color-lavender-ink: var(--lavender-ink);
+  /* Companion palettes: Pip (apricot) and notifications. Never page chrome. */
+  --color-apricot-surface: var(--apricot-surface);
+  --color-apricot-line: var(--apricot-line);
+  --color-apricot-soft: var(--apricot-soft);
+  --color-apricot-ink: var(--apricot-ink);
   --color-butter-surface: var(--butter-surface);
   --color-butter-line: var(--butter-line);
   --color-butter-soft: var(--butter-soft);
@@ -41,10 +41,10 @@
   --color-mint-line: var(--mint-line);
   --color-mint-soft: var(--mint-soft);
   --color-mint-ink: var(--mint-ink);
-  --color-coral-surface: var(--coral-surface);
-  --color-coral-line: var(--coral-line);
-  --color-coral-soft: var(--coral-soft);
-  --color-coral-ink: var(--coral-ink);
+  --color-rose-surface: var(--rose-surface);
+  --color-rose-line: var(--rose-line);
+  --color-rose-soft: var(--rose-soft);
+  --color-rose-ink: var(--rose-ink);
 
   /* Bare sizes between Tailwind's steps. T-shirt names, so tailwind-merge
      still reads them as font sizes. text-md is the body size. */
@@ -93,22 +93,22 @@
   --warn-soft: rgb(178 80 0 / 0.12);
 
   /* Companion palettes: tinted surface, its outline, a stronger fill, and text. */
-  --lavender-surface: #f6f3ff;
-  --lavender-line: #ddd5ff;
-  --lavender-soft: #ebe5ff;
-  --lavender-ink: #5b45b8;
-  --butter-surface: #fffaeb;
-  --butter-line: #f2dc8f;
-  --butter-soft: #fff1c2;
-  --butter-ink: #7a5900;
-  --mint-surface: #f0faf7;
-  --mint-line: #c6ebe1;
-  --mint-soft: #ddf4ed;
-  --mint-ink: #0f6b59;
-  --coral-surface: #fff5f1;
-  --coral-line: #ffd5c7;
-  --coral-soft: #ffe7de;
-  --coral-ink: #a8401f;
+  --apricot-surface: #ffead6;
+  --apricot-line: #f5b47a;
+  --apricot-soft: #ffd9b5;
+  --apricot-ink: #8a4310;
+  --butter-surface: #fff3c4;
+  --butter-line: #f0cf5c;
+  --butter-soft: #ffe792;
+  --butter-ink: #6b4d00;
+  --mint-surface: #dcf5ed;
+  --mint-line: #9fdcc9;
+  --mint-soft: #c3ecdf;
+  --mint-ink: #0b5e4e;
+  --rose-surface: #ffe3e8;
+  --rose-line: #ffa3b3;
+  --rose-soft: #ffccd6;
+  --rose-ink: #a3112e;
 
   /* Translucent chrome: sticky table header, popups. */
   --glass: rgb(255 255 255 / 0.72);
@@ -159,22 +159,22 @@
   --bad-soft: rgb(255 69 58 / 0.16);
   --warn: #ffb340;
   --warn-soft: rgb(255 159 10 / 0.16);
-  --lavender-surface: #1f1b2e;
-  --lavender-line: #3a3157;
-  --lavender-soft: #2c2645;
-  --lavender-ink: #c4b5ff;
-  --butter-surface: #26220f;
-  --butter-line: #4a4120;
-  --butter-soft: #332d14;
-  --butter-ink: #f5d67a;
-  --mint-surface: #142621;
-  --mint-line: #24463d;
-  --mint-soft: #1b332c;
-  --mint-ink: #7fd9c2;
-  --coral-surface: #2a1b16;
-  --coral-line: #4d2f25;
-  --coral-soft: #38231c;
-  --coral-ink: #ffab8f;
+  --apricot-surface: #36220f;
+  --apricot-line: #7a4a1f;
+  --apricot-soft: #4a2e14;
+  --apricot-ink: #ffc48f;
+  --butter-surface: #332b0d;
+  --butter-line: #6b5a1f;
+  --butter-soft: #463a12;
+  --butter-ink: #ffe08a;
+  --mint-surface: #10332a;
+  --mint-line: #2f6b5a;
+  --mint-soft: #174a3d;
+  --mint-ink: #8fe8d1;
+  --rose-surface: #3a1820;
+  --rose-line: #7a2e3f;
+  --rose-soft: #4d1f2a;
+  --rose-ink: #ff9fb2;
   --glass: rgb(30 30 34 / 0.72);
   --shadow-pop: 0 0 0 1px var(--line-strong), 0 10px 32px rgb(0 0 0 / 0.5);
   --shadow-sheet: 0 0 0 1px var(--line-strong), 0 24px 64px rgb(0 0 0 / 0.6);

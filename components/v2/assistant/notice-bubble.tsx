@@ -12,9 +12,9 @@ type Kind = "success" | "warning" | "error" | "loading" | "info";
 const TONE: Record<Kind, BubbleTone> = {
   success: "mint",
   warning: "butter",
-  error: "coral",
-  loading: "lavender",
-  info: "lavender",
+  error: "rose",
+  loading: "apricot",
+  info: "apricot",
 };
 
 export function noticeKind(t: Pick<ToastT, "type">): Kind {

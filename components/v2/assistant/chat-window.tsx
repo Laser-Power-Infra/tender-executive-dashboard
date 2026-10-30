@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { SquarePen, X } from "lucide-react";
@@ -26,7 +25,6 @@ export function ChatWindow({
   firstName: string | null;
   onClose: () => void;
 }) {
-  const pathname = usePathname();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const { messages, status, error } = chat;
@@ -40,7 +38,7 @@ export function ChatWindow({
   function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
-    chat.sendMessage({ text: trimmed }, { body: { path: pathname } });
+    chat.sendMessage({ text: trimmed });
     onInput("");
   }
 
@@ -55,12 +53,12 @@ export function ChatWindow({
         if (e.key === "Escape") onClose();
       }}
       style={{ boxShadow: PIP_SHADOW }}
-      className="flex h-[min(37.5rem,75dvh)] w-100 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-lavender-surface"
+      className="flex h-[min(37.5rem,75dvh)] w-100 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl bg-apricot-surface"
     >
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-lavender-line px-2 pl-4">
+      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-apricot-line px-2 pl-4">
         <div className="min-w-0 flex-1">
           <h2 className="type-title leading-tight">Pip</h2>
-          <p aria-live="polite" className={error ? "text-xs text-bad" : "text-xs text-lavender-ink"}>
+          <p aria-live="polite" className={error ? "text-xs text-bad" : "text-xs text-apricot-ink"}>
             {statusLine}
           </p>
         </div>

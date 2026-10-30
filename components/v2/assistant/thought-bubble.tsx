@@ -32,9 +32,9 @@ const DOTS = ["left-[46%] -bottom-9 size-3.5", "left-[54%] -bottom-12 size-2"];
  */
 export function ThoughtBubble({ children }: { children: ReactNode }) {
   return (
-    <div className="relative w-max max-w-60 px-6 py-4 text-center drop-shadow-[0_8px_18px_rgb(0_0_0/0.14)]">
-      <Shapes className="bg-lavender-surface shadow-[0_0_0_1px_var(--lavender-line)]" />
-      <Shapes className="bg-lavender-surface" />
+    <div className="relative w-max max-w-60 px-6 py-4 text-center drop-shadow-[0_8px_18px_color-mix(in_srgb,var(--apricot-line)_55%,transparent)]">
+      <Shapes className="bg-apricot-surface shadow-[0_0_0_1px_var(--apricot-line)]" />
+      <Shapes className="bg-apricot-surface" />
       <p className="relative">{children}</p>
     </div>
   );

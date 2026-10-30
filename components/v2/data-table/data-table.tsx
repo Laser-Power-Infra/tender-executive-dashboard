@@ -35,7 +35,7 @@ import { Menu, MenuCheckItem, Popover, Select } from "@/components/v2/ui/overlay
 import { EmptyState } from "@/components/v2/ui/page";
 import { Clamp } from "./cells";
 import { ColumnFilterPanel, summarizeFilter } from "./column-filter";
-import { filterRefs, formatFilters, parseFilters } from "./filter-formula";
+import { filterRefs, formatFilters, parseFilters, resolveRef, type FilterRef } from "./filter-formula";
 import { SaveFilterButton, SavedFiltersMenu } from "./saved-filters";
 import type { SavedFilterRow } from "@/actions/saved-filters";
 import {
@@ -48,8 +48,10 @@ import {
   type DataTableColumn,
   type DataTableProps,
   type FilterChip,
+  type FilterOption,
 } from "./types";
 import { say } from "@/lib/pip-says";
+import { fitValues, registerPipTable, showOption } from "@/components/v2/assistant/pip-table";
 
 const DEFAULT_WIDTH = 180;
 const MIN_WIDTH = 50;
@@ -514,24 +516,13 @@ function ColumnPicker<Row>({
   );
 }
 
-/**
- * Column filters as one editable formula: paste or type one to set every
- * column at once, copy it, or save it. The chips stay the view of what is set.
- */
-function FormulaBar<Row>({
-  columns,
-  filters,
-  onFilterChange,
-  onResetFilters,
-  formulaFilters = [],
-}: Pick<
+type FormulaProps<Row> = Pick<
   DataTableProps<Row>,
   "columns" | "filters" | "onFilterChange" | "onResetFilters" | "formulaFilters"
->) {
-  // null follows the live filters; typing or pasting starts a draft.
-  const [draft, setDraft] = useState<string | null>(null);
-  // This page's saved filters, loaded when the Saved menu first opens.
-  const [saved, setSaved] = useState<SavedFilterRow[] | null>(null);
+>;
+
+/** The table's filters as formula targets, the live formula, and a way to replace them all. */
+function useFormula<Row>({ columns, filters, onFilterChange, onResetFilters, formulaFilters = [] }: FormulaProps<Row>) {
   // Page filters first: they sit above the columns on screen too.
   const refs = useMemo(
     () => [
@@ -546,14 +537,6 @@ function FormulaBar<Row>({
     return out;
   }, [filters, formulaFilters]);
   const current = useMemo(() => formatFilters(allFilters, refs), [allFilters, refs]);
-  const text = draft ?? current;
-  const dirty = draft !== null && draft.trim() !== current;
-  const parsed = useMemo(
-    () => (dirty && draft.trim() ? parseFilters(draft, refs) : null),
-    [dirty, draft, refs],
-  );
-  const ready = !!parsed && parsed.errors.length === 0;
-  const valid = !!text.trim() && (!parsed || ready);
 
   // Replace, not merge: the formula is the whole filter.
   const replaceFilters = (next: Record<string, ColumnFilterState>) => {
@@ -567,6 +550,29 @@ function FormulaBar<Row>({
       }
     }
   };
+
+  return { refs, current, replaceFilters };
+}
+
+type Formula = ReturnType<typeof useFormula>;
+
+/**
+ * Column filters as one editable formula: paste or type one to set every
+ * column at once, copy it, or save it. The chips stay the view of what is set.
+ */
+function FormulaBar({ formula: { refs, current, replaceFilters } }: { formula: Formula }) {
+  // null follows the live filters; typing or pasting starts a draft.
+  const [draft, setDraft] = useState<string | null>(null);
+  // This page's saved filters, loaded when the Saved menu first opens.
+  const [saved, setSaved] = useState<SavedFilterRow[] | null>(null);
+  const text = draft ?? current;
+  const dirty = draft !== null && draft.trim() !== current;
+  const parsed = useMemo(
+    () => (dirty && draft.trim() ? parseFilters(draft, refs) : null),
+    [dirty, draft, refs],
+  );
+  const ready = !!parsed && parsed.errors.length === 0;
+  const valid = !!text.trim() && (!parsed || ready);
 
   const apply = () => {
     if (!ready) return;
@@ -638,6 +644,70 @@ function FormulaBar<Row>({
       )}
     </div>
   );
+}
+
+/** Lets Pip read and set this table's filters while it is on screen. */
+function usePipTable(
+  formula: Formula,
+  getFilterOptions: DataTableProps<unknown>["getFilterOptions"],
+  onFilterOpen: DataTableProps<unknown>["onFilterOpen"],
+) {
+  // Pip calls in later than any render, so it reads the latest of everything.
+  const latest = useRef({ formula, getFilterOptions, onFilterOpen });
+  useEffect(() => {
+    latest.current = { formula, getFilterOptions, onFilterOpen };
+  });
+
+  useEffect(() => {
+    // A list column's own options, then whatever the page loads for it.
+    const options = async (ref: FilterRef): Promise<FilterOption[]> => {
+      const own = ref.filter?.type === "select" ? (ref.filter.options ?? []) : [];
+      const loaded = () => latest.current.getFilterOptions?.(ref.id).options;
+      if (latest.current.getFilterOptions && !loaded()) {
+        latest.current.onFilterOpen?.(ref.id);
+        // ponytail: polls the latest options for up to 5 s; a promise from getFilterOptions would remove it.
+        for (let i = 0; i < 25 && !loaded(); i++) await new Promise((r) => setTimeout(r, 200));
+      }
+      const seen = new Set<string>();
+      return [...own, ...(loaded() ?? [])].filter((o) => !seen.has(o.value) && !!seen.add(o.value));
+    };
+
+    return registerPipTable({
+      get refs() {
+        return latest.current.formula.refs;
+      },
+      current: () => latest.current.formula.current,
+      apply: async (text) => {
+        const { refs, replaceFilters } = latest.current.formula;
+        if (!text.trim()) {
+          replaceFilters({});
+          return [];
+        }
+        const result = parseFilters(text, refs);
+        if (result.errors.length) return result.errors;
+        // Pip writes values from what people say; hold them to the column's real values.
+        const errors: string[] = [];
+        for (const [id, state] of Object.entries(result.filters)) {
+          const ref = refs.find((r) => r.id === id);
+          if (!state.select || ref?.filter?.type !== "select") continue;
+          const known = await options(ref);
+          const fit = fitValues(state.select, known);
+          // A searchable list may hold more values than it lists; only a closed list refuses.
+          if (fit.unknown.length && !ref.filter.searchAsText && known.length > 1) {
+            errors.push(
+              `[${ref.name}]: unknown value ${fit.unknown.map((v) => JSON.stringify(v)).join(", ")}. Use one of: ${known.slice(0, 30).map(showOption).join(", ")}`,
+            );
+          } else state.select = [...fit.values, ...fit.unknown];
+        }
+        if (errors.length === 0) replaceFilters(result.filters);
+        return errors;
+      },
+      values: async (column) => {
+        const ref = resolveRef(column.replace(/^\[|\]$/g, ""), latest.current.formula.refs);
+        return ref?.filter?.type === "select" ? options(ref) : null;
+      },
+    });
+  }, []);
 }
 
 /* ---------------------------------- Table ---------------------------------- */
@@ -778,6 +848,8 @@ export function DataTable<Row>({
   const hasColumnFilters = Object.values(filters).some(isFilterActive);
 
   const [formulaOpen, setFormulaOpen] = useState(false);
+  const formula = useFormula({ columns, filters, onFilterChange, onResetFilters, formulaFilters });
+  usePipTable(formula, getFilterOptions, onFilterOpen);
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-surface card">
@@ -815,13 +887,7 @@ export function DataTable<Row>({
         </div>
       </div>
       {formulaOpen && (
-        <FormulaBar
-          columns={columns}
-          filters={filters}
-          onFilterChange={onFilterChange}
-          onResetFilters={onResetFilters}
-          formulaFilters={formulaFilters}
-        />
+        <FormulaBar formula={formula} />
       )}
 
       <div className="relative min-h-0 flex-1">

@@ -62,18 +62,18 @@ Tokens are CSS variables on `:root`, redefined under `.dark`, and exposed to Tai
 
 ### Companion palettes
 
-Four tinted families for things that speak to the user rather than belong to a page. Pip's bubbles and chat use `lavender`. Notifications Pip says use `mint` (success), `butter` (warning), `coral` (error) and `lavender` (info, loading). Each family has the same four tokens.
+Four tinted families for things that speak to the user rather than belong to a page. Pip's bubbles and chat use `apricot`. Notifications Pip says use `mint` (success), `butter` (warning), `rose` (error) and `apricot` (info, loading). Each family has the same four tokens.
 
 | Family | Light surface / line / soft / ink | Dark surface / line / soft / ink |
 |---|---|---|
-| `lavender` | `#f6f3ff` `#ddd5ff` `#ebe5ff` `#5b45b8` | `#1f1b2e` `#3a3157` `#2c2645` `#c4b5ff` |
-| `butter` | `#fffaeb` `#f2dc8f` `#fff1c2` `#7a5900` | `#26220f` `#4a4120` `#332d14` `#f5d67a` |
-| `mint` | `#f0faf7` `#c6ebe1` `#ddf4ed` `#0f6b59` | `#142621` `#24463d` `#1b332c` `#7fd9c2` |
-| `coral` | `#fff5f1` `#ffd5c7` `#ffe7de` `#a8401f` | `#2a1b16` `#4d2f25` `#38231c` `#ffab8f` |
+| `apricot` | `#ffead6` `#f5b47a` `#ffd9b5` `#8a4310` | `#36220f` `#7a4a1f` `#4a2e14` `#ffc48f` |
+| `butter` | `#fff3c4` `#f0cf5c` `#ffe792` `#6b4d00` | `#332b0d` `#6b5a1f` `#463a12` `#ffe08a` |
+| `mint` | `#dcf5ed` `#9fdcc9` `#c3ecdf` `#0b5e4e` | `#10332a` `#2f6b5a` `#174a3d` `#8fe8d1` |
+| `rose` | `#ffe3e8` `#ffa3b3` `#ffccd6` `#a3112e` | `#3a1820` `#7a2e3f` `#4d1f2a` `#ff9fb2` |
 
 - `-surface` is the panel background, `-line` its outline (`border-*-line`, or `0 0 0 1px var(--*-line)` ahead of `--shadow-pop`), `-soft` a stronger fill inside it (the user's own message), `-ink` tinted text (a status line).
 - Never page chrome, tables or controls. Buttons inside a companion panel keep the normal accent.
-- `butter`, `mint` and `coral` mean status only in Pip's notifications, and there always with an icon and words. On pages, status stays `good`, `bad` and `warn`.
+- `butter`, `mint` and `rose` mean status only in Pip's notifications, and there always with an icon and words. On pages, status stays `good`, `bad` and `warn`.
 
 Rules:
 

@@ -249,7 +249,8 @@ export function buildTenderColumns({
           width: index?.width ?? 120,
           hidden: byIndex,
           sortable: false,
-          filter: selectFilter(),
+          // Stored as a boolean, so the values are "true" / "false".
+          filter: selectFilter({ value: "true", label: "Yes" }, { value: "false", label: "No" }),
           cell: (row, { rowIndex }) => (
             <DecisionCell row={row} field={col} rowIndex={rowIndex} />
           ),

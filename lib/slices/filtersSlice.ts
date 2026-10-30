@@ -12,6 +12,8 @@ interface FiltersState {
   columnFilters: Record<string, ColumnFilterState>;
   participationFilters: ParticipationFilter[];
   analyticsFilter: AnalyticsFilter;
+  /** Turns off the tenders page's default "today onward" deadline rule. */
+  showPastDeadlines: boolean;
 }
 
 const initialState: FiltersState = {
@@ -20,6 +22,7 @@ const initialState: FiltersState = {
   columnFilters: {},
   participationFilters: [],
   analyticsFilter: null,
+  showPastDeadlines: false,
 };
 
 export const filtersSlice = createSlice({
@@ -46,6 +49,9 @@ export const filtersSlice = createSlice({
     },
     setAnalyticsFilter(state, action: PayloadAction<AnalyticsFilter>) {
       state.analyticsFilter = action.payload;
+    },
+    setShowPastDeadlines(state, action: PayloadAction<boolean>) {
+      state.showPastDeadlines = action.payload;
     },
     // Keyed by filter type, so every ColumnFilterType (numberRange included) is
     // stored without a case per type.
@@ -74,6 +80,7 @@ export const {
   toggleParticipationFilter,
   clearParticipationFilters,
   setAnalyticsFilter,
+  setShowPastDeadlines,
   setColumnFilter,
   clearColumnFilter,
   resetColumnFilters,

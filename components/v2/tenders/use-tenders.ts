@@ -107,7 +107,7 @@ export function useTenders() {
   // identity stable across unrelated dispatches.
   const query = useAppSelector(
     (s): TenderQuery =>
-      selectTenderQuery(s, SCOPE, s.filters.participationFilters.length === 0),
+      selectTenderQuery(s, SCOPE, s.filters.participationFilters.length === 0 && !s.filters.showPastDeadlines),
     (a, b) => tenderQueryKey(a) === tenderQueryKey(b),
   );
   const queryKey = useMemo(() => tenderQueryKey(query), [query]);

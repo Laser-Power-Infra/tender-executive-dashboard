@@ -48,7 +48,7 @@ export function filterRefs<Row>(columns: DataTableColumn<Row>[]): FilterRef[] {
 const key = (s: string) => s.trim().toLowerCase();
 
 /** Header when it names one target only, else the id. */
-function refName(ref: FilterRef, refs: FilterRef[]): string {
+export function refName(ref: FilterRef, refs: FilterRef[]): string {
   const same = refs.filter((r) => key(r.name) === key(ref.name));
   return same.length === 1 && ref.name && !ref.name.includes("]") ? ref.name : ref.id;
 }
@@ -158,7 +158,7 @@ function tokenize(text: string): Token[] {
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Local calendar day, the format the date range filter stores. */
-const localDay = (d: Date) =>
+export const localDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function isRealDay(s: string): boolean {
@@ -168,7 +168,7 @@ function isRealDay(s: string): boolean {
   return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
 }
 
-function resolve(name: string, refs: FilterRef[]): FilterRef | undefined {
+export function resolveRef(name: string, refs: FilterRef[]): FilterRef | undefined {
   const byName = refs.filter((r) => key(r.name) === key(name));
   return byName.length === 1 ? byName[0] : refs.find((r) => r.id === name.trim());
 }
@@ -235,7 +235,7 @@ export function parseFilters(
       i++;
       const name = head.v;
       const label = `[${name}]`;
-      const ref = resolve(name, refs);
+      const ref = resolveRef(name, refs);
       if (!ref) errors.push(`${label} is not a column on this page`);
       // Parse the clause even for an unknown column, so later clauses still get checked.
       const op = peek();

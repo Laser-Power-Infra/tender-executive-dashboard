@@ -57,7 +57,7 @@ const COLOURS = [
   "bad-soft",
   "warn",
   "warn-soft",
-  ...["lavender", "butter", "mint", "coral"].flatMap((f) =>
+  ...["apricot", "butter", "mint", "rose"].flatMap((f) =>
     ["surface", "line", "soft", "ink"].map((p) => `${f}-${p}`),
   ),
 ];

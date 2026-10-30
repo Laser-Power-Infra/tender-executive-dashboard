@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useSonner } from "sonner";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Tip } from "@/components/v2/ui/overlay";
 import { useIsDeveloper } from "@/components/v2/providers";
@@ -12,6 +12,7 @@ import { ChatWindow } from "./chat-window";
 import { noticeKind } from "./notice-bubble";
 import { NoticeStack } from "./notice-stack";
 import { PipOrb } from "./pip-orb";
+import { describeTable, pipTable } from "./pip-table";
 import { popIn } from "./pop";
 import { ThoughtBubble } from "./thought-bubble";
 import { usePipMood } from "./use-pip-mood";
@@ -23,7 +24,13 @@ const CENTER =
 // Hangs off the top of the dock, centred on Pip.
 const ABOVE = "absolute bottom-full left-1/2 -translate-x-1/2";
 
-const transport = new DefaultChatTransport({ api: "/api/assistant" });
+// A function body, so the turn Pip sends after a tool call sees the table as it is now.
+const transport = new DefaultChatTransport({
+  api: "/api/assistant",
+  body: () => ({ path: location.pathname, table: describeTable(pipTable()) }),
+});
+
+const NO_TABLE = "This page has no table to filter.";
 
 export function Assistant() {
   const { data: session, status: sessionStatus } = useSession();
@@ -35,7 +42,28 @@ export function Assistant() {
 /** Pip and whatever pops out of it. One fixed dock, so moving it moves everything. */
 function AssistantDock({ firstName, isDeveloper }: { firstName: string | null; isDeveloper: boolean }) {
   const reduceMotion = useReducedMotion();
-  const chat = useChat({ transport });
+  const chat = useChat({
+    transport,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    // Pip's tools act on the page's table, so they run here. No await on addToolOutput: it deadlocks.
+    async onToolCall({ toolCall }) {
+      const table = pipTable();
+      const input = toolCall.input as { formula?: string; column?: string };
+      const answer = (output: unknown) =>
+        chat.addToolOutput({ tool: toolCall.toolName, toolCallId: toolCall.toolCallId, output });
+      if (toolCall.toolName === "set_filters") {
+        const errors = table ? await table.apply(input.formula ?? "") : [NO_TABLE];
+        answer(errors.length ? { ok: false, errors } : { ok: true });
+      } else if (toolCall.toolName === "list_filter_values") {
+        const values = table ? await table.values(input.column ?? "") : null;
+        answer(
+          values
+            ? values.map((o) => ({ value: o.value, label: o.label }))
+            : { error: table ? `${input.column} is not a list column` : NO_TABLE },
+        );
+      }
+    },
+  });
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const orbRef = useRef<HTMLButtonElement>(null);
