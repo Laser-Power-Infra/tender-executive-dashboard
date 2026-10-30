@@ -11,7 +11,8 @@ import { auth } from "@/auth";
 
 export const maxDuration = 60;
 
-const MAX_MESSAGES = 40;
+// Keep in step with MAX_USER_MESSAGES in components/v2/assistant/chat-window.tsx.
+const MAX_USER_MESSAGES = 15;
 const MAX_TEXT = 2000;
 
 const REFUSAL = "I can only help with the tender dashboard.";
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
   const tooLong = messages.some(
     (m) => m.role === "user" && m.parts.some((p) => p.type === "text" && p.text.length > MAX_TEXT),
   );
-  if (messages.length > MAX_MESSAGES || tooLong) {
+  if (messages.filter((m) => m.role === "user").length > MAX_USER_MESSAGES || tooLong) {
     return Response.json(
       { error: tooLong ? `Keep messages under ${MAX_TEXT} characters.` : "This chat is too long. Start a new one." },
       { status: 400 },

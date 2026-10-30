@@ -11,6 +11,7 @@ export function ChatComposer({
   onSend,
   onStop,
   busy,
+  disabled,
   ref,
 }: {
   value: string;
@@ -18,6 +19,7 @@ export function ChatComposer({
   onSend: () => void;
   onStop: () => void;
   busy: boolean;
+  disabled?: boolean;
   ref?: Ref<HTMLTextAreaElement>;
 }) {
   const id = useId();
@@ -39,6 +41,7 @@ export function ChatComposer({
           rows={1}
           autoFocus
           value={value}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -46,7 +49,7 @@ export function ChatComposer({
               onSend();
             }
           }}
-          placeholder="Ask Pip"
+          placeholder={disabled ? "Start a new chat to continue" : "Ask Pip"}
           className="field-sizing-content max-h-36 min-h-7 flex-1 resize-none bg-transparent py-1 leading-snug outline-none placeholder:text-ink-3 focus-visible:outline-none"
         />
         {busy ? (
@@ -66,7 +69,7 @@ export function ChatComposer({
             className="w-7 px-0"
             aria-label="Send"
             title="Send (Enter)"
-            disabled={!value.trim()}
+            disabled={disabled || !value.trim()}
             icon={<ArrowUp className="size-3.5" />}
           />
         )}
