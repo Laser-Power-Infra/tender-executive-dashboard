@@ -107,7 +107,8 @@ export function useTenders() {
   // identity stable across unrelated dispatches.
   const query = useAppSelector(
     (s): TenderQuery =>
-      selectTenderQuery(s, SCOPE, s.filters.participationFilters.length === 0 && !s.filters.showPastDeadlines),
+      // The deadline floor is a real column filter now, not an implicit rule.
+      selectTenderQuery(s, SCOPE, false),
     (a, b) => tenderQueryKey(a) === tenderQueryKey(b),
   );
   const queryKey = useMemo(() => tenderQueryKey(query), [query]);

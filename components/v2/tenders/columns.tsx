@@ -219,6 +219,7 @@ export function buildTenderColumns({
         return {
           id: col,
           header: label ?? "Category",
+          hint: "business line of the tender: EPC (contracts to build or install) or Manufacturing (supply of goods)",
           width: index?.width ?? 150,
           hidden: byIndex,
           search: false,
@@ -454,6 +455,14 @@ export function buildTenderColumns({
       frozen: FROZEN.has(col) || undefined,
     };
 
+    if (col === "ourRank") {
+      // Exact ranks ("1", "L1") need a list; text search would also match 10, 11.
+      return {
+        ...base,
+        hint: "our bid rank in the result; rank 1 / L1 means we won or were lowest bidder",
+        filter: selectFilter(),
+      };
+    }
     if (isRawMaterials) {
       return {
         ...base,

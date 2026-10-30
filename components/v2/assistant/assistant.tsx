@@ -24,10 +24,10 @@ const CENTER =
 // Hangs off the top of the dock, centred on Pip.
 const ABOVE = "absolute bottom-full left-1/2 -translate-x-1/2";
 
-// A function body, so the turn Pip sends after a tool call sees the table as it is now.
+// A function body, so every turn carries the page Pip is on now.
 const transport = new DefaultChatTransport({
   api: "/api/assistant",
-  body: () => ({ path: location.pathname, table: describeTable(pipTable()) }),
+  body: () => ({ path: location.pathname }),
 });
 
 const NO_TABLE = "This page has no table to filter.";
@@ -51,7 +51,9 @@ function AssistantDock({ firstName, isDeveloper }: { firstName: string | null; i
       const input = toolCall.input as { formula?: string; column?: string };
       const answer = (output: unknown) =>
         chat.addToolOutput({ tool: toolCall.toolName, toolCallId: toolCall.toolCallId, output });
-      if (toolCall.toolName === "set_filters") {
+      if (toolCall.toolName === "get_table") {
+        answer(describeTable(table));
+      } else if (toolCall.toolName === "set_filters") {
         const errors = table ? await table.apply(input.formula ?? "") : [NO_TABLE];
         answer(errors.length ? { ok: false, errors } : { ok: true });
       } else if (toolCall.toolName === "list_filter_values") {

@@ -7,13 +7,11 @@ import { useAppDispatch, useAppSelector } from "@/lib/hooks";
 import { resetSelectedDateRange, setSelectedDateRange } from "@/lib/slices/filesSlice";
 import {
   setAnalyticsFilter,
-  setShowPastDeadlines,
   setExclusionFilter,
   type AnalyticsFilter,
 } from "@/lib/slices/filtersSlice";
 import { DataTable } from "@/components/v2/data-table/data-table";
 import {
-  isFilterActive,
   type FilterChip,
   type FormulaFilter,
 } from "@/components/v2/data-table/types";
@@ -64,7 +62,6 @@ export function TendersView() {
   const t = useTenders();
   const analyticsFilter = useAppSelector((s) => s.filters.analyticsFilter);
   const exclusionFilter = useAppSelector((s) => s.filters.exclusionFilter);
-  const showPastDeadlines = useAppSelector((s) => s.filters.showPastDeadlines);
   const dateFrom = useAppSelector((s) => s.files.selectedDateFrom);
   const dateTo = useAppSelector((s) => s.files.selectedDateTo);
   const [exporting, setExporting] = useState(false);
@@ -126,20 +123,6 @@ export function TendersView() {
         onRemove: () => dispatch(resetSelectedDateRange()),
       });
     }
-    if (query.applyDefaultDeadlineFilter && !isFilterActive(columnFilters.deadline)) {
-      chips.push({
-        key: "deadline-default",
-        label: "Deadline: today onward or not set",
-        onRemove: () => dispatch(setShowPastDeadlines(true)),
-      });
-    }
-    if (showPastDeadlines) {
-      chips.push({
-        key: "past-deadlines",
-        label: "Including past deadlines",
-        onRemove: () => dispatch(setShowPastDeadlines(false)),
-      });
-    }
     return chips;
   }, [
     analyticsFilter,
@@ -149,9 +132,6 @@ export function TendersView() {
     exclusionFilter,
     dateFrom,
     dateTo,
-    query.applyDefaultDeadlineFilter,
-    showPastDeadlines,
-    columnFilters.deadline,
     dispatch,
   ]);
 
@@ -177,16 +157,8 @@ export function TendersView() {
             ? "needs both dates: BETWEEN start AND end"
             : null,
       },
-      {
-        // Off by default: the page hides past deadlines until this is YES.
-        id: "pastDeadlines",
-        name: "Include past deadlines",
-        filter: { type: "boolean" },
-        value: showPastDeadlines ? { boolean: true } : undefined,
-        onChange: (value) => dispatch(setShowPastDeadlines(!!value?.boolean)),
-      },
     ],
-    [dateFrom, dateTo, showPastDeadlines, dispatch],
+    [dateFrom, dateTo, dispatch],
   );
 
   const handleExport = () => {
