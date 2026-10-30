@@ -77,13 +77,15 @@ async function requeueStageFn(stage: RequeueStage, from: "FAILED" | "QUEUED") {
   if (from !== "FAILED" && from !== "QUEUED") throw new Error(`Unknown status: ${from}`);
 
   const tenders = await prisma.tenderMerged.findMany({
-    where:
-      from === "FAILED"
+    where: {
+      deleteRequestedAt: null,
+      ...(from === "FAILED"
         ? { lifecycleStatus: `${stage}_FAILED` }
         : {
             lifecycleStatus: `${stage}_QUEUED`,
             lifecycleUpdatedAt: { lt: new Date(Date.now() - LIFECYCLE_SLOW_MS) },
-          },
+          }),
+    },
     select: {
       id: true,
       referenceNo: true,
@@ -152,7 +154,7 @@ export const requeueStage = withLog(requeueStageFn, (result) => ({
 async function startAiAnalysisRunFn(): Promise<number> {
   await requireUserAction();
   const { count } = await prisma.tenderMerged.updateMany({
-    where: { lifecycleStatus: TENDER_LIFECYCLE_STATUS.RELEVANCE_REJECTED },
+    where: { lifecycleStatus: TENDER_LIFECYCLE_STATUS.RELEVANCE_REJECTED, deleteRequestedAt: null },
     data: { lifecycleStatus: null, lifecycleUpdatedAt: null, lifecycleError: null },
   });
   return count;

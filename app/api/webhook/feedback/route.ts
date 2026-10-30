@@ -18,7 +18,7 @@ interface TriggerAnalysisInput {
 
 async function triggerAnalysis({ referenceNo, company }: TriggerAnalysisInput) {
   const tender = await prisma.tenderMerged.findUnique({
-    where: { referenceNo },
+    where: { referenceNo, deleteRequestedAt: null },
     select: {
       tenderBrief: true,
       itemCategory: true,

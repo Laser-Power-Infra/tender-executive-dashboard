@@ -323,6 +323,16 @@ async function insertTenderMerged(
 
   for (const p of prepared) {
     const old = existingMap.get(p.refNo);
+    if (old?.deleteRequestedAt) {
+      // The row is kept until a developer decides; reject the delete request first to bring it back.
+      sheetResult.rejected.push({
+        fileName,
+        sheetName: sheetResult.sheetName,
+        reason: "Pending delete",
+        row: p.originalRow,
+      });
+      continue;
+    }
     if (old) {
       const updateData: Record<string, unknown> = {
         fileId,

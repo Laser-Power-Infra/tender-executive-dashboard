@@ -83,7 +83,7 @@ async function handleAutomationEvent(evt: WebhookEvent) {
   const { referenceNo } = evt.data;
 
   const tender = await prisma.tenderMerged.findUnique({
-    where: { referenceNo },
+    where: { referenceNo, deleteRequestedAt: null },
     select: { id: true, lifecycleStatus: true },
   });
   if (!tender) throw httpError(`Reference not found: ${referenceNo}`, 404);

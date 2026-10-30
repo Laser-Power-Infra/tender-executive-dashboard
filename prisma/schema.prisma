@@ -920,6 +920,13 @@ model TenderMerged {
   CostingSheetDetails CostingSheetDetails[]
   emdMergeds          EmdMerged[]           @relation("EmdMergedToTenderMerged")
 
+  /// Set when a user asks to delete this tender. The row is hidden from the UI until a developer
+  /// confirms (permanent delete) or rejects (these three go back to null).
+  deleteRequestedAt   DateTime?
+  /// User.id of the requester; no FK so removing a user never blocks or cascades here.
+  deleteRequestedById String?
+  deleteReason        String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -109,6 +109,7 @@ async function loadPage(
     let columns: string[] = [];
     if (includeMeta) {
       const sample = await prisma.tenderMerged.findMany({
+        where: { deleteRequestedAt: null },
         take: 1,
         orderBy: { id: "asc" },
         include: TENDER_ROW_INCLUDE,

@@ -19,6 +19,7 @@ import {
   PriceCell,
   RawMaterialsCell,
   ReasonNotApmCell,
+  DeleteRequestCell,
   ReferenceCell,
   RemarksCell,
   ReportingsCell,
@@ -571,6 +572,15 @@ export function buildTenderColumns({
   if (columns.some((c) => c.id === "location" && !c.frozen)) {
     move("website", (list) => list.findIndex((c) => c.id === "location") + 1);
   }
+
+  columns.push({
+    id: "deleteRequest",
+    header: "",
+    width: 56,
+    search: false,
+    sortable: false,
+    cell: (row) => <DeleteRequestCell row={row} />,
+  });
 
   return columns;
 }

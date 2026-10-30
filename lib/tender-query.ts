@@ -190,12 +190,12 @@ function docketFillSql(name: string): Prisma.Sql {
  */
 export function tenderSourceSql(q: Pick<TenderQuery, "docketRollup">): Prisma.Sql {
   if (!q.docketRollup) {
-    return Prisma.sql`(SELECT m.*, ARRAY[m."id"] AS "docketIds" FROM "tender_merged" m) t`;
+    return Prisma.sql`(SELECT m.*, ARRAY[m."id"] AS "docketIds" FROM "tender_merged" m WHERE m."deleteRequestedAt" IS NULL) t`;
   }
   const columns = [...TENDER_COLUMNS].map(
     (name) => Prisma.sql`${docketFillSql(name)} AS ${Prisma.raw(`"${name}"`)}`,
   );
-  return Prisma.sql`(SELECT ${Prisma.join(columns, ", ")}, array_agg(m."id") OVER w AS "docketIds" FROM "tender_merged" m WINDOW w AS (PARTITION BY ${docketKeySql("m")})) t`;
+  return Prisma.sql`(SELECT ${Prisma.join(columns, ", ")}, array_agg(m."id") OVER w AS "docketIds" FROM "tender_merged" m WHERE m."deleteRequestedAt" IS NULL WINDOW w AS (PARTITION BY ${docketKeySql("m")})) t`;
 }
 
 /** Quoted column reference. Never call with unvalidated input. */

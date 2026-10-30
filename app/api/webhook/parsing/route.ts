@@ -82,7 +82,7 @@ async function handleParsingEvent(evt: WebhookEvent) {
   if (!fileLink) throw httpError("data.file_link is required", 400);
 
   const tender = await prisma.tenderMerged.findUnique({
-    where: { referenceNo },
+    where: { referenceNo, deleteRequestedAt: null },
     select: { id: true },
   });
   if (!tender) throw httpError(`Reference not found: ${referenceNo}`, 404);
