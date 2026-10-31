@@ -22,10 +22,6 @@ export async function POST(req: Request) {
   if (!session?.user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // Work in progress: developers only until the assistant is ready for everyone.
-  if (session.user.role !== "developer") {
-    return Response.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const { messages, path }: { messages: UIMessage[]; path?: string } = await req.json();
 

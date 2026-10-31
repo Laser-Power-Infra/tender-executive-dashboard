@@ -7,17 +7,14 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Tip } from "@/components/v2/ui/overlay";
-import { useIsDeveloper } from "@/components/v2/providers";
 import { ChatWindow } from "./chat-window";
 import { noticeKind } from "./notice-bubble";
 import { NoticeStack } from "./notice-stack";
 import { PipOrb } from "./pip-orb";
 import { describeTable, pipTable } from "./pip-table";
 import { popIn } from "./pop";
-import { ThoughtBubble } from "./thought-bubble";
 import { usePipMood } from "./use-pip-mood";
 
-const THINK_MS = 4000;
 // Horizontal centre of the content area, beside the sidebar in either width.
 const CENTER =
   "left-[calc(50%+var(--sidebar-w)/2)] in-data-[sidebar=collapsed]:left-[calc(50%+var(--sidebar-rail-w)/2)] -translate-x-1/2";
@@ -34,13 +31,12 @@ const NO_TABLE = "This page has no table to filter.";
 
 export function Assistant() {
   const { data: session, status: sessionStatus } = useSession();
-  const isDeveloper = useIsDeveloper();
   if (sessionStatus !== "authenticated") return null;
-  return <AssistantDock firstName={session.user?.name?.split(" ")[0] ?? null} isDeveloper={isDeveloper} />;
+  return <AssistantDock firstName={session.user?.name?.split(" ")[0] ?? null} />;
 }
 
 /** Pip and whatever pops out of it. One fixed dock, so moving it moves everything. */
-function AssistantDock({ firstName, isDeveloper }: { firstName: string | null; isDeveloper: boolean }) {
+function AssistantDock({ firstName }: { firstName: string | null }) {
   const reduceMotion = useReducedMotion();
   const chat = useChat({
     transport,
@@ -72,25 +68,16 @@ function AssistantDock({ firstName, isDeveloper }: { firstName: string | null; i
   // Every sonner toast in the app is said by Pip instead (the Toaster hides itself).
   const { toasts } = useSonner();
 
-  // Until chat opens to everyone, Pip answers a press with a passing thought.
-  const [thinking, setThinking] = useState(false);
-  const thinkTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(thinkTimer.current), []);
-
   const mood = usePipMood({
     status: chat.status,
     failed: !!chat.error,
     open,
     typing: !!input.trim(),
-    talking: thinking,
     notice: toasts[0] ? noticeKind(toasts[0]) : null,
   });
 
   function press() {
-    if (isDeveloper) return setOpen((o) => !o);
-    clearTimeout(thinkTimer.current);
-    setThinking(true);
-    thinkTimer.current = setTimeout(() => setThinking(false), THINK_MS);
+    setOpen((o) => !o);
   }
 
   // Ctrl/Cmd+J presses Pip from anywhere in the app.
@@ -116,35 +103,28 @@ function AssistantDock({ firstName, isDeveloper }: { firstName: string | null; i
     <PipOrb
       ref={orbRef}
       mood={mood}
-      aria-label={isDeveloper ? (open ? "Close assistant" : "Open assistant") : "Pip"}
-      aria-expanded={isDeveloper ? open : undefined}
+      aria-label={open ? "Close assistant" : "Open assistant"}
+      aria-expanded={open}
       onClick={press}
     />
   );
 
   return (
     <div className={`fixed -bottom-2 z-(--z-assistant) ${CENTER}`}>
-      {/* Chat closed: notifications and thoughts rise from Pip's head.
+      {/* Chat closed: notifications rise from Pip's head.
           Chat open: the card takes that space, so notifications move beside Pip. */}
-      {open && isDeveloper ? (
+      {open ? (
         <div className="absolute bottom-6 left-full ml-3 w-max">
           <NoticeStack toasts={toasts} tail="left" />
         </div>
       ) : (
         <div className={`${ABOVE} mb-3 flex w-max flex-col items-center gap-2`}>
           <NoticeStack toasts={toasts} tail="bottom" />
-          <AnimatePresence>
-            {thinking && (
-              <motion.div key="thought" role="status" {...popIn(reduceMotion)} className="mb-11">
-                <ThoughtBubble>I&apos;m still learning my way around here. Check back soon!</ThoughtBubble>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       )}
 
       <AnimatePresence>
-        {open && isDeveloper && (
+        {open && (
           <motion.div key="chat" {...popIn(reduceMotion)} className={`${ABOVE} mb-3`}>
             <ChatWindow
               chat={chat}
@@ -157,13 +137,9 @@ function AssistantDock({ firstName, isDeveloper }: { firstName: string | null; i
         )}
       </AnimatePresence>
 
-      {isDeveloper ? (
-        <Tip label={open ? "Close Pip (Ctrl+J)" : "Ask Pip (Ctrl+J)"} side="top">
-          {orb}
-        </Tip>
-      ) : (
-        orb
-      )}
+      <Tip label={open ? "Close Pip (Ctrl+J)" : "Ask Pip (Ctrl+J)"} side="top">
+        {orb}
+      </Tip>
     </div>
   );
 }
