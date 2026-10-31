@@ -96,7 +96,11 @@ async function loadPage(
       SELECT ${countExpr} AS count FROM ${tenderSourceSql(query)} WHERE ${where}
     `,
     includeMeta
-      ? prisma.association.findMany({ select: { id: true, name: true, email: true } })
+      ? prisma.association.findMany({
+          // Test associate keeps its tender links but is never shown.
+          where: { NOT: { name: { startsWith: "Test User" } } },
+          select: { id: true, name: true, email: true },
+        })
       : Promise.resolve(undefined),
   ]);
 
