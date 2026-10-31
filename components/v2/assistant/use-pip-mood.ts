@@ -32,14 +32,12 @@ export function usePipMood({
   failed,
   open,
   typing,
-  talking,
   notice,
 }: {
   status: ChatStatus;
   failed: boolean;
   open: boolean;
   typing: boolean;
-  talking: boolean;
   /** Kind of the newest notification Pip is saying, if any. */
   notice: keyof typeof NOTICE_MOOD | null;
 }): PipMood {
@@ -62,12 +60,11 @@ export function usePipMood({
   // Doze off after a while with nothing happening; any activity wakes it.
   useEffect(() => {
     setAsleep(false);
-    if (open || busy || talking || notice) return;
+    if (open || busy || notice) return;
     const t = setTimeout(() => setAsleep(true), SLEEP_AFTER_MS);
     return () => clearTimeout(t);
-  }, [open, busy, talking, notice]);
+  }, [open, busy, notice]);
 
-  if (talking) return "speaking";
   if (notice) return NOTICE_MOOD[notice];
   if (failed) return "error";
   if (status === "submitted") return "thinking";
