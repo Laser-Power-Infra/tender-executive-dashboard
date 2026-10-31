@@ -26,6 +26,7 @@ export class GoogleSheetService {
     const records = await prisma.tenderMerged.findMany({
       where: {
         docketNo: { not: null },
+        deleteRequestedAt: null,
         ...(options?.onlyTendersMissingCosting
           ? {
               NOT: {

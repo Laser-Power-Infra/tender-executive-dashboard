@@ -19,6 +19,7 @@ import {
   PriceCell,
   RawMaterialsCell,
   ReasonNotApmCell,
+  DeleteRequestCell,
   ReferenceCell,
   RemarksCell,
   ReportingsCell,
@@ -219,6 +220,7 @@ export function buildTenderColumns({
         return {
           id: col,
           header: label ?? "Category",
+          hint: "business line of the tender: EPC (contracts to build or install) or Manufacturing (supply of goods)",
           width: index?.width ?? 150,
           hidden: byIndex,
           search: false,
@@ -454,6 +456,14 @@ export function buildTenderColumns({
       frozen: FROZEN.has(col) || undefined,
     };
 
+    if (col === "ourRank") {
+      // Exact ranks ("1", "L1") need a list; text search would also match 10, 11.
+      return {
+        ...base,
+        hint: "our bid rank in the result; rank 1 / L1 means we won or were lowest bidder",
+        filter: selectFilter(),
+      };
+    }
     if (isRawMaterials) {
       return {
         ...base,
@@ -562,6 +572,15 @@ export function buildTenderColumns({
   if (columns.some((c) => c.id === "location" && !c.frozen)) {
     move("website", (list) => list.findIndex((c) => c.id === "location") + 1);
   }
+
+  columns.push({
+    id: "deleteRequest",
+    header: "",
+    width: 56,
+    search: false,
+    sortable: false,
+    cell: (row) => <DeleteRequestCell row={row} />,
+  });
 
   return columns;
 }

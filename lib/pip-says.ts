@@ -45,6 +45,7 @@ export const say = {
 
   // Tenders
   feedbackSent: () => "I've sent your feedback for analysis.",
+  deleteRequested: (ref: string) => `I've asked a developer to delete ${ref}. It is hidden until they decide.`,
   tenderAssigned: () => "I've assigned the tender.",
   sameOrganisationUpdated: (n: number) => `I've also updated ${count(n, "tender")} from the same organisation.`,
   collectingTenders: () => "I'm collecting the filtered tenders…",

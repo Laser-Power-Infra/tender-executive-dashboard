@@ -23,6 +23,8 @@ export interface FilterRef {
   id: string;
   name: string;
   filter?: ColumnFilter;
+  /** What the column means in plain words, for Pip. */
+  hint?: string;
   /** Takes a "contains" search. */
   search: boolean;
   /** Further checks on the parsed value; returns why it cannot be applied. */
@@ -36,6 +38,7 @@ export function filterRefs<Row>(columns: DataTableColumn<Row>[]): FilterRef[] {
       id: c.id,
       name: c.header,
       filter: c.filter,
+      hint: c.hint,
       search: c.search !== false || (c.filter?.type === "select" && !!c.filter.searchAsText),
     });
     for (const e of c.extraFilters ?? []) {
@@ -161,6 +164,12 @@ const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 export const localDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+/** The day `n` days from an ISO day. */
+function shiftDay(day: string, n: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return localDay(new Date(y, m - 1, d + n));
+}
+
 function isRealDay(s: string): boolean {
   const m = ISO_DAY.exec(s);
   if (!m) return false;
@@ -217,7 +226,10 @@ export function parseFilters(
   const setRange = (ref: FilterRef, label: string, from: string, to: string) => {
     const f = ref.filter;
     if (f?.type === "dateRange") {
-      [from, to] = [from, to].map((d) => (d.toUpperCase() === "TODAY" ? today : d));
+      [from, to] = [from, to].map((d) => {
+        const w = d.toUpperCase();
+        return w === "TODAY" ? today : w === "YESTERDAY" ? shiftDay(today, -1) : d;
+      });
       const bad = [from, to].filter((d) => d && !isRealDay(d));
       if (bad.length) errors.push(`${label}: ${bad.join(", ")} is not a date (use YYYY-MM-DD)`);
       else set(ref, "dateRange", { startDate: from, endDate: to });
@@ -274,6 +286,17 @@ export function parseFilters(
         i++;
         const to = value();
         if (ref) setRange(ref, label, from, to);
+      } else if (isWord(op, "BEFORE") || isWord(op, "AFTER")) {
+        // Strictly before / after a day: the range ends the day before, or starts the day after.
+        i++;
+        const v = value();
+        const w = v.toUpperCase();
+        const day = w === "TODAY" ? today : w === "YESTERDAY" ? shiftDay(today, -1) : v;
+        if (ref && !isRealDay(day)) errors.push(`${label}: ${v} is not a date (use YYYY-MM-DD)`);
+        else if (ref) {
+          const before = op.v.toUpperCase() === "BEFORE";
+          setRange(ref, label, before ? "" : shiftDay(day, 1), before ? shiftDay(day, -1) : "");
+        }
       } else if (isSym(op, ">=") || isSym(op, "<=")) {
         i++;
         const v = value();
@@ -281,10 +304,10 @@ export function parseFilters(
       } else if (isSym(op, "=")) {
         i++;
         const v = value().toUpperCase();
-        if (v === "TODAY") {
+        if (v === "TODAY" || v === "YESTERDAY") {
           if (ref && ref.filter?.type !== "dateRange") errors.push(`${label} has no date filter`);
           else if (ref) setRange(ref, label, v, v);
-        } else if (v !== "YES" && v !== "NO") errors.push(`${label}: use = YES, = NO or = TODAY`);
+        } else if (v !== "YES" && v !== "NO") errors.push(`${label}: use = YES, = NO, = TODAY or = YESTERDAY`);
         else if (ref && ref.filter?.type !== "boolean") errors.push(`${label} has no Yes/No filter`);
         else if (ref) set(ref, "boolean", v === "YES");
       } else if (op?.t === "word" && isSym(tokens[i + 1], "=")) {
@@ -305,7 +328,7 @@ export function parseFilters(
             errors.push(`${label}: ${op.v} value is not valid JSON`);
           }
         }
-      } else fail("CONTAINS, IN, BETWEEN, >=, <= or =");
+      } else fail("CONTAINS, IN, BETWEEN, BEFORE, AFTER, >=, <= or =");
 
       if (i < tokens.length) {
         if (!isWord(peek(), "AND")) fail("AND");

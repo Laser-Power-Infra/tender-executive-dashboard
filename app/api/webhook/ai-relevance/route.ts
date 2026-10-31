@@ -28,7 +28,7 @@ async function updateAiRelevance({
   subCategory,
 }: UpdateAiRelevanceInput) {
   const existing = await prisma.tenderMerged.findUnique({
-    where: { referenceNo },
+    where: { referenceNo, deleteRequestedAt: null },
     select: { id: true, tenderType: true },
   });
   if (!existing) {

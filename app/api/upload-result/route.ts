@@ -188,7 +188,7 @@ async function processResultFile(file: File): Promise<FileResult & { updatedRefs
       const refNos = parsed.updates.map((u) => u.refNo);
 
       const existingRecords = await prisma.tenderMerged.findMany({
-        where: { referenceNo: { in: refNos } },
+        where: { referenceNo: { in: refNos }, deleteRequestedAt: null },
         select: { id: true, referenceNo: true, competitors: true },
       });
 

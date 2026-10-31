@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 async function getEmdMerged() {
   const rows = await prisma.emdMerged.findMany({
     orderBy: { createdAt: "desc" },
-    include: { tenderMergeds: { select: { id: true, docketNo: true } } },
+    include: { tenderMergeds: { where: { deleteRequestedAt: null }, select: { id: true, docketNo: true } } },
   });
   return rows;
 }
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       const rows = await prisma.emdMerged.findMany({
         where: { emdType: emdType as any },
         orderBy: { createdAt: "desc" },
-        include: { tenderMergeds: { select: { id: true, docketNo: true } } },
+        include: { tenderMergeds: { where: { deleteRequestedAt: null }, select: { id: true, docketNo: true } } },
       });
       return NextResponse.json({ success: true, data: rows });
     }

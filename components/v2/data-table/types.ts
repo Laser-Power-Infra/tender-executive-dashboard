@@ -49,6 +49,8 @@ export interface DataTableColumn<Row> {
   id: string;
   header: string;
   width?: number;
+  /** What the column means in people's words; Pip reads it to pick the right column. */
+  hint?: string;
   /** Pinned to the left edge. */
   frozen?: boolean;
   /** Never rendered and not offered in the column picker. */

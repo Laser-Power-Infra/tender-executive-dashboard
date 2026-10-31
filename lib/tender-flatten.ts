@@ -65,6 +65,8 @@ function formatQty(val: number): string {
 export const SKIP_RELATION_FIELDS = new Set([
   "extraFields", "tenderAssociations", "reportings", "evaluations",
   "tenderFiles", "file", "tenderStatus", "utilityMapping", "CostingSheetDetails",
+  // Delete-request bookkeeping, not table columns.
+  "deleteRequestedAt", "deleteRequestedById", "deleteReason",
 ]);
 
 export function flattenTender(

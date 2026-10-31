@@ -584,7 +584,7 @@ check("the docket key uppercases and falls back to the row id", () => {
 
 check("the plain source is tender_merged with a one-row docket", () => {
   const t = text(tenderSourceSql({}));
-  assert.equal(t, `(SELECT m.*, ARRAY[m."id"] AS "docketIds" FROM "tender_merged" m) t`);
+  assert.equal(t, `(SELECT m.*, ARRAY[m."id"] AS "docketIds" FROM "tender_merged" m WHERE m."deleteRequestedAt" IS NULL) t`);
 });
 
 check("docketRollup fills blank docket-level fields from siblings", () => {
@@ -593,6 +593,8 @@ check("docketRollup fills blank docket-level fields from siblings", () => {
   assert.match(t, /coalesce\(m\."reverseAuctionStartDate", max\(m\."reverseAuctionStartDate"\) OVER w\) AS "reverseAuctionStartDate"/);
   assert.match(t, /IN \('', 'NOT EVALUATED'\) THEN NULL ELSE m\."currentStatus" END\) OVER w, m\."currentStatus"\) AS "currentStatus"/);
   assert.match(t, /array_agg\(m\."id"\) OVER w AS "docketIds"/);
+  // Hidden tenders leave before the window runs, so they never feed a sibling's rollup.
+  assert.match(t, /FROM "tender_merged" m WHERE m\."deleteRequestedAt" IS NULL WINDOW w AS/);
   assert.match(t, /WINDOW w AS \(PARTITION BY coalesce\(nullif\(upper\(btrim\(m\."docketNo"\)\), ''\), '__row_' \|\| m\."id"::text\)\)/);
   // Per-reference fields pass through untouched, and every column is present.
   assert.match(t, /, m\."deadline" AS "deadline"/);

@@ -33,7 +33,7 @@ const RESPONSE_FIELDS = [
 
 async function lookupTenders(identifiers: string[]) {
   const docketRows = await prisma.tenderMerged.findMany({
-    where: { docketNo: { in: identifiers } },
+    where: { docketNo: { in: identifiers }, deleteRequestedAt: null },
     select: TENDER_MERGED_SELECT,
   });
 

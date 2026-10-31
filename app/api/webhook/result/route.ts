@@ -14,7 +14,7 @@ async function handleResultEvent(evt: WebhookEvent) {
 
   const rows = parseResultRows(evt.data.result);
   const tenders = await prisma.tenderMerged.findMany({
-    where: { referenceNo: { in: rows.map((r) => r.referenceNo) } },
+    where: { referenceNo: { in: rows.map((r) => r.referenceNo) }, deleteRequestedAt: null },
     select: { id: true, referenceNo: true, competitors: true },
   });
   const byRef = new Map(tenders.map((t) => [t.referenceNo, t]));

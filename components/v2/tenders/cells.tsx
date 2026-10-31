@@ -13,6 +13,7 @@ import {
   Lock,
   MessageSquarePlus,
   Pencil,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -38,6 +39,7 @@ import { CellAction, Chips, Clamp } from "@/components/v2/data-table/cells";
 import { Badge, Choice, Dash, Field, Input, Textarea, type Tone } from "@/components/v2/ui/field";
 import { Dialog, Select } from "@/components/v2/ui/overlay";
 import { Sheet } from "@/components/v2/ui/sheet";
+import { requestTenderDelete } from "@/actions/tender-delete";
 import { useTenderCellContext } from "./use-tenders";
 import { say } from "@/lib/pip-says";
 
@@ -762,6 +764,54 @@ function UploadDocumentDialog({ row, onClose }: { row: Row; onClose: () => void 
         </Field>
       </div>
     </Dialog>
+  );
+}
+
+/** Hides the tender and asks a developer to delete it for good. */
+export function DeleteRequestCell({ row }: { row: Row }) {
+  const { reload } = useTenderCellContext();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = () => {
+    setSaving(true);
+    requestTenderDelete({ tenderMergedId: Number(row.id), reason })
+      .then(() => {
+        toast.success(say.deleteRequested(str(row.referenceNo)));
+        setOpen(false);
+        reload();
+      })
+      .catch((err: unknown) => toastError(say.couldNot("request the delete"), err))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <>
+      <IconButton size="sm" label="Request delete" onClick={() => { setReason(""); setOpen(true); }}>
+        <Trash2 className="size-3.5" />
+      </IconButton>
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete ${str(row.referenceNo)}?`}
+        description="The tender is hidden at once. A developer confirms the delete or brings it back."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={saving} disabled={!reason.trim()} onClick={submit}>
+              Request delete
+            </Button>
+          </>
+        }
+      >
+        <Field label="Reason">
+          <Textarea autoFocus value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Field>
+      </Dialog>
+    </>
   );
 }
 

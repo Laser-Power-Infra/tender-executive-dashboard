@@ -31,7 +31,7 @@ export const getUtilityPartyNames = withLog(async () => {
   const rows = await prisma.tenderMerged.findMany({
     distinct: ["erpPartyName"],
     select: { erpPartyName: true },
-    where: { erpPartyName: { not: null } },
+    where: { erpPartyName: { not: null }, deleteRequestedAt: null },
     orderBy: { erpPartyName: "asc" },
   });
   return rows

@@ -96,4 +96,7 @@ assert.deepEqual(parseFilters("[Bid End Date] >= today", refs, day).filters, ran
 assert.deepEqual(parseFilters("[Bid End Date] BETWEEN 2026-10-01 AND TODAY", refs, day).filters, range("2026-10-01", day));
 assert.deepEqual(parseFilters("[Party] = TODAY", refs, day).errors, ["[Party] has no date filter"]);
 assert.deepEqual(parseFilters("[Uploaded] = TODAY", withCheck, day).errors, []);
+assert.deepEqual(parseFilters("[Bid End Date] BEFORE TODAY", refs, day).filters, range("", "2026-10-20"));
+assert.deepEqual(parseFilters("[Bid End Date] AFTER 2026-10-01", refs, day).filters, range("2026-10-02", ""));
+assert.deepEqual(parseFilters("[Bid End Date] = YESTERDAY", refs, day).filters, range("2026-10-20", "2026-10-20"));
 console.log("filter-formula TODAY: ok");

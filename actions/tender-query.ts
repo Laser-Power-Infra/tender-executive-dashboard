@@ -96,7 +96,11 @@ async function loadPage(
       SELECT ${countExpr} AS count FROM ${tenderSourceSql(query)} WHERE ${where}
     `,
     includeMeta
-      ? prisma.association.findMany({ select: { id: true, name: true, email: true } })
+      ? prisma.association.findMany({
+          // Test associate keeps its tender links but is never shown.
+          where: { NOT: { name: { startsWith: "Test User" } } },
+          select: { id: true, name: true, email: true },
+        })
       : Promise.resolve(undefined),
   ]);
 
@@ -109,6 +113,7 @@ async function loadPage(
     let columns: string[] = [];
     if (includeMeta) {
       const sample = await prisma.tenderMerged.findMany({
+        where: { deleteRequestedAt: null },
         take: 1,
         orderBy: { id: "asc" },
         include: TENDER_ROW_INCLUDE,

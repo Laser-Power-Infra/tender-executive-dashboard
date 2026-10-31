@@ -29,6 +29,7 @@ async function sendCostingSheetReminder() {
     where: {
       apm: "YES",
       participated: true,
+      deleteRequestedAt: null,
       deadline: { gt: new Date("2026-01-01T00:00:00.000Z") },
       NOT: {
         tenderFiles: {

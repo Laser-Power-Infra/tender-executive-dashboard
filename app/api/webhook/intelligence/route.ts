@@ -11,7 +11,7 @@ interface UpdateAgentReportInput {
 
 async function updateAgentReport({ referenceNo, agentReport }: UpdateAgentReportInput) {
   const existing = await prisma.tenderMerged.findUnique({
-    where: { referenceNo },
+    where: { referenceNo, deleteRequestedAt: null },
     select: { id: true },
   });
   if (!existing) {

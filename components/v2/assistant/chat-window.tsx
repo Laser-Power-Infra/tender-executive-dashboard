@@ -11,6 +11,9 @@ import { ChatThread } from "./chat-thread";
 import { ChatWelcome } from "./chat-welcome";
 import { PIP_SHADOW } from "./pop";
 
+// Keep in step with MAX_USER_MESSAGES in app/api/assistant/route.ts.
+const MAX_USER_MESSAGES = 15;
+
 /** Pip's chat card: header, thread and composer. */
 export function ChatWindow({
   chat,
@@ -29,6 +32,8 @@ export function ChatWindow({
   const [errorText, setErrorText] = useState<string | null>(null);
   const { messages, status, error } = chat;
   const busy = status === "submitted" || status === "streaming";
+  const left = MAX_USER_MESSAGES - messages.filter((m) => m.role === "user").length;
+  const full = left <= 0;
 
   useEffect(() => {
     if (!error) return setErrorText(null);
@@ -37,13 +42,13 @@ export function ChatWindow({
 
   function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || busy || full) return;
     chat.sendMessage({ text: trimmed });
     onInput("");
   }
 
   const statusLine =
-    status === "submitted" ? "Thinking" : status === "streaming" ? "Writing" : error ? "Something went wrong" : "Assistant";
+    status === "submitted" ? "Thinking" : status === "streaming" ? "Writing" : error ? "Something went wrong" : full ? "Chat full: start a new chat" : `${left} ${left === 1 ? "message" : "messages"} left`;
 
   return (
     <section
@@ -92,6 +97,7 @@ export function ChatWindow({
         onSend={() => send(input)}
         onStop={() => chat.stop()}
         busy={busy}
+        disabled={full}
       />
     </section>
   );

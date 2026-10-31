@@ -2,6 +2,7 @@ import { createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 type VisibilityState = Record<string, boolean>;
 import type { ColumnFilterState, ColumnFilterType } from "@/lib/types";
+import { localDay } from "@/components/v2/data-table/filter-formula";
 
 type ParticipationFilter = "participated" | "notParticipated" | "upcomingRa" | "participatedWithRa" | "participatedWithoutRa" | "yetToOpenRa" | "bidOpeningPendingExclRa" | "participatedTotal" | "raDone" | "raPending" | "technicalOpen" | "technicalNotOpen" | "weL1" | "weLost" | "expRaDate" | "contractReceived" | "contractPending" | "financialOpen" | "financialNotOpen" | "financialWeL1" | "financialWeLost" | "financialContractReceived" | "financialContractPending";
 type AnalyticsFilter = "aiYes" | "aiYesUnallocated" | "apmYesAllocated" | "apmYesUnallocated" | null;
@@ -12,17 +13,15 @@ interface FiltersState {
   columnFilters: Record<string, ColumnFilterState>;
   participationFilters: ParticipationFilter[];
   analyticsFilter: AnalyticsFilter;
-  /** Turns off the tenders page's default "today onward" deadline rule. */
-  showPastDeadlines: boolean;
 }
 
 const initialState: FiltersState = {
   exclusionFilter: null,
   columnVisibility: {},
-  columnFilters: {},
+  // The tenders page opens on upcoming deadlines; a real filter, so the formula bar shows it and it can be removed.
+  columnFilters: { deadline: { dateRange: { startDate: localDay(new Date()), endDate: "" } } },
   participationFilters: [],
   analyticsFilter: null,
-  showPastDeadlines: false,
 };
 
 export const filtersSlice = createSlice({
@@ -49,9 +48,6 @@ export const filtersSlice = createSlice({
     },
     setAnalyticsFilter(state, action: PayloadAction<AnalyticsFilter>) {
       state.analyticsFilter = action.payload;
-    },
-    setShowPastDeadlines(state, action: PayloadAction<boolean>) {
-      state.showPastDeadlines = action.payload;
     },
     // Keyed by filter type, so every ColumnFilterType (numberRange included) is
     // stored without a case per type.
@@ -80,7 +76,6 @@ export const {
   toggleParticipationFilter,
   clearParticipationFilters,
   setAnalyticsFilter,
-  setShowPastDeadlines,
   setColumnFilter,
   clearColumnFilter,
   resetColumnFilters,

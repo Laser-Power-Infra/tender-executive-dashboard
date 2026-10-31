@@ -33,6 +33,7 @@ async function fetchLifecycleCountsFn(): Promise<LifecycleCounts> {
   const [tenders, files, queues] = await Promise.all([
     prisma.tenderMerged.groupBy({
       by: ["lifecycleStatus"],
+      where: { deleteRequestedAt: null },
       _count: { _all: true },
       _min: { lifecycleUpdatedAt: true },
     }),
@@ -84,7 +85,7 @@ async function fetchLifecycleTendersFn(
 
   const [rows, total] = await Promise.all([
     prisma.tenderMerged.findMany({
-      where,
+      where: { ...where, deleteRequestedAt: null },
       select: {
         id: true,
         referenceNo: true,
@@ -97,7 +98,7 @@ async function fetchLifecycleTendersFn(
       skip: (Math.max(1, Math.trunc(page) || 1) - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
-    prisma.tenderMerged.count({ where }),
+    prisma.tenderMerged.count({ where: { ...where, deleteRequestedAt: null } }),
   ]);
   return {
     tenders: rows.map((r) => ({

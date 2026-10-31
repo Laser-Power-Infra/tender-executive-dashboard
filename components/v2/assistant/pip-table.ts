@@ -34,7 +34,7 @@ function kind(ref: FilterRef): string {
   if (f?.type === "select") return "list (IN; call list_filter_values for its values)";
   if (f?.type === "dateRange") {
     const presets = f.presets?.map((p) => p.value).join(", ");
-    return `date (BETWEEN, >=, <=, = TODAY${presets ? `; presets with IN: ${presets}` : ""})`;
+    return `date (BETWEEN, BEFORE, AFTER, >=, <=, = TODAY${presets ? `; presets with IN: ${presets}` : ""})`;
   }
   if (f?.type === "boolean") return "yes/no (= YES, = NO)";
   if (f?.type === "custom" && f.stateKey === "numberRange") return "number (BETWEEN, >=, <=)";
@@ -74,7 +74,7 @@ export function describeTable(t: PipTable | null, today = localDay(new Date())):
     const values = options?.length
       ? ` Known values: ${options.slice(0, MAX_VALUES).map(showOption).join(", ")}${options.length > MAX_VALUES ? ", ..." : ""}`
       : "";
-    return `- [${refName(ref, t.refs)}]: ${how}.${values}`;
+    return `- [${refName(ref, t.refs)}]: ${how}.${ref.hint ? ` Meaning: ${ref.hint}.` : ""}${values}`;
   });
   return [`Today is ${today}.`, "Filterable columns:", ...lines, `Current filter: ${t.current() || "(none)"}`].join("\n");
 }
