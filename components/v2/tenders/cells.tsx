@@ -278,10 +278,12 @@ export function AiRelevanceCell({ row }: { row: Row }) {
 export function AssigneeCell({ row, rowIndex }: { row: Row; rowIndex: number }) {
   const dispatch = useAppDispatch();
   const { associations, reload } = useTenderCellContext();
+  const isDeveloper = useIsDeveloper();
   const [saving, setSaving] = useState(false);
   const value = str(row.assignedTo);
 
-  if (value) {
+  // Locked once assigned, except for developers who can correct it.
+  if (value && !isDeveloper) {
     const names = value
       .split(",")
       .map((id) => associations.find((a) => a.id === parseInt(id.trim(), 10))?.name)
@@ -302,11 +304,11 @@ export function AssigneeCell({ row, rowIndex }: { row: Row; rowIndex: number }) 
       size="sm"
       label="Assign to"
       placeholder="Unassigned"
-      value={null}
+      value={value ? value.split(",")[0].trim() : null}
       disabled={saving}
       options={associations.map((a) => ({ value: String(a.id), label: a.name }))}
       onChange={(id) => {
-        if (!id) return;
+        if (!id || id === value) return;
         setSaving(true);
         dispatch(
           updateTenderAssignments({

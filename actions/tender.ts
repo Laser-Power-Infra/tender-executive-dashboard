@@ -26,12 +26,14 @@ export const updateTenderAssignmentsAction = withLog(
     tenderMergedId: number;
     associationIds: number[];
   }) => {
-    await requireUserAction();
+    const user = await requireUserAction();
     const existing = await prisma.tenderAssociation.findFirst({
       where: { tenderMergedId: params.tenderMergedId },
       select: { id: true },
     });
-    if (existing) {
+    // Only a developer may change an assignment that is already made.
+    const reassign = !!existing && user.role === "developer";
+    if (existing && !reassign) {
       throw new Error(
         `Assignment is locked for tender #${params.tenderMergedId} because a person is already assigned`,
       );
@@ -54,7 +56,9 @@ export const updateTenderAssignmentsAction = withLog(
         tenderFiles: true,
       },
     });
+    // A developer's correction must not mail the new assignee again.
     if (
+      !reassign &&
       tender &&
       tender.apm === "YES" &&
       tender.tenderAssociations.length > 0
