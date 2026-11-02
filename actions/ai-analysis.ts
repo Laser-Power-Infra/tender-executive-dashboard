@@ -5,7 +5,6 @@ import { withLog } from "@/lib/activity-logger";
 import {
   INGESTION_FILE_SELECT,
   publishAgentIntelligenceTask,
-  publishAiRelevanceTask,
   publishIngestionTask,
   publishTenderTask,
 } from "@/lib/queue/publisher";
@@ -15,14 +14,8 @@ import {
   TENDER_LIFECYCLE_STATUS,
   type LifecycleStageCount,
 } from "@/lib/tender-lifecycle";
-import { setLifecycleStatus, setRelevanceQueued } from "@/lib/tender-lifecycle-store";
-import { parseRupees } from "@/lib/rupees";
-
-// "Power Distribution" -> "power_distribution", "Cables & Conductors" -> "cables_conductors"
-function toSnakeCase(label: string | null | undefined): string | null {
-  if (!label) return null;
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
+import { setLifecycleStatus } from "@/lib/tender-lifecycle-store";
+import { publishRelevance, queueRelevance } from "@/lib/relevance";
 
 async function publishAiAnalysisJobFn(params: {
   referenceNo: string;
@@ -34,27 +27,7 @@ async function publishAiAnalysisJobFn(params: {
     where: { referenceNo: params.referenceNo },
     select: { subCategory: true, value: true },
   });
-  const sent = await publishRelevance({ ...tender, ...params });
-  await setRelevanceQueued(params.referenceNo, sent);
-  return sent;
-}
-
-function publishRelevance(tender: {
-  referenceNo: string;
-  tenderBrief?: string | null;
-  itemCategory?: string | null;
-  subCategory?: string | null;
-  value?: string | null;
-}) {
-  return publishAiRelevanceTask({
-    payloadType: "analysis",
-    referenceNo: tender.referenceNo,
-    company: "laser",
-    tenderbrief: tender.tenderBrief ?? "",
-    itemcategory: tender.itemCategory ?? "",
-    category: toSnakeCase(tender.subCategory),
-    tenderAmount: parseRupees(tender.value),
-  });
+  return queueRelevance({ ...tender, ...params });
 }
 
 type RequeueStage = LifecycleStageCount["stage"];

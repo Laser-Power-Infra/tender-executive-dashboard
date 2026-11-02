@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { createWebhookHandler, httpError, type WebhookEvent } from "@/lib/webhook-event";
 import { TENDER_CATEGORIES } from "@/lib/tender-categories";
+import { queueRelevance } from "@/lib/relevance";
 import {
   insertTenderMerged,
   loadUpsertContext,
@@ -65,7 +66,16 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
   // Documents for new and existing tenders alike; a URL already on the tender is not added twice.
   const saved = await prisma.tenderMerged.findMany({
     where: { referenceNo: { in: refNos }, deleteRequestedAt: null },
-    select: { id: true, referenceNo: true, tenderFiles: { select: { url: true } } },
+    select: {
+      id: true,
+      referenceNo: true,
+      tenderBrief: true,
+      itemCategory: true,
+      subCategory: true,
+      value: true,
+      excludedCategory: true,
+      tenderFiles: { select: { url: true } },
+    },
   });
   const newFiles: (NicFile & { tenderMergedId: number })[] = [];
   const savedByRef = new Map(saved.map((t) => [t.referenceNo, t]));
@@ -81,6 +91,15 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
     }
   }
   if (newFiles.length) await prisma.tenderFile.createMany({ data: newFiles });
+
+  // New tenders enter the lifecycle at stage 1. Existing ones are already in it (or were handled),
+  // and a tender whose deadline has passed is not worth an analysis.
+  let relevanceQueued = 0;
+  for (const t of saved) {
+    if (matched.has(t.referenceNo)) continue;
+    if (t.excludedCategory?.split(",").includes("date")) continue;
+    if (await queueRelevance(t)) relevanceQueued++;
+  }
 
   await prisma.file.update({
     where: { id: file.id },
@@ -101,6 +120,7 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
     rejected: result.rejected.map((r) => ({ referenceNo: r.row.referenceNo ?? null, reason: r.reason })),
     errors: result.errors,
     files: newFiles.length,
+    relevanceQueued,
   };
 }
 
