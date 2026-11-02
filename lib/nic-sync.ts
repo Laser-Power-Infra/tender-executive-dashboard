@@ -65,9 +65,17 @@ export function nicIntFields(t: NicTender): Record<string, number> {
   return out;
 }
 
+// The sync worker's sub_category names -> the app's TENDER_SUBCATEGORIES.
 const SUBCATEGORY_ALIASES: Record<string, string> = {
+  // Manufacturing
   cables: "Cables & Conductors",
   conductors: "Cables & Conductors",
+  // EPC
+  distribution: "Power Distribution",
+  transmission: "Power Transmission",
+  solar: "Solar",
+  water: "Water Distribution",
+  railway: "Railways",
 };
 
 /** Payload category/sub_category validated against TENDER_SUBCATEGORIES; unknown values fall back. */
