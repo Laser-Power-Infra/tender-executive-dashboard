@@ -236,22 +236,64 @@ export function prepareTenderRow(
   return { refNo: r, tenderType, createData, originalRow: row };
 }
 
+// Prefix matches shorter than this are ignored: "2026" alone must not claim every 2026 tender.
+const MIN_PREFIX_REF_LENGTH = 6;
+
+/**
+ * The stored reference an incoming one belongs to. Exact (case-insensitive) wins; otherwise
+ * "abcd" and "abcd1234" are the same tender when either is a prefix of the other, and the
+ * most specific (longest) stored reference is taken.
+ */
+export function pickExistingReference(incoming: string, candidates: string[]): string | undefined {
+  const inc = incoming.toLowerCase();
+  const exact = candidates.find((c) => c.toLowerCase() === inc);
+  if (exact) return exact;
+  if (inc.length < MIN_PREFIX_REF_LENGTH) return undefined;
+  return candidates
+    .filter((c) => {
+      const cand = c.toLowerCase();
+      return cand.length >= MIN_PREFIX_REF_LENGTH && (cand.startsWith(inc) || inc.startsWith(cand));
+    })
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+/** Stored tenders whose reference equals, or is a prefix of / is prefixed by, one of `refNos`. */
+async function findExistingByReference(refNos: string[]) {
+  const ids = await prisma.$queryRaw<{ id: number }[]>`
+    SELECT t."id" FROM "tender_merged" t
+    WHERE EXISTS (
+      SELECT 1 FROM unnest(${refNos}::text[]) AS r
+      WHERE lower(t."referenceNo") = lower(r)
+         OR (length(r) >= ${MIN_PREFIX_REF_LENGTH} AND length(t."referenceNo") >= ${MIN_PREFIX_REF_LENGTH}
+             AND (lower(t."referenceNo") = left(lower(r), length(t."referenceNo"))
+               OR lower(r) = left(lower(t."referenceNo"), length(r))))
+    )`;
+  if (ids.length === 0) return [];
+  return prisma.tenderMerged.findMany({
+    where: { id: { in: ids.map((r) => r.id) } },
+    include: { tenderAssociations: { include: { association: true } } },
+  });
+}
+
+/**
+ * Creates new tenders and fills empty fields on existing ones. A prepared row that matches an
+ * existing tender by reference prefix gets its `refNo` rewritten to the stored reference.
+ * Returns the stored references that were matched (updated or skipped), not created.
+ */
 export async function insertTenderMerged(
   prepared: PreparedTender[],
   fileId: number,
   sheetResult: SheetResult,
   fileName: string,
-): Promise<void> {
-  if (!prepared.length) return;
+): Promise<Set<string>> {
+  const matched = new Set<string>();
+  if (!prepared.length) return matched;
 
   const refNos = prepared.map((p) => p.refNo);
 
-  const existingRecords = await prisma.tenderMerged.findMany({
-    where: { referenceNo: { in: refNos } },
-    include: { tenderAssociations: { include: { association: true } } },
-  });
-
-  const existingMap = new Map(existingRecords.map((r) => [r.referenceNo, r]));
+  const existingRecords = await findExistingByReference(refNos);
+  const existingByRef = new Map(existingRecords.map((r) => [r.referenceNo, r]));
+  const candidates = existingRecords.map((r) => r.referenceNo);
 
   const toCreate: Record<string, unknown>[] = [];
   const webhookQueue: string[] = [];
@@ -259,7 +301,13 @@ export async function insertTenderMerged(
   const originalRowByRef = new Map<string, Record<string, unknown>>();
 
   for (const p of prepared) {
-    const old = existingMap.get(p.refNo);
+    const storedRef = pickExistingReference(p.refNo, candidates);
+    const old = storedRef ? existingByRef.get(storedRef) : undefined;
+    if (old) {
+      p.refNo = old.referenceNo;
+      p.createData.referenceNo = old.referenceNo;
+      matched.add(old.referenceNo);
+    }
     if (old?.deleteRequestedAt) {
       // The row is kept until a developer decides; reject the delete request first to bring it back.
       sheetResult.rejected.push({
@@ -453,4 +501,6 @@ export async function insertTenderMerged(
       }
     }
   }
+
+  return matched;
 }
