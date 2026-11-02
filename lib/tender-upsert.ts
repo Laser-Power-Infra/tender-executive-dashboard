@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { parseEmd, parseRupees } from "@/lib/rupees";
 import { resolveEpcSubCategory, TENDER_CATEGORIES } from "@/lib/tender-categories";
 
-// Shared by the Excel upload (app/api/upload) and the NIC sync webhook (app/api/webhook/nic-sync):
+// Shared by the Excel upload (app/api/upload) and the NIC sync webhook (app/api/webhook/tenders):
 // one row -> PreparedTender, then create-or-fill into TenderMerged.
 
 const INSERT_BATCH_SIZE = 50;
