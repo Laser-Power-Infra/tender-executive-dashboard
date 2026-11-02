@@ -83,7 +83,7 @@ to `automation-v2:sync`, each with a one-element `portals` array:
 
 The queue has no version switch. Published by `publishNicSyncTask` in `lib/queue/publisher.ts`.
 
-The worker reports back to `POST /api/webhook/nic-sync` with the shared envelope, `event: "nic.synced_success"`,
+The worker reports back to `POST /api/webhook/tenders` with the shared envelope, `event: "nic.synced_success"`,
 `data.type: "NIC_SYNC"` and `data.result` = array of NIC tenders (raw portal field names, plus `reference_no`,
 `category`, `sub_category`, `Tenders Documents`). Each tender is shaped by `lib/nic-sync.ts` and goes through the same
 create-or-fill upsert as an Excel upload (`lib/tender-upsert.ts`, shared with `/api/upload`): new references are created,
