@@ -113,6 +113,17 @@ export async function publishTenderFileParsingTask(
   );
 }
 
+export type NicSyncPayload = {
+  portals: string[];
+};
+
+export async function publishNicSyncTask(payload: NicSyncPayload): Promise<boolean> {
+  return publishToQueue(
+    QUEUES.AUTOMATION_V2_SYNC,
+    withClientId("TENDER_AUTOMATION_SYNC_CLIENT_ID", payload),
+  );
+}
+
 export type KnowledgebasePayload = {
   mode: "direct";
   collection: string;

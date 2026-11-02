@@ -71,6 +71,25 @@ Required env var. Values: `v1` or `v2`. It selects the automation queues through
 - Payloads do not change with the version. Workers must accept `client_id` on both versions.
 - Switching the version does not move jobs already in a queue. Drain the old queues before you switch.
 
+### NIC portal sync (outside the tender lifecycle)
+
+`POST /api/sync/nic` (auth: `EXTERNAL_API_KEY`) reads every distinct `website` from `TenderStatusTable`
+where `type = "NIC"` and publishes one job to `automation-v2:sync`:
+
+```json
+{ "portals": ["<website>", "..."], "client_id": "<TENDER_AUTOMATION_SYNC_CLIENT_ID>" }
+```
+
+The queue has no version switch. Published by `publishNicSyncTask` in `lib/queue/publisher.ts`.
+
+The worker reports back to `POST /api/webhook/nic-sync` with the shared envelope, `event: "nic.synced_success"`,
+`data.type: "NIC_SYNC"` and `data.result` = array of NIC tenders (raw portal field names, plus `reference_no`,
+`category`, `sub_category`, `Tenders Documents`). Each tender is shaped by `lib/nic-sync.ts` and goes through the same
+create-or-fill upsert as an Excel upload (`lib/tender-upsert.ts`, shared with `/api/upload`): new references are created,
+existing ones only get empty fields filled. Documents with a URL become `TenderFile` rows (`BOQ` → `boqComparativeChart`,
+others → `tenderDocument`, source `nic-sync`), without queuing parsing. Nothing is published onward; these tenders do not
+enter the relevance/automation chain.
+
 ## 3. v2 lifecycle (target)
 
 ```mermaid

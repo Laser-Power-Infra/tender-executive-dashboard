@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server"
 const developerRoutes = ["/v2/admin", "/v2/design"]
 const developerApiPaths = ["/api/column-mappings", "/api/column-groups", "/api/column-indices", "/api/sop-responsibilities"]
 const syncApiPaths = ["/api/sync", "/api/refresh-all"]
-const publicApiPaths = ["/api/external", "/api/mcp","/api/sync-dockets", "/api/sync-quotation", "/api/sync-costing-smartsheet", "/api/sync-bom", "/api/health", "/api/sync-to-merged", "/api/admin/reset-password", "/api/reminder/costing-sheet", "/api/webhook/intelligence", "/api/webhook/ai-relevance", "/api/webhook/automation", "/api/webhook/parsing", "/api/webhook/ingestion", "/api/webhook/feedback", "/api/webhook/result", "/api/webhook/performance-certificate"]
+const publicApiPaths = ["/api/external", "/api/mcp", "/api/sync/nic","/api/sync-dockets", "/api/sync-quotation", "/api/sync-costing-smartsheet", "/api/sync-bom", "/api/health", "/api/sync-to-merged", "/api/admin/reset-password", "/api/reminder/costing-sheet", "/api/webhook/intelligence", "/api/webhook/ai-relevance", "/api/webhook/automation", "/api/webhook/parsing", "/api/webhook/ingestion", "/api/webhook/feedback", "/api/webhook/result", "/api/webhook/performance-certificate", "/api/webhook/nic-sync"]
 const ADMIN_ROLES = ["admin", "developer"]
 
 export default async function proxy(req: NextRequest) {
