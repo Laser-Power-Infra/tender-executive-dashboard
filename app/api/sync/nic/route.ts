@@ -20,16 +20,19 @@ export async function POST(req: NextRequest) {
         select: { website: true },
         distinct: ["website"],
       });
-  const portals = (override ?? rows!.map((r) => r.website))
+  const portals: string[] = (override ?? rows!.map((r) => r.website))
     .map((p: unknown) => String(p ?? "").trim())
     .filter(Boolean);
   if (portals.length === 0) {
     return NextResponse.json({ error: "No NIC portals found" }, { status: 404 });
   }
 
-  const queued = await publishNicSyncTask({ portals });
-  if (!queued) {
-    return NextResponse.json({ error: "Sync job not queued (RabbitMQ unavailable?)" }, { status: 503 });
+  // One message per portal, each still a one-element `portals` array, so the worker sees one shape.
+  const results = await Promise.all(portals.map((portal) => publishNicSyncTask({ portals: [portal] })));
+  const queued = portals.filter((_, i) => results[i]);
+  const failed = portals.filter((_, i) => !results[i]);
+  if (queued.length === 0) {
+    return NextResponse.json({ error: "Sync jobs not queued (RabbitMQ unavailable?)", failed }, { status: 503 });
   }
-  return NextResponse.json({ queued: true, portals });
+  return NextResponse.json({ queued: queued.length, portals: queued, failed });
 }
