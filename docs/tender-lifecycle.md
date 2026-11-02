@@ -88,8 +88,10 @@ The worker reports back to `POST /api/webhook/tenders` with the shared envelope,
 `category`, `sub_category`, `Tenders Documents`). Each tender is shaped by `lib/nic-sync.ts` and goes through the same
 create-or-fill upsert as an Excel upload (`lib/tender-upsert.ts`, shared with `/api/upload`): new references are created,
 existing ones only get empty fields filled. Documents with a URL become `TenderFile` rows (`BOQ` → `boqComparativeChart`,
-others → `tenderDocument`, source `nic-sync`), without queuing parsing. Nothing is published onward; these tenders do not
-enter the relevance/automation chain.
+others → `tenderDocument`, source `nic-sync`), without queuing parsing. Every **newly created** tender is then published
+to `agent:relevance` (`queueRelevance` in `lib/relevance.ts`, status `RELEVANCE_QUEUED`), so it enters the lifecycle at
+stage 1 like a manual "Analyse". Tenders that already existed, and new ones whose deadline has passed (`excludedCategory`
+contains `date`), are not queued.
 
 ## 3. v2 lifecycle (target)
 
@@ -131,7 +133,7 @@ published by `/api/webhook/automation`.
 
 | | |
 |---|---|
-| Trigger | `publishAiAnalysisJob` in `actions/ai-analysis.ts` (server action, `withLog`) |
+| Trigger | `publishAiAnalysisJob` in `actions/ai-analysis.ts` (server action, `withLog`), or `/api/webhook/tenders` for each new tender it creates; both call `queueRelevance` (`lib/relevance.ts`) |
 | Publisher | `publishAiRelevanceTask` (`lib/queue/publisher.ts`) |
 | Queue | `agent:relevance` (`QUEUES.AGENT_RELEVANCE`) |
 | Client ID | `TENDER_AGENT_RELEVANCE_CLIENT_ID` |
