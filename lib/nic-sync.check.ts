@@ -55,6 +55,14 @@ assert.deepEqual(nicCategoryFields(sample), { category: "Manufacturing", subCate
 assert.deepEqual(nicCategoryFields({ category: "Manufacturing", sub_category: "Rockets" }), { category: "Manufacturing", subCategory: null });
 assert.deepEqual(nicCategoryFields({}), { category: "Manufacturing", subCategory: null });
 assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Solar" }), { category: "EPC", subCategory: "Solar" });
+assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Distribution" }), { category: "EPC", subCategory: "Power Distribution" });
+assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Transmission" }), { category: "EPC", subCategory: "Power Transmission" });
+assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Water" }), { category: "EPC", subCategory: "Water Distribution" });
+assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Railway" }), { category: "EPC", subCategory: "Railways" });
+assert.deepEqual(nicCategoryFields({ category: "Manufacturing", sub_category: "Conductors" }), { category: "Manufacturing", subCategory: "Cables & Conductors" });
+// Alias names are case-insensitive; an unknown EPC sub is dropped, not invented.
+assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "RAILWAY" }), { category: "EPC", subCategory: "Railways" });
+assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Wind" }), { category: "EPC", subCategory: null });
 
 const files = nicDocsToFiles(sample["Tenders Documents"]);
 assert.equal(files.length, 1, "doc without url is skipped");
