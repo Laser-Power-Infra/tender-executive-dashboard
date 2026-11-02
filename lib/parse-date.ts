@@ -35,6 +35,9 @@ const DATE_FORMATS = [
   // month name, dash
   "d-MMM-yyyy-hh:mm a",
   "d-MMM-yyyy-HH:mm",
+  // NIC portals: "04-Nov-2026 06:00 PM"
+  "d-MMM-yyyy hh:mm a",
+  "d-MMM-yyyy HH:mm",
   "d-MMM-yyyy",
   "d-MMM-yy",
   // month name, space

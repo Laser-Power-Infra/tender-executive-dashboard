@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10)))
     const userFilter = searchParams.get("user")
     const tableFilter = searchParams.get("table")
+    const refFilter = searchParams.get("ref")
     const from = searchParams.get("from")
     const to = searchParams.get("to")
 
@@ -21,6 +22,9 @@ export async function GET(req: NextRequest) {
     }
     if (tableFilter) {
       where.tableName = { equals: tableFilter, mode: "insensitive" }
+    }
+    if (refFilter) {
+      where.referenceNo = { contains: refFilter, mode: "insensitive" }
     }
     if (from || to) {
       const createdAt: Record<string, Date> = {}

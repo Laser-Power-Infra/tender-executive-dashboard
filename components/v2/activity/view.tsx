@@ -59,7 +59,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-// The server pages and filters this log, and only by user and by table.
+// The server pages and filters this log, and only by user, table and reference number.
 const fixed = { search: false, sortable: false } as const;
 
 const columns: DataTableColumn<ActivityLog>[] = [
@@ -86,7 +86,7 @@ const columns: DataTableColumn<ActivityLog>[] = [
     ...fixed,
     filter: { type: "select", options: TABLES.map((t) => ({ value: t, label: t })) },
   },
-  { id: "referenceNo", header: "Reference No", width: 220, ...fixed, text: (r) => r.referenceNo ?? "" },
+  { id: "referenceNo", header: "Reference No", width: 220, sortable: false, text: (r) => r.referenceNo ?? "" },
   { id: "details", header: "Details", width: 460, ...fixed, text: (r) => r.details ?? "" },
 ];
 
@@ -99,6 +99,7 @@ export function ActivityView() {
   const [page, setPage] = useState(1);
   const [user, setUser] = useState("");
   const [table, setTable] = useState("");
+  const [ref, setRef] = useState("");
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +111,7 @@ export function ActivityView() {
     const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     if (user) params.set("user", user);
     if (table) params.set("table", table);
+    if (ref) params.set("ref", ref);
 
     setLoading(true);
     fetch(`/api/activity?${params}`, { signal: abort.signal })
@@ -130,7 +132,7 @@ export function ActivityView() {
         setLoaded(true);
       });
     return () => abort.abort();
-  }, [page, user, table, refresh]);
+  }, [page, user, table, ref, refresh]);
 
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
 
@@ -138,12 +140,14 @@ export function ActivityView() {
     const out: Record<string, ColumnFilterState> = {};
     if (user) out.user = { text: user };
     if (table) out.tableName = { select: [table] };
+    if (ref) out.referenceNo = { text: ref };
     return out;
-  }, [user, table]);
+  }, [user, table, ref]);
 
   const onFilterChange = useCallback(
     (columnId: string, type: ColumnFilterType, value: unknown | undefined) => {
       if (columnId === "user" && type === "text") setUser((value as string | undefined) ?? "");
+      if (columnId === "referenceNo" && type === "text") setRef((value as string | undefined) ?? "");
       // One table at a time: the newest pick replaces the last.
       if (columnId === "tableName" && type === "select") {
         setTable((value as string[] | undefined)?.at(-1) ?? "");
@@ -156,6 +160,7 @@ export function ActivityView() {
   const onResetFilters = useCallback(() => {
     setUser("");
     setTable("");
+    setRef("");
     setPage(1);
   }, []);
 

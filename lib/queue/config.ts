@@ -9,6 +9,7 @@ export const QUEUES = {
   // Automation v2 — see docs/tender-lifecycle.md
   AUTOMATION_V2_TASKS: "automation-v2:tasks",
   AUTOMATION_V2_PARSING: "automation-v2:parsing",
+  AUTOMATION_V2_SYNC: "automation-v2:sync",
 } as const;
 
 // Tender download + parsing queues for the automation version selected by AUTOMATION_VERSION.
