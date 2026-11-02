@@ -43,7 +43,8 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
 
   const headers = [...NIC_ROW_HEADERS];
   const prepared: PreparedTender[] = [];
-  const filesByRef = new Map<string, NicFile[]>();
+  // Keyed by the prepared row: insertTenderMerged may rewrite refNo to a prefix-matched stored reference.
+  const filesByRow = new Map<PreparedTender, NicFile[]>();
   for (const t of tenders) {
     const row = nicTenderToRow(t);
     const p = prepareTenderRow(row, headers, { ...ctx, categoryFields: nicCategoryFields(t) });
@@ -54,17 +55,12 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
     Object.assign(p.createData, nicIntFields(t));
     if (p.createData.excludedCategory !== null) result.excludedCount++;
     prepared.push(p);
-    filesByRef.set(p.refNo, nicDocsToFiles(t["Tenders Documents"]));
+    filesByRow.set(p, nicDocsToFiles(t["Tenders Documents"]));
   }
 
+  // Rewrites p.refNo to the stored reference when an existing tender matches by prefix.
+  const matched = await insertTenderMerged(prepared, file.id, result, file.fileName);
   const refNos = prepared.map((p) => p.refNo);
-  const before = new Set(
-    (await prisma.tenderMerged.findMany({ where: { referenceNo: { in: refNos } }, select: { referenceNo: true } })).map(
-      (r) => r.referenceNo,
-    ),
-  );
-
-  await insertTenderMerged(prepared, file.id, result, file.fileName);
 
   // Documents for new and existing tenders alike; a URL already on the tender is not added twice.
   const saved = await prisma.tenderMerged.findMany({
@@ -72,10 +68,16 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
     select: { id: true, referenceNo: true, tenderFiles: { select: { url: true } } },
   });
   const newFiles: (NicFile & { tenderMergedId: number })[] = [];
-  for (const t of saved) {
+  const savedByRef = new Map(saved.map((t) => [t.referenceNo, t]));
+  for (const p of prepared) {
+    const t = savedByRef.get(p.refNo);
+    if (!t) continue;
     const have = new Set(t.tenderFiles.map((f) => f.url));
-    for (const f of filesByRef.get(t.referenceNo) ?? []) {
-      if (!have.has(f.url)) newFiles.push({ ...f, tenderMergedId: t.id });
+    for (const f of filesByRow.get(p) ?? []) {
+      if (!have.has(f.url)) {
+        have.add(f.url);
+        newFiles.push({ ...f, tenderMergedId: t.id });
+      }
     }
   }
   if (newFiles.length) await prisma.tenderFile.createMany({ data: newFiles });
@@ -94,7 +96,7 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
     handled: true,
     received: tenders.length,
     created: result.count,
-    updated: prepared.filter((p) => before.has(p.refNo) && !rejectedRefs.has(p.refNo)).length,
+    updated: [...matched].filter((ref) => !rejectedRefs.has(ref)).length,
     excluded: result.excludedCount,
     rejected: result.rejected.map((r) => ({ referenceNo: r.row.referenceNo ?? null, reason: r.reason })),
     errors: result.errors,
