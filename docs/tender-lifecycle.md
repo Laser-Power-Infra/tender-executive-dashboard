@@ -74,10 +74,11 @@ Required env var. Values: `v1` or `v2`. It selects the automation queues through
 ### NIC portal sync (outside the tender lifecycle)
 
 `POST /api/sync/nic` (auth: `EXTERNAL_API_KEY`) reads every distinct `website` from `TenderStatusTable`
-where `type = "NIC"` and publishes one job to `automation-v2:sync`:
+where `type = "NIC"` (or takes an explicit `{ "portals": [...] }` body) and publishes **one job per portal**
+to `automation-v2:sync`, each with a one-element `portals` array:
 
 ```json
-{ "portals": ["<website>", "..."], "client_id": "<TENDER_AUTOMATION_SYNC_CLIENT_ID>" }
+{ "portals": ["<website>"], "client_id": "<TENDER_AUTOMATION_SYNC_CLIENT_ID>" }
 ```
 
 The queue has no version switch. Published by `publishNicSyncTask` in `lib/queue/publisher.ts`.
