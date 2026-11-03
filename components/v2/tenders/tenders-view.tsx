@@ -25,6 +25,7 @@ import {
   AiAnalysisButton,
   EXCLUSION_OPTIONS,
   ExclusionsMenu,
+  QueueStageMenu,
   UploadMenu,
   UploadWindowControl,
   formatUploadWindow,
@@ -189,6 +190,7 @@ export function TendersView() {
           <>
             <UploadMenu />
             <AiAnalysisButton query={query} total={t.total} />
+            <QueueStageMenu query={query} total={t.total} />
             <Button
               icon={<Download className="size-3.5" />}
               loading={exporting}

@@ -68,6 +68,14 @@ export const LIFECYCLE_MAIN_STAGES = TENDER_LIFECYCLE_STAGES.flatMap(({ stage })
   stage === "PARSING" ? [] : [stage],
 );
 
+/** How the UI names each main stage. */
+export const LIFECYCLE_STAGE_INFO: Record<LifecycleMainStage, { label: string; detail: string }> = {
+  RELEVANCE: { label: "Relevance", detail: "AI checks the tender is relevant" },
+  AUTOMATION: { label: "Documents", detail: "Tender files are downloaded" },
+  INGESTION: { label: "Ingestion", detail: "The agent reads the files" },
+  INTELLIGENCE: { label: "Report", detail: "The agent writes its report" },
+};
+
 /** The RabbitMQ queue a stage's jobs go to; automation follows AUTOMATION_VERSION. */
 export function lifecycleStageQueue(stage: LifecycleMainStage): string {
   if (stage === "AUTOMATION") return automationQueues().tasks;

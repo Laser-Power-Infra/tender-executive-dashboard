@@ -50,8 +50,10 @@ export const say = {
   sameOrganisationUpdated: (n: number) => `I've also updated ${count(n, "tender")} from the same organisation.`,
   collectingTenders: () => "I'm collecting the filtered tenders…",
   nothingToQueue: () => "There's nothing to queue. Every filtered tender already has an AI result or no brief.",
-  queueing: (done: number, total: number) => `I'm queueing tenders for AI analysis (${num(done)} of ${num(total)})…`,
-  queued: (n: number) => `I've queued ${count(n, "tender")} for AI analysis.`,
+  noneMatch: () => "There's nothing to queue. No tender matches the filters.",
+  queueing: (done: number, total: number, what = "AI analysis") =>
+    `I'm queueing tenders for ${what} (${num(done)} of ${num(total)})…`,
+  queued: (n: number, what = "AI analysis") => `I've queued ${count(n, "tender")} for ${what}.`,
   queuedSome: (queued: number, failed: number) => `I queued ${num(queued)}, but ${num(failed)} failed.`,
   queueStopped: (queued: number) => `I've stopped after queueing ${count(queued, "tender")}.`,
   rejected: (n: number) => `I couldn't take ${count(n, "tender")}.`,

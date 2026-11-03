@@ -84,7 +84,8 @@ to `automation-v2:sync`, each with a one-element `portals` array:
 The queue has no version switch. Published by `publishNicSyncTask` in `lib/queue/publisher.ts`.
 
 The worker reports back to `POST /api/webhook/tenders` with the shared envelope, `event: "nic.synced_success"`,
-`data.type: "NIC_SYNC"` and `data.result` = array of NIC tenders (raw portal field names, plus `reference_no`,
+`data.type: "NIC_SYNC"`, `data.portal` = the portal URL the job ran against (stored as `website` on each tender) and
+`data.result` = array of NIC tenders (raw portal field names, plus `reference_no`,
 `category`, `sub_category`, `Tenders Documents`). Each tender is shaped by `lib/nic-sync.ts` and goes through the same
 create-or-fill upsert as an Excel upload (`lib/tender-upsert.ts`, shared with `/api/upload`): new references are created,
 existing ones only get empty fields filled. Documents with a URL become `TenderFile` rows (`BOQ` → `boqComparativeChart`,
@@ -189,6 +190,7 @@ Webhook `POST /api/webhook/automation` (envelope, [§8](#8-webhook-envelope)):
 - Success event: `file.fetched_success`. An event with `data.error` or ending in `_failed` sets `AUTOMATION_FAILED`; any other event is logged only.
 - `data.result.files[]`: `{ name, extension, url, tag, source }`. The file name overrides `tag` (case-insensitive): contains `boq` → `boqComparativeChart`, contains `costing` → `costingAttachment`. Otherwise the worker's `tag` is kept and must be a value of `TENDER_FILE_TYPES` (`lib/tender-file-types.ts`), else `400`.
 - `TENDER_AUTOMATION_PARSING_CLIENT_ID` and `TENDER_AGENT_INGESTION_CLIENT_ID` are checked before anything is saved.
+- `data.portal` (optional): the portal URL the files came from; stored as `website` when the tender has none.
 - DB write: one `TenderFile` row per new URL. URLs already stored are skipped (retry-safe).
 - Parsing branch: only candidate files get `parseStatus = PENDING` and a stage 3 job. Candidates by `data.type`:
   `GEM_DOWNLOAD` / `RA_GEM_DOWNLOAD` → tag `tenderDocument`; `NON_GEM_DOWNLOAD` → tag `boqComparativeChart`.
@@ -384,6 +386,10 @@ Rules:
   columns on `/v2/ai-analysis`: it republishes that stage's job for every tender in the stage's `*_FAILED`, or in
   its `*_QUEUED` for longer than `LIFECYCLE_SLOW_MS` (one hour). A failed tender whose job still cannot be sent
   keeps `*_FAILED` with a `Requeue: ...` reason in `lifecycleError`.
+- A developer can also push every tender matching the current filters on `/v2/tenders` into any stage with the
+  "Queue to" menu (`queueTenderStage` in `actions/ai-analysis.ts`, one call per tender). It publishes that stage's job
+  and sets `*_QUEUED` (or `*_FAILED` with the reason) whatever the tender's status was, so it also serves as a way to
+  start the lifecycle at a later stage, e.g. Documents for tenders that never went through relevance.
 
 ```mermaid
 stateDiagram-v2
@@ -458,6 +464,7 @@ All v2 workers call back with this body. Parsed and validated by `createWebhookH
 | `data.referenceNo` | yes | `TenderMerged.referenceNo` |
 | `data.result` | no | Stage-specific result |
 | `data.error` | no | Non-null means failure. The handler logs it and sets `*_FAILED`. |
+| `data.portal` | no | Portal URL (automation and tenders webhooks); stored as `TenderMerged.website`, fill-only. |
 
 Validation errors return `400`. An unknown `referenceNo` returns `404`.
 
