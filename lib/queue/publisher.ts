@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { getChannel } from "@/lib/rabbitmq";
 import { QUEUES, automationQueues } from "./config";
 
@@ -199,12 +200,23 @@ export const INGESTION_FILE_SELECT = {
   tags: true,
 } as const;
 
+// Wire shape the ingestion worker validates: a jobId plus camelCase file fields (fileTag = the file's tag).
 export async function publishIngestionTask(
   payload: IngestionPayload,
 ): Promise<boolean> {
   return publishToQueue(
     QUEUES.AGENT_INGESTION,
-    withClientId("TENDER_AGENT_INGESTION_CLIENT_ID", payload),
+    withClientId("TENDER_AGENT_INGESTION_CLIENT_ID", {
+      jobId: `ingest-${randomUUID()}`,
+      referenceNo: payload.referenceNo,
+      files: payload.files.map((f) => ({
+        documentId: f.id,
+        fileUrl: f.url,
+        fileName: f.name,
+        fileType: f.extension,
+        fileTag: f.tags[0] ?? "",
+      })),
+    }),
   );
 }
 

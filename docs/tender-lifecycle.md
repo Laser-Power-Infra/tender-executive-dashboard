@@ -258,22 +258,24 @@ Payload:
 
 ```json
 {
+  "jobId": "ingest-<uuid>",
   "referenceNo": "GEM/2026/B/1234567",
   "files": [
     {
-      "id": 1,
-      "name": "bid.pdf",
-      "extension": "pdf",
-      "url": "https://...",
-      "source": "gem",
-      "tags": ["tenderDocument"]
+      "documentId": 1,
+      "fileUrl": "https://...",
+      "fileName": "bid.pdf",
+      "fileType": "pdf",
+      "fileTag": "tenderDocument"
     }
   ],
   "client_id": "<TENDER_AGENT_INGESTION_CLIENT_ID>"
 }
 ```
 
-`files` holds file metadata only. Parse results are not included, because parsing may still be running.
+`files` holds file metadata only (`documentId` = `TenderFile.id`, `fileTag` = its tag). Parse results are not
+included, because parsing may still be running. Callers pass `TenderFile` rows (`INGESTION_FILE_SELECT`);
+`publishIngestionTask` maps them to this shape.
 
 Webhook `POST /api/webhook/ingestion` (envelope):
 
