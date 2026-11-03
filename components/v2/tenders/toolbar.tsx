@@ -9,14 +9,17 @@ import {
   FileSpreadsheet,
   FileUp,
   Filter,
+  ListPlus,
   Sparkles,
   Square,
   Upload,
   X,
 } from "lucide-react";
 import { fetchAllFilteredTenderRows } from "@/actions/tender-query";
-import { publishAiAnalysisJob, startAiAnalysisRun } from "@/actions/ai-analysis";
+import { publishAiAnalysisJob, queueTenderStage, startAiAnalysisRun } from "@/actions/ai-analysis";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
+import { LIFECYCLE_MAIN_STAGES, LIFECYCLE_STAGE_INFO, type LifecycleMainStage } from "@/lib/tender-lifecycle";
+import { useIsDeveloper } from "@/components/v2/providers";
 import { cn } from "@/lib/utils";
 import {
   TENDER_CATEGORIES,
@@ -234,10 +237,51 @@ export function UploadMenu() {
 
 /* -------------------------------- AI analysis ------------------------------ */
 
+type QueueProgress = { done: number; total: number } | null;
+
+/** Sends one job per target, one at a time, with a progress toast; `abort.current` stops the loop. */
+async function queueEach<T>(
+  targets: T[],
+  send: (target: T) => Promise<boolean>,
+  what: string,
+  toastId: string | number,
+  setProgress: (p: QueueProgress) => void,
+  abort: { current: boolean },
+) {
+  setProgress({ done: 0, total: targets.length });
+  let queued = 0;
+  let failed = 0;
+  for (const target of targets) {
+    if (abort.current) break;
+    try {
+      if (await send(target)) queued++;
+      else failed++;
+    } catch {
+      failed++;
+    }
+    toast.loading(say.queueing(queued + failed, targets.length, what), { id: toastId });
+    setProgress({ done: queued + failed, total: targets.length });
+  }
+  if (abort.current) toast.info(say.queueStopped(queued), { id: toastId });
+  else if (failed === 0) toast.success(say.queued(queued, what), { id: toastId });
+  else toast.warning(say.queuedSome(queued, failed), { id: toastId });
+}
+
+function StopButton({ progress, onStop }: { progress: NonNullable<QueueProgress>; onStop: () => void }) {
+  return (
+    <Button variant="danger" icon={<Square className="size-3 fill-current" />} onClick={onStop}>
+      Stop
+      <span className="tabular-nums">
+        {progress.done}/{progress.total}
+      </span>
+    </Button>
+  );
+}
+
 export function AiAnalysisButton({ query, total }: { query: TenderQuery; total: number }) {
   const [open, setOpen] = useState(false);
   const [reRunAll, setReRunAll] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<QueueProgress>(null);
   const abort = useRef(false);
 
   const run = async () => {
@@ -266,34 +310,22 @@ export function AiAnalysisButton({ query, total }: { query: TenderQuery; total: 
         return;
       }
 
-      setProgress({ done: 0, total: targets.length });
       // Earlier rejections stop counting on the AI analysis page. Only that count
       // depends on it, so a failure here must not stop the queueing.
       await startAiAnalysisRun().catch((err) => console.warn("[ai-analysis] run not reset:", err));
-      let queued = 0;
-      let failed = 0;
-      for (const row of targets) {
-        if (abort.current) break;
-        try {
-          const sent = await publishAiAnalysisJob({
+      await queueEach(
+        targets,
+        (row) =>
+          publishAiAnalysisJob({
             referenceNo: String(row.referenceNo ?? ""),
             tenderBrief: String(row.tenderBrief ?? ""),
             itemCategory: String(row.itemCategory ?? ""),
-          });
-          if (sent) queued++;
-          else failed++;
-        } catch {
-          failed++;
-        }
-        toast.loading(say.queueing(queued + failed, targets.length), {
-          id: toastId,
-        });
-        setProgress({ done: queued + failed, total: targets.length });
-      }
-
-      if (abort.current) toast.info(say.queueStopped(queued), { id: toastId });
-      else if (failed === 0) toast.success(say.queued(queued), { id: toastId });
-      else toast.warning(say.queuedSome(queued, failed), { id: toastId });
+          }),
+        "AI analysis",
+        toastId,
+        setProgress,
+        abort,
+      );
     } catch (err) {
       toast.error(say.couldNot("start the AI analysis"), { id: toastId, description: await describeError(err) });
     } finally {
@@ -301,22 +333,7 @@ export function AiAnalysisButton({ query, total }: { query: TenderQuery; total: 
     }
   };
 
-  if (progress) {
-    return (
-      <Button
-        variant="danger"
-        icon={<Square className="size-3 fill-current" />}
-        onClick={() => {
-          abort.current = true;
-        }}
-      >
-        Stop
-        <span className="tabular-nums">
-          {progress.done}/{progress.total}
-        </span>
-      </Button>
-    );
-  }
+  if (progress) return <StopButton progress={progress} onStop={() => (abort.current = true)} />;
 
   return (
     <>
@@ -343,6 +360,72 @@ export function AiAnalysisButton({ query, total }: { query: TenderQuery; total: 
         <Checkbox checked={reRunAll} onChange={setReRunAll}>
           Also re-analyse tenders that already have a result
         </Checkbox>
+      </Dialog>
+    </>
+  );
+}
+
+/* ------------------------- Queue to a stage (developer) -------------------- */
+
+/** Sends every filtered tender to the chosen lifecycle stage's queue, whatever its current status. */
+export function QueueStageMenu({ query, total }: { query: TenderQuery; total: number }) {
+  const isDeveloper = useIsDeveloper();
+  const [stage, setStage] = useState<LifecycleMainStage | null>(null);
+  const [progress, setProgress] = useState<QueueProgress>(null);
+  const abort = useRef(false);
+  if (!isDeveloper) return null;
+
+  const run = async (picked: LifecycleMainStage) => {
+    abort.current = false;
+    setStage(null);
+    const what = LIFECYCLE_STAGE_INFO[picked].label;
+    setProgress({ done: 0, total: 0 });
+    const toastId = toast.loading(say.collectingTenders());
+    try {
+      const rows = await fetchAllFilteredTenderRows(query, ["referenceNo"]);
+      const refs = rows.map((r) => String(r.referenceNo ?? "")).filter(Boolean);
+      if (refs.length === 0) {
+        toast.info(say.noneMatch(), { id: toastId });
+        return;
+      }
+      await queueEach(refs, (ref) => queueTenderStage(picked, ref), what, toastId, setProgress, abort);
+    } catch (err) {
+      toast.error(say.couldNot(`queue ${what}`), { id: toastId, description: await describeError(err) });
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  if (progress) return <StopButton progress={progress} onStop={() => (abort.current = true)} />;
+
+  const label = stage ? LIFECYCLE_STAGE_INFO[stage].label : "";
+  return (
+    <>
+      <Menu align="end" trigger={<Button icon={<ListPlus className="size-3.5" />}>Queue to</Button>}>
+        {LIFECYCLE_MAIN_STAGES.map((s) => (
+          <MenuItem key={s} onClick={() => setStage(s)}>
+            {LIFECYCLE_STAGE_INFO[s].label}
+          </MenuItem>
+        ))}
+      </Menu>
+      <Dialog
+        open={stage !== null}
+        onOpenChange={(open) => !open && setStage(null)}
+        title={`Queue ${label}`}
+        description={`Sends the ${total.toLocaleString("en-IN")} tenders matching the current filters to the ${label} queue, whatever their current status.`}
+        width="28rem"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setStage(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => stage && run(stage)}>
+              Queue {label}
+            </Button>
+          </>
+        }
+      >
+        {stage && <p className="text-ink-2">{LIFECYCLE_STAGE_INFO[stage].detail}.</p>}
       </Dialog>
     </>
   );

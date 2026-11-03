@@ -15,6 +15,7 @@ import {
 } from "@/actions/tender-lifecycle";
 import {
   LIFECYCLE_MAIN_STAGES,
+  LIFECYCLE_STAGE_INFO,
   LIFECYCLE_SLOW_MS as SLOW_MS,
   TENDER_LIFECYCLE_STATUS,
   type LifecycleCounts,
@@ -36,12 +37,7 @@ const PAGE_SIZES = [PAGE_SIZE];
 
 type RequeueFrom = Parameters<typeof requeueStage>[1];
 
-const STAGES: Record<LifecycleMainStage, { label: string; detail: string }> = {
-  RELEVANCE: { label: "Relevance", detail: "AI checks the tender is relevant" },
-  AUTOMATION: { label: "Documents", detail: "Tender files are downloaded" },
-  INGESTION: { label: "Ingestion", detail: "The agent reads the files" },
-  INTELLIGENCE: { label: "Report", detail: "The agent writes its report" },
-};
+const STAGES = LIFECYCLE_STAGE_INFO;
 
 const fmt = (n: number) => n.toLocaleString("en-IN");
 

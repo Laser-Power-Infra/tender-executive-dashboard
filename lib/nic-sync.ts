@@ -27,6 +27,7 @@ export const NIC_ROW_HEADERS = [
   "bidOpeningDateTime",
   "location",
   "source",
+  "website",
 ] as const;
 
 const str = (v: unknown) => (v == null ? "" : String(v).trim());
@@ -34,7 +35,8 @@ const str = (v: unknown) => (v == null ? "" : String(v).trim());
 const blank = (v: unknown) => /^(na|nil|n\/a|-)?$/i.test(str(v));
 const field = (t: NicTender, key: string) => (blank(t[key]) ? "" : str(t[key]));
 
-export function nicTenderToRow(t: NicTender): Record<string, unknown> {
+/** `portal` is the event's `data.portal`; stored as `website` (fill-only on existing tenders). */
+export function nicTenderToRow(t: NicTender, portal = ""): Record<string, unknown> {
   const chain = field(t, "Organisation Chain").split("||").map((s) => s.trim()).filter(Boolean);
   return {
     referenceNo: field(t, "reference_no") || field(t, "Tender ID"),
@@ -48,6 +50,7 @@ export function nicTenderToRow(t: NicTender): Record<string, unknown> {
     bidOpeningDateTime: field(t, "Bid Opening Date"),
     location: field(t, "Location"),
     source: "NIC",
+    website: portal,
   };
 }
 

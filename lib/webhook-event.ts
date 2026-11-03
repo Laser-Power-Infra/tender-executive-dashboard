@@ -13,6 +13,8 @@ export interface WebhookEvent {
     error: unknown;
     // Echoed by the parsing worker to identify the TenderFile.
     file_link?: string;
+    // Sent by the NIC sync worker: the portal the result rows came from.
+    portal?: string;
   };
 }
 
@@ -82,6 +84,7 @@ export function createWebhookHandler(
           result: data.result ?? null,
           error: data.error ?? null,
           ...(typeof data.file_link === "string" && { file_link: data.file_link.trim() }),
+          ...(typeof data.portal === "string" && { portal: data.portal.trim() }),
         },
       });
       return NextResponse.json(result);

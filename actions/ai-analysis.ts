@@ -12,6 +12,7 @@ import { requireUserAction } from "@/lib/dal";
 import {
   LIFECYCLE_SLOW_MS,
   TENDER_LIFECYCLE_STATUS,
+  lifecycleStageQueue,
   type LifecycleStageCount,
 } from "@/lib/tender-lifecycle";
 import { setLifecycleStatus } from "@/lib/tender-lifecycle-store";
@@ -36,6 +37,62 @@ const REQUEUE_STAGES: RequeueStage[] = ["RELEVANCE", "AUTOMATION", "INGESTION", 
 // or move the loop to a background job.
 const REQUEUE_LIMIT = 500;
 
+const STAGE_TENDER_SELECT = {
+  id: true,
+  referenceNo: true,
+  tenderType: true,
+  tenderBrief: true,
+  itemCategory: true,
+  subCategory: true,
+  value: true,
+} as const;
+type StageTender = {
+  id: number;
+  referenceNo: string;
+  tenderType: "GEM" | "NON_GEM";
+  tenderBrief: string | null;
+  itemCategory: string | null;
+  subCategory: string | null;
+  value: string | null;
+};
+
+/** Publishes the job that starts `stage` for one tender; `reason` says why it was not sent. */
+async function publishStageJob(
+  stage: RequeueStage,
+  tender: StageTender,
+): Promise<{ sent: boolean; reason: string }> {
+  const { id, referenceNo } = tender;
+  let reason = "Job not sent; RabbitMQ unreachable";
+  let sent = false;
+  if (stage === "RELEVANCE") {
+    sent = await publishRelevance(tender);
+  } else if (stage === "AUTOMATION") {
+    sent = await publishTenderTask(
+      tender.tenderType === "GEM"
+        ? { type: "GEM_DOWNLOAD", tenderId: id, gemId: referenceNo, referenceNo, timestamp: Date.now() }
+        : { type: "NON_GEM_DOWNLOAD", tenderId: id, referenceNo, timestamp: Date.now() },
+    );
+  } else if (stage === "INGESTION") {
+    const files = await prisma.tenderFile.findMany({
+      where: { tenderMergedId: id },
+      select: INGESTION_FILE_SELECT,
+      orderBy: { id: "asc" },
+    });
+    // Nothing to ingest: the download has to be queued first.
+    if (files.length === 0) reason = "No downloaded files to ingest; queue Documents first";
+    sent = files.length > 0 && (await publishIngestionTask({ referenceNo, files }));
+  } else {
+    sent = await publishAgentIntelligenceTask({
+      payloadType: "analysis",
+      referenceNo,
+      company: "laser",
+      tenderbrief: tender.tenderBrief ?? "",
+      itemcategory: tender.itemCategory ?? "",
+    });
+  }
+  return { sent, reason };
+}
+
 /**
  * Publishes the stage's job again for every tender stuck on it, the same job the
  * stage before would have published. `from` picks the stuck tenders: FAILED, or
@@ -59,53 +116,18 @@ async function requeueStageFn(stage: RequeueStage, from: "FAILED" | "QUEUED") {
             lifecycleUpdatedAt: { lt: new Date(Date.now() - LIFECYCLE_SLOW_MS) },
           }),
     },
-    select: {
-      id: true,
-      referenceNo: true,
-      tenderType: true,
-      tenderBrief: true,
-      itemCategory: true,
-      subCategory: true,
-      value: true,
-    },
+    select: STAGE_TENDER_SELECT,
     orderBy: { lifecycleUpdatedAt: "asc" },
     take: REQUEUE_LIMIT,
   });
 
   let queued = 0;
   for (const tender of tenders) {
-    const { id, referenceNo } = tender;
-    let sent = false;
-    let reason = "Requeue: job not sent; RabbitMQ unreachable";
-    if (stage === "RELEVANCE") {
-      sent = await publishRelevance(tender);
-    } else if (stage === "AUTOMATION") {
-      sent = await publishTenderTask(
-        tender.tenderType === "GEM"
-          ? { type: "GEM_DOWNLOAD", tenderId: id, gemId: referenceNo, referenceNo, timestamp: Date.now() }
-          : { type: "NON_GEM_DOWNLOAD", tenderId: id, referenceNo, timestamp: Date.now() },
-      );
-    } else if (stage === "INGESTION") {
-      const files = await prisma.tenderFile.findMany({
-        where: { tenderMergedId: id },
-        select: INGESTION_FILE_SELECT,
-        orderBy: { id: "asc" },
-      });
-      // Nothing to ingest: the download has to be requeued first.
-      if (files.length === 0) reason = "Requeue: no downloaded files to ingest; requeue Documents first";
-      sent = files.length > 0 && (await publishIngestionTask({ referenceNo, files }));
-    } else {
-      sent = await publishAgentIntelligenceTask({
-        payloadType: "analysis",
-        referenceNo,
-        company: "laser",
-        tenderbrief: tender.tenderBrief ?? "",
-        itemcategory: tender.itemCategory ?? "",
-      });
-    }
+    const { referenceNo } = tender;
+    const { sent, reason } = await publishStageJob(stage, tender);
     if (!sent) {
       // Say why on the tender, so the AI analysis page can show it.
-      if (from === "FAILED") await setLifecycleStatus(referenceNo, `${stage}_FAILED`, reason);
+      if (from === "FAILED") await setLifecycleStatus(referenceNo, `${stage}_FAILED`, `Requeue: ${reason}`);
       continue;
     }
     await setLifecycleStatus(referenceNo, `${stage}_QUEUED`);
@@ -114,6 +136,29 @@ async function requeueStageFn(stage: RequeueStage, from: "FAILED" | "QUEUED") {
 
   return { stage, from, queued, notQueued: tenders.length - queued };
 }
+
+/** Developer only: starts `stage` for one tender whatever its current status (tenders page "Queue to"). */
+async function queueTenderStageFn(stage: RequeueStage, referenceNo: string): Promise<boolean> {
+  const user = await requireUserAction();
+  if (user.role !== "developer") throw new Error("Forbidden: developer role required");
+  if (!REQUEUE_STAGES.includes(stage)) throw new Error(`Unknown stage: ${stage}`);
+  const tender = await prisma.tenderMerged.findUnique({
+    where: { referenceNo, deleteRequestedAt: null },
+    select: STAGE_TENDER_SELECT,
+  });
+  if (!tender) throw new Error(`Reference not found: ${referenceNo}`);
+  const { sent, reason } = await publishStageJob(stage, tender);
+  await setLifecycleStatus(referenceNo, sent ? `${stage}_QUEUED` : `${stage}_FAILED`, sent ? undefined : reason);
+  return sent;
+}
+
+export const queueTenderStage = withLog(queueTenderStageFn, (sent, stage, referenceNo) => ({
+  action: "CREATE" as const,
+  tableName: lifecycleStageQueue(stage),
+  recordId: undefined,
+  referenceNo,
+  details: `Queued ${stage} from the tenders page (sent=${sent})`,
+}));
 
 export const requeueStage = withLog(requeueStageFn, (result) => ({
   action: "UPDATE" as const,
