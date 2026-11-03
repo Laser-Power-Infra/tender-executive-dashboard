@@ -81,12 +81,18 @@ async function handleAutomationEvent(evt: WebhookEvent) {
 
   const files = parseFiles(evt.data.result);
   const { referenceNo } = evt.data;
+  const portal = evt.data.portal ?? "";
 
   const tender = await prisma.tenderMerged.findUnique({
     where: { referenceNo, deleteRequestedAt: null },
-    select: { id: true, lifecycleStatus: true },
+    select: { id: true, lifecycleStatus: true, website: true },
   });
   if (!tender) throw httpError(`Reference not found: ${referenceNo}`, 404);
+
+  // Portal the files came from; fill-only, like the tenders webhook.
+  if (portal && !tender.website) {
+    await prisma.tenderMerged.update({ where: { id: tender.id }, data: { website: portal } });
+  }
 
   // Skip URLs already stored so a retried webhook does not duplicate rows or parsing jobs.
   const existing = await prisma.tenderFile.findMany({
@@ -154,7 +160,7 @@ async function handleAutomationEvent(evt: WebhookEvent) {
         ));
   }
 
-  return { handled: true, filesCreated: newFiles.length, parsingQueued, ingestionQueued };
+  return { handled: true, portal, filesCreated: newFiles.length, parsingQueued, ingestionQueued };
 }
 
 export const POST = createWebhookHandler("Automation", handleAutomationEvent);

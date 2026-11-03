@@ -27,10 +27,11 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
   if (evt.data.type !== "NIC_SYNC") throw httpError('data.type must be "NIC_SYNC"', 400);
   if (!Array.isArray(evt.data.result)) throw httpError("data.result must be an array of tenders", 400);
   const tenders = evt.data.result.filter((t): t is NicTender => !!t && typeof t === "object");
+  const portal = evt.data.portal ?? "";
 
   // Same shape as an upload: one File row anchors the batch (TenderMerged.fileId is required).
   const file = await prisma.file.create({
-    data: { fileName: `${SOURCE} ${evt.id}`, fileType: "application/json", status: "processing" },
+    data: { fileName: `${SOURCE} ${portal || evt.id}`, fileType: "application/json", status: "processing" },
   });
   const ctx = await loadUpsertContext({ category: TENDER_CATEGORIES.MANUFACTURING, subCategory: null });
   const result: SheetResult = {
@@ -47,7 +48,7 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
   // Keyed by the prepared row: insertTenderMerged may rewrite refNo to a prefix-matched stored reference.
   const filesByRow = new Map<PreparedTender, NicFile[]>();
   for (const t of tenders) {
-    const row = nicTenderToRow(t);
+    const row = nicTenderToRow(t, portal);
     const p = prepareTenderRow(row, headers, { ...ctx, categoryFields: nicCategoryFields(t) });
     if ("reason" in p) {
       result.rejected.push({ fileName: file.fileName, sheetName: SOURCE, reason: p.reason, row });
@@ -113,6 +114,7 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
   const rejectedRefs = new Set(result.rejected.map((r) => String(r.row.referenceNo ?? "")));
   return {
     handled: true,
+    portal,
     received: tenders.length,
     created: result.count,
     updated: [...matched].filter((ref) => !rejectedRefs.has(ref)).length,

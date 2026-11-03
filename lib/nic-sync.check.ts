@@ -39,6 +39,8 @@ assert.equal(row.departmentName, "MIDNAPORE ZONE / PURBA MEDINIPUR REGION / CONT
 assert.equal(row.value, "3,60,466");
 assert.equal(row.emd, "7,209");
 assert.equal(row.source, "NIC");
+assert.equal(row.website, "");
+assert.equal(nicTenderToRow(sample, "https://wbtenders.gov.in").website, "https://wbtenders.gov.in");
 
 // The deadline must survive the shared date parser, else the row is rejected.
 const deadline = parseDate(row.deadline);
