@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getToolName, isToolUIPart, type DynamicToolUIPart, type ToolUIPart, type UIMessage } from "ai";
-import { Check, ChevronRight, ListFilter, Loader2, TableProperties, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, ListFilter, Loader2, Pencil, TableProperties, TriangleAlert, type LucideIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -8,9 +8,16 @@ type ToolPart = ToolUIPart | DynamicToolUIPart;
 
 /** What a tool call reads as while it runs, and once it is done. */
 function describeStep(p: ToolPart): { icon: LucideIcon; label: string; detail?: string } {
-  const input = (p.input ?? {}) as { formula?: string; column?: string };
-  const output = p.state === "output-available" ? (p.output as { ok?: boolean; errors?: string[] }) : undefined;
+  const input = (p.input ?? {}) as { formula?: string; column?: string; field?: string; referenceNo?: string };
+  const output = p.state === "output-available" ? (p.output as { ok?: boolean; errors?: string[]; error?: string }) : undefined;
   switch (getToolName(p)) {
+    case "lookup_field_values":
+      return { icon: ListFilter, label: `${output ? "Looked up" : "Looking up"} values for ${input.field ?? "field"}` };
+    case "tender_update": {
+      const ref = input.referenceNo ?? "tender";
+      const label = !output ? `Updating ${ref}` : output.ok === false ? `Couldn't update ${ref}` : `Updated ${ref}`;
+      return { icon: Pencil, label, detail: output?.error };
+    }
     case "get_table":
       return { icon: TableProperties, label: output ? "Read the table" : "Reading the table" };
     case "list_filter_values":

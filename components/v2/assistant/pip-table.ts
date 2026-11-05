@@ -14,6 +14,10 @@ export interface PipTable {
   apply(formula: string): Promise<string[]>;
   /** The options a list column takes, loading them if needed; null if it is not one. */
   values(column: string): Promise<FilterOption[] | null>;
+  /** The rows on screen now. */
+  rows?(): Record<string, unknown>[];
+  /** Fetches the rows again, after Pip edits one. */
+  reload?(): void;
 }
 
 let table: PipTable | null = null;
@@ -28,6 +32,21 @@ export function registerPipTable(t: PipTable): () => void {
 export const pipTable = () => table;
 
 const MAX_VALUES = 30;
+const MAX_ROWS = 30;
+const MAX_BRIEF = 80;
+
+// shortcut: reads tender keys off a generic row; add a per-page row summary when another table needs Pip edits.
+function describeRows(rows: Record<string, unknown>[]): string[] {
+  const tenders = rows.filter((r) => r.referenceNo);
+  if (!tenders.length) return [];
+  const lines = tenders.slice(0, MAX_ROWS).map((r) => {
+    const brief = String(r.tenderBrief ?? "").trim();
+    const cat = [r.category, r.subCategory].filter(Boolean).join(" / ");
+    return `- ${r.referenceNo} | ${brief.length > MAX_BRIEF ? `${brief.slice(0, MAX_BRIEF)}...` : brief} | ${cat || "no category"}`;
+  });
+  if (tenders.length > MAX_ROWS) lines.push(`... and ${tenders.length - MAX_ROWS} more; filter to narrow.`);
+  return [`Rows on screen (${tenders.length}): reference no | brief | category:`, ...lines];
+}
 
 function kind(ref: FilterRef): string {
   const f = ref.filter;
@@ -76,5 +95,11 @@ export function describeTable(t: PipTable | null, today = localDay(new Date())):
       : "";
     return `- [${refName(ref, t.refs)}]: ${how}.${ref.hint ? ` Meaning: ${ref.hint}.` : ""}${values}`;
   });
-  return [`Today is ${today}.`, "Filterable columns:", ...lines, `Current filter: ${t.current() || "(none)"}`].join("\n");
+  return [
+    `Today is ${today}.`,
+    "Filterable columns:",
+    ...lines,
+    `Current filter: ${t.current() || "(none)"}`,
+    ...describeRows(t.rows?.() ?? []),
+  ].join("\n");
 }

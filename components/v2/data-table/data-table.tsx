@@ -651,11 +651,13 @@ function usePipTable(
   formula: Formula,
   getFilterOptions: DataTableProps<unknown>["getFilterOptions"],
   onFilterOpen: DataTableProps<unknown>["onFilterOpen"],
+  rows: unknown[],
+  onRetry: DataTableProps<unknown>["onRetry"],
 ) {
   // Pip calls in later than any render, so it reads the latest of everything.
-  const latest = useRef({ formula, getFilterOptions, onFilterOpen });
+  const latest = useRef({ formula, getFilterOptions, onFilterOpen, rows, onRetry });
   useEffect(() => {
-    latest.current = { formula, getFilterOptions, onFilterOpen };
+    latest.current = { formula, getFilterOptions, onFilterOpen, rows, onRetry };
   });
 
   useEffect(() => {
@@ -706,6 +708,8 @@ function usePipTable(
         const ref = resolveRef(column.replace(/^\[|\]$/g, ""), latest.current.formula.refs);
         return ref?.filter?.type === "select" ? options(ref) : null;
       },
+      rows: () => latest.current.rows as Record<string, unknown>[],
+      reload: () => latest.current.onRetry?.(),
     });
   }, []);
 }
@@ -849,7 +853,7 @@ export function DataTable<Row>({
 
   const [formulaOpen, setFormulaOpen] = useState(false);
   const formula = useFormula({ columns, filters, onFilterChange, onResetFilters, formulaFilters });
-  usePipTable(formula, getFilterOptions, onFilterOpen);
+  usePipTable(formula, getFilterOptions, onFilterOpen, rows, onRetry);
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-surface card">
