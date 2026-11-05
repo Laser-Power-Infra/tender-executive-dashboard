@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendTenderWebhook } from "@/lib/webhook";
 import { withLog, logActivity } from "@/lib/activity-logger";
-import { requireUserAction } from "@/lib/dal";
+import { ADMIN_ROLES, requireUserAction } from "@/lib/dal";
 import {
   triggerEmdPaymentWebhook,
   resolveEmdAttachment,
@@ -20,6 +20,7 @@ import { parseDate } from "@/lib/parse-date";
 import { toISTDateKey } from "@/lib/format-ist";
 import { calcDiffDecimal, calcDiffString } from "@/lib/diffCalculator";
 import { parseEmd, parseRupees } from "@/lib/rupees";
+import { TENDER_CATEGORIES, TENDER_SUBCATEGORIES, isValidCategorySelection, type TenderCategory } from "@/lib/tender-categories";
 
 export const updateTenderAssignmentsAction = withLog(
   async (params: {
@@ -374,6 +375,48 @@ export async function updateBeneficiaryBankDetails(params: {
     recordId: String(params.tenderMergedId),
     details: `Updated beneficiary bank details to "${params.beneficiaryBankDetails}" on tender #${params.tenderMergedId}`,
   });
+}
+
+/** Pip's edit. Only the controlled category pair; the user's choice is kept as is (no EPC auto-derivation). */
+export async function updateTenderCategory(params: {
+  referenceNo: string;
+  category: string;
+  subCategory?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUserAction();
+  if (!(ADMIN_ROLES as readonly string[]).includes(user.role ?? "")) {
+    return { ok: false, error: "Only admins can change a tender's category." };
+  }
+  const { referenceNo, category } = params;
+  const subCategory = params.subCategory?.trim() || null;
+  if (!isValidCategorySelection(category, subCategory)) {
+    const options = TENDER_SUBCATEGORIES[category as TenderCategory];
+    return {
+      ok: false,
+      error: options
+        ? `${category} takes sub category ${options.map((o) => `"${o}"`).join(", ")}${category === TENDER_CATEGORIES.MANUFACTURING ? " or none" : ""}.`
+        : `Category must be ${Object.values(TENDER_CATEGORIES).map((c) => `"${c}"`).join(" or ")}.`,
+    };
+  }
+  let updated: { id: number };
+  try {
+    updated = await prisma.tenderMerged.update({
+      where: { referenceNo },
+      data: { category, subCategory },
+      select: { id: true },
+    });
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2025") return { ok: false, error: `No tender with reference no "${referenceNo}".` };
+    throw error;
+  }
+  logActivity({
+    action: "UPDATE",
+    tableName: "TenderMerged",
+    recordId: String(updated.id),
+    referenceNo,
+    details: `Updated category to "${category}"${subCategory ? ` / "${subCategory}"` : ""} on tender ${referenceNo} via Pip`,
+  });
+  return { ok: true };
 }
 
 export async function updateTenderMergedStringField(params: {

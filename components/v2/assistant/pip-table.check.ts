@@ -38,6 +38,24 @@ assert.doesNotMatch(text, /\[Notes\]/);
 assert.match(text, /Current filter: \[Status\] IN \("Open"\)/);
 
 assert.equal(describeTable(null), "This page has no table to filter.");
+// No rows section unless the table has rows with a reference no.
+assert.doesNotMatch(text, /Rows on screen/);
+
+// Rows on screen: reference no, brief (cut), category pair; long pages are cut too.
+const tenderRows = Array.from({ length: 31 }, (_, i) => ({
+  referenceNo: `REF-${i}`,
+  tenderBrief: i === 0 ? "x".repeat(100) : "Supply of cables",
+  category: "EPC",
+  subCategory: i === 0 ? "Solar" : null,
+}));
+const withRows = describeTable({ ...table, rows: () => tenderRows }, "2026-10-29");
+assert.match(withRows, /Rows on screen \(31\)/);
+assert.match(withRows, new RegExp(`- REF-0 \\| ${"x".repeat(80)}\\.\\.\\. \\| EPC / Solar`));
+assert.match(withRows, /- REF-1 \| Supply of cables \| EPC\n/);
+assert.match(withRows, /- REF-29 /);
+assert.doesNotMatch(withRows, /- REF-30 /);
+assert.match(withRows, /\.\.\. and 1 more; filter to narrow\./);
+assert.doesNotMatch(describeTable({ ...table, rows: () => [{ name: "no ref" }] }), /Rows on screen/);
 
 // Only the table that registered last can unregister itself.
 const off = registerPipTable(table);

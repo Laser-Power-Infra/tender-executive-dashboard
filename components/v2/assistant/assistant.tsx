@@ -6,6 +6,7 @@ import { useSonner } from "sonner";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { updateTenderCategory } from "@/actions/tender";
 import { Tip } from "@/components/v2/ui/overlay";
 import { ChatWindow } from "./chat-window";
 import { noticeKind } from "./notice-bubble";
@@ -44,7 +45,7 @@ function AssistantDock({ firstName }: { firstName: string | null }) {
     // Pip's tools act on the page's table, so they run here. No await on addToolOutput: it deadlocks.
     async onToolCall({ toolCall }) {
       const table = pipTable();
-      const input = toolCall.input as { formula?: string; column?: string };
+      const input = toolCall.input as { formula?: string; column?: string; referenceNo?: string; category?: string; subCategory?: string };
       const answer = (output: unknown) =>
         chat.addToolOutput({ tool: toolCall.toolName, toolCallId: toolCall.toolCallId, output });
       if (toolCall.toolName === "get_table") {
@@ -59,6 +60,14 @@ function AssistantDock({ firstName }: { firstName: string | null }) {
             ? values.map((o) => ({ value: o.value, label: o.label }))
             : { error: table ? `${input.column} is not a list column` : NO_TABLE },
         );
+      } else if (toolCall.toolName === "tender_update") {
+        const result = await updateTenderCategory({
+          referenceNo: input.referenceNo ?? "",
+          category: input.category ?? "",
+          subCategory: input.subCategory,
+        });
+        if (result.ok) table?.reload?.();
+        answer(result);
       }
     },
   });
