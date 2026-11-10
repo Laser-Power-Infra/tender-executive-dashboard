@@ -72,6 +72,7 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
       referenceNo: true,
       tenderBrief: true,
       itemCategory: true,
+      category: true,
       subCategory: true,
       value: true,
       excludedCategory: true,

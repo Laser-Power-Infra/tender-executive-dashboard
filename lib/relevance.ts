@@ -10,14 +10,20 @@ export interface RelevanceTender {
   referenceNo: string;
   tenderBrief?: string | null;
   itemCategory?: string | null;
+  category?: string | null;
   subCategory?: string | null;
   value?: string | null;
 }
 
-// "Power Distribution" -> "power_distribution", "Cables & Conductors" -> "cables_conductors"
-function toSnakeCase(label: string | null | undefined): string | null {
-  if (!label) return null;
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+/**
+ * The relevance job's `category`: the sub category in snake_case
+ * ("Power Distribution" -> "power_distribution", "Cables & Conductors" -> "cables_conductors").
+ * A SPECIAL tender has no sub category and is analysed as cables & conductors.
+ */
+export function relevanceCategory(tender: Pick<RelevanceTender, "category" | "subCategory">): string | null {
+  if (tender.category === "SPECIAL") return "cables_conductors";
+  if (!tender.subCategory) return null;
+  return tender.subCategory.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
 export function publishRelevance(tender: RelevanceTender): Promise<boolean> {
@@ -27,7 +33,7 @@ export function publishRelevance(tender: RelevanceTender): Promise<boolean> {
     company: "laser",
     tenderbrief: tender.tenderBrief ?? "",
     itemcategory: tender.itemCategory ?? "",
-    category: toSnakeCase(tender.subCategory),
+    category: relevanceCategory(tender),
     tenderAmount: parseRupees(tender.value),
   });
 }

@@ -4,12 +4,7 @@ import { withLog } from "@/lib/activity-logger";
 import { publishAiRelevanceTask } from "@/lib/queue/publisher";
 import { setRelevanceQueued } from "@/lib/tender-lifecycle-store";
 import { parseRupees } from "@/lib/rupees";
-
-// "Power Distribution" -> "power_distribution"
-function toSnakeCase(label: string | null | undefined): string | null {
-  if (!label) return null;
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
+import { relevanceCategory } from "@/lib/relevance";
 
 interface TriggerAnalysisInput {
   referenceNo: string;
@@ -22,6 +17,7 @@ async function triggerAnalysis({ referenceNo, company }: TriggerAnalysisInput) {
     select: {
       tenderBrief: true,
       itemCategory: true,
+      category: true,
       subCategory: true,
       value: true,
     },
@@ -40,7 +36,7 @@ async function triggerAnalysis({ referenceNo, company }: TriggerAnalysisInput) {
     company,
     tenderbrief: tender.tenderBrief ?? "",
     itemcategory: tender.itemCategory ?? "",
-    category: toSnakeCase(tender.subCategory),
+    category: relevanceCategory(tender),
     tenderAmount: parseRupees(tender.value),
   });
   if (!queued) {
