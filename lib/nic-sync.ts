@@ -84,6 +84,8 @@ const SUBCATEGORY_ALIASES: Record<string, string> = {
 /** Payload category/sub_category validated against TENDER_SUBCATEGORIES; unknown values fall back. */
 export function nicCategoryFields(t: NicTender): CategoryFields {
   const category = field(t, "category") || TENDER_CATEGORIES.MANUFACTURING;
+  // Special tenders come only from the sync worker and never carry a sub category.
+  if (category.toUpperCase() === "SPECIAL") return { category: "SPECIAL", subCategory: null };
   const rawSub = field(t, "sub_category");
   const subCategory = SUBCATEGORY_ALIASES[rawSub.toLowerCase()] ?? rawSub;
   if (isValidCategorySelection(category, subCategory)) return { category, subCategory: subCategory || null };

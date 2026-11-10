@@ -55,7 +55,8 @@ assert.deepEqual(nicIntFields({ "Bid Validity(Days)": "NA" }), {});
 
 assert.deepEqual(nicCategoryFields(sample), { category: "Manufacturing", subCategory: "Cables & Conductors" });
 assert.deepEqual(nicCategoryFields({ category: "Manufacturing", sub_category: "Rockets" }), { category: "Manufacturing", subCategory: null });
-assert.deepEqual(nicCategoryFields({}), { category: "Manufacturing", subCategory: null });
+assert.deepEqual(nicCategoryFields({ category: "SPECIAL", sub_category: null }), { category: "SPECIAL", subCategory: null });
+assert.deepEqual(nicCategoryFields({}),{ category: "Manufacturing", subCategory: null });
 assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Solar" }), { category: "EPC", subCategory: "Solar" });
 assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Distribution" }), { category: "EPC", subCategory: "Power Distribution" });
 assert.deepEqual(nicCategoryFields({ category: "EPC", sub_category: "Transmission" }), { category: "EPC", subCategory: "Power Transmission" });

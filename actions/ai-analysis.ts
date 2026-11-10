@@ -26,7 +26,7 @@ async function publishAiAnalysisJobFn(params: {
   await requireUserAction();
   const tender = await prisma.tenderMerged.findUnique({
     where: { referenceNo: params.referenceNo },
-    select: { subCategory: true, value: true },
+    select: { category: true, subCategory: true, value: true },
   });
   return queueRelevance({ ...tender, ...params });
 }
@@ -43,6 +43,7 @@ const STAGE_TENDER_SELECT = {
   tenderType: true,
   tenderBrief: true,
   itemCategory: true,
+  category: true,
   subCategory: true,
   value: true,
 } as const;
@@ -52,6 +53,7 @@ type StageTender = {
   tenderType: "GEM" | "NON_GEM";
   tenderBrief: string | null;
   itemCategory: string | null;
+  category: string | null;
   subCategory: string | null;
   value: string | null;
 };
