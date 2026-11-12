@@ -19,7 +19,7 @@ function q(scope: TenderScope, patch: Partial<TenderQuery> = {}): TenderQuery {
 }
 
 async function main() {
-  for (const scope of ["home", "postParticipation", "notParticipated"] as TenderScope[]) {
+  for (const scope of ["home", "postParticipation", "notParticipated", "quotationPending"] as TenderScope[]) {
     const page = await fetchTendersPage(q(scope), true);
     const groups = new Set(
       page.rows.map((r) =>

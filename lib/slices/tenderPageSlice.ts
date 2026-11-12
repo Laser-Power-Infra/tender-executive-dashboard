@@ -78,6 +78,7 @@ const SCOPES: TenderScope[] = [
   "home",
   "postParticipation",
   "notParticipated",
+  "quotationPending",
 ];
 
 function emptyScopeState(): ScopePageState {
