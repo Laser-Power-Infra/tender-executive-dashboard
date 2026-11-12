@@ -33,6 +33,8 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   developerOnly?: boolean;
+  /** Admins and developers. */
+  adminOnly?: boolean;
   items: NavItem[];
 }
 
@@ -66,13 +68,17 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Admin",
+    adminOnly: true,
+    items: [{ href: "/v2/admin/users", label: "Users", icon: UserCog, v2: true }],
+  },
+  {
     label: "Developers",
     developerOnly: true,
     items: [
       { href: "/v2/admin/mappings", label: "Column Mappings", icon: Columns3, v2: true },
       { href: "/v2/admin/indices", label: "Column Index", icon: ListOrdered, v2: true },
       { href: "/v2/admin/merging", label: "Column Merging", icon: Merge, v2: true },
-      { href: "/v2/admin/users", label: "Users", icon: UserCog, v2: true },
       { href: "/v2/admin/delete-requests", label: "Delete Requests", icon: Trash2, v2: true },
       { href: "/v2/admin/sop", label: "SOP Responsibilities", icon: UsersRound, v2: true },
       { href: "/v2/design", label: "Design System", icon: Palette, v2: true },

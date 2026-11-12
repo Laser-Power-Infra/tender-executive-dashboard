@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server"
 
 // Developer tools: the pages, and every write to the settings they edit.
 const developerRoutes = ["/v2/admin", "/v2/design"]
+// Under a developer route, but open to admins too.
+const adminRoutes = ["/v2/admin/users"]
 const developerApiPaths = ["/api/column-mappings", "/api/column-groups", "/api/column-indices", "/api/sop-responsibilities"]
 const syncApiPaths = ["/api/sync", "/api/refresh-all"]
 const publicApiPaths = ["/api/external", "/api/mcp", "/api/sync/nic","/api/sync-dockets", "/api/sync-quotation", "/api/sync-costing-smartsheet", "/api/sync-bom", "/api/health", "/api/sync-to-merged", "/api/admin/reset-password", "/api/reminder/costing-sheet", "/api/webhook/intelligence", "/api/webhook/ai-relevance", "/api/webhook/automation", "/api/webhook/parsing", "/api/webhook/ingestion", "/api/webhook/feedback", "/api/webhook/result", "/api/webhook/performance-certificate", "/api/webhook/tenders"]
@@ -58,7 +60,12 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  if (isProtected && session?.user?.role !== "developer") {
+  const role = session?.user?.role ?? ""
+  const isAdminRoute = adminRoutes.some(
+    (route) => path === route || path.startsWith(route + "/")
+  )
+
+  if (isProtected && role !== "developer" && !(isAdminRoute && ADMIN_ROLES.includes(role))) {
     return NextResponse.redirect(new URL("/v2/tenders", req.url))
   }
 
