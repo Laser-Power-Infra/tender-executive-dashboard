@@ -25,6 +25,15 @@ export async function requireDeveloperAction() {
   return user
 }
 
+/** For server actions open to admins and developers. */
+export async function requireAdminAction() {
+  const user = await requireUserAction()
+  if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    throw new Error("Forbidden: admins only")
+  }
+  return user
+}
+
 export async function requireAdminApi() {
   const session = await auth()
 

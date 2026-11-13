@@ -75,10 +75,11 @@ Required env var. Values: `v1` or `v2`. It selects the automation queues through
 
 `POST /api/sync/nic` (auth: `EXTERNAL_API_KEY`) reads every distinct `website` from `TenderStatusTable`
 where `type = "NIC"` (or takes an explicit `{ "portals": [...] }` body) and publishes **one job per portal**
-to `automation-v2:sync`, each with a one-element `portals` array:
+to `automation-v2:sync`, each with a one-element `portals` array. An optional body `days` (positive integer,
+how many days back the worker scrapes) is passed through; omitted = the worker's default:
 
 ```json
-{ "portals": ["<website>"], "client_id": "<TENDER_AUTOMATION_SYNC_CLIENT_ID>" }
+{ "portals": ["<website>"], "days": 1, "client_id": "<TENDER_AUTOMATION_SYNC_CLIENT_ID>" }
 ```
 
 The queue has no version switch. Published by `publishNicSyncTask` in `lib/queue/publisher.ts`.
@@ -89,7 +90,16 @@ The worker reports back to `POST /api/webhook/tenders` with the shared envelope,
 `category`, `sub_category`, `Tenders Documents`). Each tender is shaped by `lib/nic-sync.ts` and goes through the same
 create-or-fill upsert as an Excel upload (`lib/tender-upsert.ts`, shared with `/api/upload`): new references are created,
 existing ones only get empty fields filled. Documents with a URL become `TenderFile` rows (`BOQ` → `boqComparativeChart`,
-others → `tenderDocument`, source `nic-sync`), without queuing parsing. Every **newly created** tender is then published
+others → `tenderDocument`, source `nic-sync`), without queuing parsing. Every tender in the batch that has **no document
+at all** (none stored, none incoming) gets one job on `automation-v2:tasks`, published sequentially by
+`publishNicDownloadTask`:
+
+```json
+{ "type": "NIC_DOWNLOAD", "referenceNo": "<ref>", "portal": "<TenderMerged.website, else data.portal>", "client_id": "<TENDER_AUTOMATION_AUTOMATION_CLIENT_ID>" }
+```
+
+The worker answers on `/api/webhook/automation` like any download (`NIC_DOWNLOAD` parses like `NON_GEM_DOWNLOAD`).
+Every **newly created** tender is then published
 to `agent:relevance` (`queueRelevance` in `lib/relevance.ts`, status `RELEVANCE_QUEUED`), so it enters the lifecycle at
 stage 1 like a manual "Analyse". Tenders that already existed, and new ones whose deadline has passed (`excludedCategory`
 contains `date`), are not queued.
@@ -158,7 +168,8 @@ Webhook `POST /api/webhook/ai-relevance`:
 - Result fields: `valid` (boolean), `reason` (string), `company` (`laser` | `gmd`).
 - DB write: `TenderMerged.aiRelevanceValid`, `TenderMerged.aiRelevanceReason`.
 - `valid = false`: status `RELEVANCE_REJECTED`. Pipeline stops.
-- `valid = true`: publish stage 2, status `AUTOMATION_QUEUED`.
+- `valid = true`: status `AUTOMATION_QUEUED`. The stage 2 publish here is commented out: downloads are queued as
+  `NIC_DOWNLOAD` by the NIC sync webhook (see "NIC portal sync").
 - Worker error: status `RELEVANCE_FAILED`.
 
 ### Stage 2 — Automation (file fetch)
@@ -210,6 +221,7 @@ Parsing type mapping:
 | `GEM_DOWNLOAD` | `GEM_PDF_PARSING` | `tenderDocument` |
 | `RA_GEM_DOWNLOAD` | `RA_GEM_PDF_PARSING` | `tenderDocument` |
 | `NON_GEM_DOWNLOAD` | `NON_GEM_BOQ_PARSING` | `boqComparativeChart` |
+| `NIC_DOWNLOAD` | `NON_GEM_BOQ_PARSING` | `boqComparativeChart` |
 
 ### Stage 3 — Parsing
 

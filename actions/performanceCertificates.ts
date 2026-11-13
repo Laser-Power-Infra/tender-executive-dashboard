@@ -4,14 +4,23 @@ import { PDFDocument } from "pdf-lib";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { withLog } from "@/lib/activity-logger";
-import { requireUserAction } from "@/lib/dal";
+import { ADMIN_ROLES, requireAdminAction, requireUserAction } from "@/lib/dal";
 import { istDateKeyToDate } from "@/lib/format-ist";
 import { createPresignedUpload, uploadBuffer } from "@/lib/s3";
 import { publishPerformanceCertTask, type PerformanceCertFile } from "@/lib/queue/publisher";
 
 export const getPerformanceCertificates = withLog(
-  async () =>
-    prisma.performanceCertificate.findMany({ orderBy: { createdAt: "desc" } }),
+  async () => {
+    const user = await requireUserAction();
+    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
+    return prisma.performanceCertificate.findMany({
+      // Not Use certificates are for admins only. `not` alone would also drop unset rows.
+      where: isAdmin
+        ? undefined
+        : { OR: [{ useNotUse: null }, { useNotUse: { not: "NOT_USE" } }] },
+      orderBy: { createdAt: "desc" },
+    });
+  },
   () => null,
 );
 
@@ -73,7 +82,8 @@ export const updatePerformanceCertificateField = withLog(
     field: PerformanceCertificateField,
     value: string | null,
   ) => {
-    await requireUserAction();
+    if (field === "useNotUse") await requireAdminAction();
+    else await requireUserAction();
     let stored: string | Date | null = value;
     if (DATE_FIELDS.has(field) && value !== null) {
       stored = istDateKeyToDate(value);

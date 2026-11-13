@@ -18,7 +18,7 @@ import {
 import { fetchAllFilteredTenderRows } from "@/actions/tender-query";
 import { publishAiAnalysisJob, queueTenderStage, startAiAnalysisRun } from "@/actions/ai-analysis";
 import { useAppDispatch, useAppSelector } from "@/lib/hooks";
-import { LIFECYCLE_MAIN_STAGES, LIFECYCLE_STAGE_INFO, type LifecycleMainStage } from "@/lib/tender-lifecycle";
+import { QUEUE_OPTIONS, QUEUE_OPTION_INFO, type QueueOption } from "@/lib/tender-lifecycle";
 import { useIsDeveloper } from "@/components/v2/providers";
 import { cn } from "@/lib/utils";
 import {
@@ -370,15 +370,15 @@ export function AiAnalysisButton({ query, total }: { query: TenderQuery; total: 
 /** Sends every filtered tender to the chosen lifecycle stage's queue, whatever its current status. */
 export function QueueStageMenu({ query, total }: { query: TenderQuery; total: number }) {
   const isDeveloper = useIsDeveloper();
-  const [stage, setStage] = useState<LifecycleMainStage | null>(null);
+  const [stage, setStage] = useState<QueueOption | null>(null);
   const [progress, setProgress] = useState<QueueProgress>(null);
   const abort = useRef(false);
   if (!isDeveloper) return null;
 
-  const run = async (picked: LifecycleMainStage) => {
+  const run = async (picked: QueueOption) => {
     abort.current = false;
     setStage(null);
-    const what = LIFECYCLE_STAGE_INFO[picked].label;
+    const what = QUEUE_OPTION_INFO[picked].label;
     setProgress({ done: 0, total: 0 });
     const toastId = toast.loading(say.collectingTenders());
     try {
@@ -398,13 +398,13 @@ export function QueueStageMenu({ query, total }: { query: TenderQuery; total: nu
 
   if (progress) return <StopButton progress={progress} onStop={() => (abort.current = true)} />;
 
-  const label = stage ? LIFECYCLE_STAGE_INFO[stage].label : "";
+  const label = stage ? QUEUE_OPTION_INFO[stage].label : "";
   return (
     <>
       <Menu align="end" trigger={<Button icon={<ListPlus className="size-3.5" />}>Queue to</Button>}>
-        {LIFECYCLE_MAIN_STAGES.map((s) => (
+        {QUEUE_OPTIONS.map((s) => (
           <MenuItem key={s} onClick={() => setStage(s)}>
-            {LIFECYCLE_STAGE_INFO[s].label}
+            {QUEUE_OPTION_INFO[s].label}
           </MenuItem>
         ))}
       </Menu>
@@ -425,7 +425,7 @@ export function QueueStageMenu({ query, total }: { query: TenderQuery; total: nu
           </>
         }
       >
-        {stage && <p className="text-ink-2">{LIFECYCLE_STAGE_INFO[stage].detail}.</p>}
+        {stage && <p className="text-ink-2">{QUEUE_OPTION_INFO[stage].detail}.</p>}
       </Dialog>
     </>
   );

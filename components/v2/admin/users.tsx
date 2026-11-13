@@ -88,7 +88,14 @@ function ConfirmButton({
 
 export function UsersView() {
   const t = useRows(listUsers);
-  const me = useSession().data?.user?.id;
+  const viewer = useSession().data?.user;
+  const me = viewer?.id;
+  // Admins manage users and admins only; the server enforces the same cap.
+  const isDeveloper = viewer?.role === "developer";
+  const roleOptions = useMemo(
+    () => (isDeveloper ? ROLE_OPTIONS : ROLE_OPTIONS.filter((o) => o.value !== "developer")),
+    [isDeveloper],
+  );
   const [creating, setCreating] = useState(false);
 
   const { upsert } = t;
@@ -106,10 +113,11 @@ export function UsersView() {
           <SelectEditCell
             label={`Role of ${nameOf(row)}`}
             value={row.role}
-            options={ROLE_OPTIONS}
+            // A developer row keeps its own option so an admin still sees the role.
+            options={row.role === "developer" ? ROLE_OPTIONS : roleOptions}
             required
             // Your own role stays put, so you cannot lock yourself out.
-            readOnly={row.id === me}
+            readOnly={row.id === me || (!isDeveloper && row.role === "developer")}
             onSave={(role) => updateUserRole({ id: row.id, role }).then(upsert)}
           />
         ),
@@ -183,7 +191,12 @@ export function UsersView() {
         ),
       },
     ],
-    [upsert, me],
+    [upsert, me, isDeveloper, roleOptions],
+  );
+  // Reset password and deactivate are developer powers.
+  const visibleColumns = useMemo(
+    () => (isDeveloper ? columns : columns.filter((c) => c.id !== "actions")),
+    [columns, isDeveloper],
   );
 
   const create = async (draft: Draft) => {
@@ -200,7 +213,7 @@ export function UsersView() {
         title="Users"
         noun="users"
         rows={t.rows}
-        columns={columns}
+        columns={visibleColumns}
         getRowId={getRowId}
         loading={t.loading}
         error={t.error}
@@ -236,7 +249,7 @@ export function UsersView() {
               />
             </Field>
             <Field label="Role">
-              <Select label="Role" value={draft.role} onChange={(role) => set({ role })} options={ROLE_OPTIONS} />
+              <Select label="Role" value={draft.role} onChange={(role) => set({ role })} options={roleOptions} />
             </Field>
           </>
         )}

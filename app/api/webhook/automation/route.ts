@@ -15,6 +15,8 @@ const PARSING: Record<string, { type: TenderFileParsingPayload["type"]; tag: Ten
   GEM_DOWNLOAD: { type: "GEM_PDF_PARSING", tag: TENDER_FILE_TYPES.TENDER_DOCUMENT },
   RA_GEM_DOWNLOAD: { type: "RA_GEM_PDF_PARSING", tag: TENDER_FILE_TYPES.TENDER_DOCUMENT },
   NON_GEM_DOWNLOAD: { type: "NON_GEM_BOQ_PARSING", tag: TENDER_FILE_TYPES.BOQ_COMPARATIVE_CHART },
+  // Queued by the NIC sync webhook for tenders without documents; NIC portals are non-GeM.
+  NIC_DOWNLOAD: { type: "NON_GEM_BOQ_PARSING", tag: TENDER_FILE_TYPES.BOQ_COMPARATIVE_CHART },
 };
 
 interface FetchedFile {

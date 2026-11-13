@@ -318,6 +318,7 @@ const text = (id: TextField, header: string, width = 180): Column => ({
 
 const date = (id: (typeof DATE_COLUMNS)[number], header: string): Column => ({
   ...text(id, header, 150),
+  filter: { type: "dateRange" },
   text: (row) => dateText(row[id]),
 });
 
@@ -381,6 +382,7 @@ export const columns: Column[] = [
   text("lastEmailSent", "Last Email Sent", 200),
   {
     ...text("lastEmailSentAt", "Last Email Sent At", 180),
+    filter: { type: "dateRange" },
     text: (row) => (row.lastEmailSentAt ? formatDateTimeIST(row.lastEmailSentAt) : ""),
   },
   {

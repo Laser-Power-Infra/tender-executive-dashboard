@@ -6,14 +6,17 @@ import {
   INGESTION_FILE_SELECT,
   publishAgentIntelligenceTask,
   publishIngestionTask,
+  publishNicDownloadTask,
   publishTenderTask,
 } from "@/lib/queue/publisher";
 import { requireUserAction } from "@/lib/dal";
 import {
   LIFECYCLE_SLOW_MS,
+  QUEUE_OPTION_INFO,
   TENDER_LIFECYCLE_STATUS,
   lifecycleStageQueue,
   type LifecycleStageCount,
+  type QueueOption,
 } from "@/lib/tender-lifecycle";
 import { setLifecycleStatus } from "@/lib/tender-lifecycle-store";
 import { publishRelevance, queueRelevance } from "@/lib/relevance";
@@ -37,10 +40,13 @@ const REQUEUE_STAGES: RequeueStage[] = ["RELEVANCE", "AUTOMATION", "INGESTION", 
 // or move the loop to a background job.
 const REQUEUE_LIMIT = 500;
 
+const optionStage = (option: QueueOption): RequeueStage => (option === "NIC_DOWNLOAD" ? "AUTOMATION" : option);
+
 const STAGE_TENDER_SELECT = {
   id: true,
   referenceNo: true,
   tenderType: true,
+  website: true,
   tenderBrief: true,
   itemCategory: true,
   category: true,
@@ -51,6 +57,7 @@ type StageTender = {
   id: number;
   referenceNo: string;
   tenderType: "GEM" | "NON_GEM";
+  website: string | null;
   tenderBrief: string | null;
   itemCategory: string | null;
   category: string | null;
@@ -60,7 +67,7 @@ type StageTender = {
 
 /** Publishes the job that starts `stage` for one tender; `reason` says why it was not sent. */
 async function publishStageJob(
-  stage: RequeueStage,
+  stage: QueueOption,
   tender: StageTender,
 ): Promise<{ sent: boolean; reason: string }> {
   const { id, referenceNo } = tender;
@@ -68,6 +75,11 @@ async function publishStageJob(
   let sent = false;
   if (stage === "RELEVANCE") {
     sent = await publishRelevance(tender);
+  } else if (stage === "NIC_DOWNLOAD") {
+    if (!tender.website) reason = "No website on the tender; the NIC worker needs the portal";
+    sent =
+      !!tender.website &&
+      (await publishNicDownloadTask({ type: "NIC_DOWNLOAD", referenceNo, portal: tender.website }));
   } else if (stage === "AUTOMATION") {
     sent = await publishTenderTask(
       tender.tenderType === "GEM"
@@ -140,23 +152,24 @@ async function requeueStageFn(stage: RequeueStage, from: "FAILED" | "QUEUED") {
 }
 
 /** Developer only: starts `stage` for one tender whatever its current status (tenders page "Queue to"). */
-async function queueTenderStageFn(stage: RequeueStage, referenceNo: string): Promise<boolean> {
+async function queueTenderStageFn(option: QueueOption, referenceNo: string): Promise<boolean> {
   const user = await requireUserAction();
   if (user.role !== "developer") throw new Error("Forbidden: developer role required");
-  if (!REQUEUE_STAGES.includes(stage)) throw new Error(`Unknown stage: ${stage}`);
+  if (!(option in QUEUE_OPTION_INFO)) throw new Error(`Unknown stage: ${option}`);
+  const stage = optionStage(option);
   const tender = await prisma.tenderMerged.findUnique({
     where: { referenceNo, deleteRequestedAt: null },
     select: STAGE_TENDER_SELECT,
   });
   if (!tender) throw new Error(`Reference not found: ${referenceNo}`);
-  const { sent, reason } = await publishStageJob(stage, tender);
+  const { sent, reason } = await publishStageJob(option, tender);
   await setLifecycleStatus(referenceNo, sent ? `${stage}_QUEUED` : `${stage}_FAILED`, sent ? undefined : reason);
   return sent;
 }
 
 export const queueTenderStage = withLog(queueTenderStageFn, (sent, stage, referenceNo) => ({
   action: "CREATE" as const,
-  tableName: lifecycleStageQueue(stage),
+  tableName: lifecycleStageQueue(optionStage(stage)),
   recordId: undefined,
   referenceNo,
   details: `Queued ${stage} from the tenders page (sent=${sent})`,

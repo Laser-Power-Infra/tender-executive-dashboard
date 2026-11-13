@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Eye, Pencil, Scissors, Sparkles, Upload, X } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import {
   publishPerformanceCertificateJobs,
@@ -345,7 +346,7 @@ function DuplicateCell({ row }: { row: Row }) {
   );
 }
 
-const columns: DataTableColumn<Row>[] = [
+const allColumns: DataTableColumn<Row>[] = [
   {
     id: "serial",
     header: "ID",
@@ -491,6 +492,15 @@ export function PerformanceCertificatesView() {
   const [preview, setPreview] = useState<Row | null>(null);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const role = useSession().data?.user?.role;
+  // Use / Not Use is for admins; the server hides Not Use rows from everyone else.
+  const columns = useMemo(
+    () =>
+      role === "admin" || role === "developer"
+        ? allColumns
+        : allColumns.filter((c) => c.id !== "useNotUse"),
+    [role],
+  );
   const { table, filtered } = useClientTable(rows, columns);
 
   useEffect(() => {

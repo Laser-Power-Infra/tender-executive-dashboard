@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { createWebhookHandler, httpError, type WebhookEvent } from "@/lib/webhook-event";
 import { TENDER_CATEGORIES } from "@/lib/tender-categories";
 import { queueRelevance } from "@/lib/relevance";
+import { publishNicDownloadTask } from "@/lib/queue/publisher";
 import {
   insertTenderMerged,
   loadUpsertContext,
@@ -76,10 +77,12 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
       subCategory: true,
       value: true,
       excludedCategory: true,
+      website: true,
       tenderFiles: { select: { url: true } },
     },
   });
   const newFiles: (NicFile & { tenderMergedId: number })[] = [];
+  const withoutFiles: typeof saved = [];
   const savedByRef = new Map(saved.map((t) => [t.referenceNo, t]));
   for (const p of prepared) {
     const t = savedByRef.get(p.refNo);
@@ -91,8 +94,22 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
         newFiles.push({ ...f, tenderMergedId: t.id });
       }
     }
+    if (have.size === 0) withoutFiles.push(t);
   }
   if (newFiles.length) await prisma.tenderFile.createMany({ data: newFiles });
+
+  // A tender with no document, stored or incoming, gets its documents fetched by the automation worker.
+  // Sequential: parallel publishes race the RabbitMQ connect.
+  let downloadQueued = 0;
+  for (const t of withoutFiles) {
+    const ok = await publishNicDownloadTask({
+      type: "NIC_DOWNLOAD",
+      referenceNo: t.referenceNo,
+      portal: t.website ?? portal,
+    });
+    if (ok) downloadQueued++;
+    else console.warn(`[nic-sync] Download job not queued for ${t.referenceNo} (RabbitMQ unavailable?)`);
+  }
 
   // New tenders enter the lifecycle at stage 1. Existing ones are already in it (or were handled),
   // and a tender whose deadline has passed is not worth an analysis.
@@ -123,6 +140,7 @@ async function handleNicSyncEvent(evt: WebhookEvent) {
     rejected: result.rejected.map((r) => ({ referenceNo: r.row.referenceNo ?? null, reason: r.reason })),
     errors: result.errors,
     files: newFiles.length,
+    downloadQueued,
     relevanceQueued,
   };
 }
