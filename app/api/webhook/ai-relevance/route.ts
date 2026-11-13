@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withLog } from "@/lib/activity-logger";
-import { publishTenderTask } from "@/lib/queue/publisher";
+// import { publishTenderTask } from "@/lib/queue/publisher";
 import { TENDER_CATEGORIES } from "@/lib/tender-categories";
 import { lifecycleData, setLifecycleStatus } from "@/lib/tender-lifecycle-store";
 
@@ -51,31 +51,33 @@ async function updateAiRelevance({
 
   // Only publish download job for valid tenders; publish failure must not
   // fail the webhook — the AI result is already saved.
-  let downloadQueued = false;
-  if (valid) {
-    if (existing.tenderType === "GEM") {
-      downloadQueued = await publishTenderTask({
-        type: "GEM_DOWNLOAD",
-        tenderId: existing.id,
-        gemId: referenceNo,
-        referenceNo,
-        timestamp: Date.now(),
-      });
-    } else {
-      downloadQueued = await publishTenderTask({
-        type: "NON_GEM_DOWNLOAD",
-        tenderId: existing.id,
-        referenceNo,
-        timestamp: Date.now(),
-      });
-    }
-    if (!downloadQueued) {
-      console.warn(
-        `[ai-relevance] Download job not queued for ${referenceNo} (RabbitMQ unavailable?)`,
-      );
-      await setLifecycleStatus(referenceNo, "AUTOMATION_FAILED", "Download job not queued");
-    }
-  }
+  // Downloads are no longer queued after relevance: the NIC sync webhook (app/api/webhook/tenders)
+  // queues a NIC_DOWNLOAD job for every tender that has no document.
+  const downloadQueued = false;
+  // if (valid) {
+  //   if (existing.tenderType === "GEM") {
+  //     downloadQueued = await publishTenderTask({
+  //       type: "GEM_DOWNLOAD",
+  //       tenderId: existing.id,
+  //       gemId: referenceNo,
+  //       referenceNo,
+  //       timestamp: Date.now(),
+  //     });
+  //   } else {
+  //     downloadQueued = await publishTenderTask({
+  //       type: "NON_GEM_DOWNLOAD",
+  //       tenderId: existing.id,
+  //       referenceNo,
+  //       timestamp: Date.now(),
+  //     });
+  //   }
+  //   if (!downloadQueued) {
+  //     console.warn(
+  //       `[ai-relevance] Download job not queued for ${referenceNo} (RabbitMQ unavailable?)`,
+  //     );
+  //     await setLifecycleStatus(referenceNo, "AUTOMATION_FAILED", "Download job not queued");
+  //   }
+  // }
 
   return { success: true, referenceNo, valid, reason, downloadQueued };
 }

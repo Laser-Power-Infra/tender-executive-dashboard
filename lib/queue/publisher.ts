@@ -61,6 +61,21 @@ export async function publishTenderTask(
   );
 }
 
+export type NicDownloadPayload = {
+  type: "NIC_DOWNLOAD";
+  referenceNo: string;
+  /** Portal URL (TenderMerged.website) the worker downloads the documents from. */
+  portal: string;
+};
+
+// Same queue and client ID as the GeM / non-GeM download jobs.
+export async function publishNicDownloadTask(payload: NicDownloadPayload): Promise<boolean> {
+  return publishToQueue(
+    automationQueues().tasks,
+    withClientId("TENDER_AUTOMATION_AUTOMATION_CLIENT_ID", payload),
+  );
+}
+
 export async function publishTenderParsingTask(
   payload: TenderTaskPayload & { type: "COSTING_ATTACHMENT_PARSING" },
 ): Promise<boolean> {
@@ -116,6 +131,8 @@ export async function publishTenderFileParsingTask(
 
 export type NicSyncPayload = {
   portals: string[];
+  /** How many days back the worker scrapes; omitted = the worker's default. */
+  days?: number;
 };
 
 export async function publishNicSyncTask(payload: NicSyncPayload): Promise<boolean> {

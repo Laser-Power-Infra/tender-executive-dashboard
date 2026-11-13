@@ -76,6 +76,14 @@ export const LIFECYCLE_STAGE_INFO: Record<LifecycleMainStage, { label: string; d
   INTELLIGENCE: { label: "Report", detail: "The agent writes its report" },
 };
 
+/** Tenders page "Queue to": the main stages, plus the NIC portal download (same stage and queue as AUTOMATION). */
+export type QueueOption = LifecycleMainStage | "NIC_DOWNLOAD";
+export const QUEUE_OPTIONS: QueueOption[] = [...LIFECYCLE_MAIN_STAGES, "NIC_DOWNLOAD"];
+export const QUEUE_OPTION_INFO: Record<QueueOption, { label: string; detail: string }> = {
+  ...LIFECYCLE_STAGE_INFO,
+  NIC_DOWNLOAD: { label: "NIC Documents", detail: "Tender files are downloaded from the NIC portal (website)" },
+};
+
 /** The RabbitMQ queue a stage's jobs go to; automation follows AUTOMATION_VERSION. */
 export function lifecycleStageQueue(stage: LifecycleMainStage): string {
   if (stage === "AUTOMATION") return automationQueues().tasks;
