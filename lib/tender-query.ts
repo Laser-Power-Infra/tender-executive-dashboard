@@ -27,8 +27,9 @@ import {
 /**
  * Which dashboard route a query belongs to.
  *
- * "tenders" is the /tenders page and adds no predicate of its own. The other
- * three mirror the row filters that lived in lib/selectors/tenderSelectors.ts,
+ * "tenders" is the /tenders page and adds no predicate of its own.
+ * "quotationPending" is the live dockets that still have no quotation number.
+ * The other three mirror the row filters that lived in lib/selectors/tenderSelectors.ts,
  * and they are ANDed unconditionally so a user cannot clear them away with the
  * Reset Filters button.
  */
@@ -36,7 +37,8 @@ export type TenderScope =
   | "tenders"
   | "home"
   | "postParticipation"
-  | "notParticipated";
+  | "notParticipated"
+  | "quotationPending";
 
 /** A user-defined merged column: one header stitched from several fields. */
 export interface MergedGroup {
@@ -764,6 +766,12 @@ export function participationChainSql(
 // ------------------------------------------------------------------ scope ---
 
 /**
+ * The quotation is made once per docket, so one row holding the number
+ * answers for its siblings. A lone "-" is how the sheet writes "none yet".
+ */
+const NO_QUOTATION = Prisma.sql`NOT EXISTS (SELECT 1 FROM "tender_merged" qn WHERE qn."id" = ANY(t."docketIds") AND btrim(coalesce(qn."quotationNo", '')) NOT IN ('', '-'))`;
+
+/**
  * The route's own dataset, mirroring lib/selectors/tenderSelectors.ts.
  *
  * ponytail: "today" is the IST calendar day. The selectors used the browser's
@@ -786,6 +794,10 @@ function scopeSql(scope: TenderScope, now: Date): Prisma.Sql | null {
     // Explicitly not participated, or undecided with the deadline gone by.
     case "notParticipated":
       return Prisma.sql`(${APM_YES} AND (t."participated" IS FALSE OR (t."participated" IS NULL AND ${HAS_DEADLINE} AND t."deadline" < ${today})))`;
+    // Still live (participated, or undecided with the deadline ahead) and no
+    // row of the docket carries a quotation number yet.
+    case "quotationPending":
+      return Prisma.sql`(${APM_YES} AND (t."participated" IS TRUE OR (t."participated" IS NULL AND ${HAS_DEADLINE} AND t."deadline" >= ${today})) AND ${NO_QUOTATION})`;
   }
 }
 

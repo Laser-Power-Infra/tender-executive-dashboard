@@ -31,14 +31,14 @@ import { lockedOnceSet, lockedWhenNotParticipated, type ParticipationScope } fro
 export type { ParticipationScope };
 
 // v1 opens not participated on deadlines up to today and post participation on
-// deadlines from 2026. Seeded once per session, so a user who clears the filter
+// deadlines from 2026. Quotation pending follows post participation. Seeded once per session, so a user who clears the filter
 // does not get it back on the next visit.
 const deadlineSeeded = new Set<ParticipationScope>();
 
 const deadlineSeed = (scope: ParticipationScope) =>
   scope === "notParticipated"
     ? { startDate: "", endDate: toISTDateKey(new Date()) ?? "" }
-    : scope === "postParticipation"
+    : scope === "postParticipation" || scope === "quotationPending"
       ? { startDate: "2026-01-01", endDate: "" }
       : null;
 
@@ -46,6 +46,7 @@ const LOCKS: Record<ParticipationScope, TenderCellContext["isLocked"]> = {
   home: undefined,
   postParticipation: lockedOnceSet,
   notParticipated: lockedWhenNotParticipated,
+  quotationPending: lockedOnceSet,
 };
 
 /** What the server sorts by until the user picks a column. */

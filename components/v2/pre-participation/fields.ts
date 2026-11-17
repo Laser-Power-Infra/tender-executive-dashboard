@@ -20,7 +20,11 @@ import {
 export type Row = FlatRow;
 
 /** The pages built on these fields, by their slot in the scope-keyed tenderPage slice. */
-export type ParticipationScope = "home" | "postParticipation" | "notParticipated";
+export type ParticipationScope =
+  | "home"
+  | "postParticipation"
+  | "notParticipated"
+  | "quotationPending";
 
 export interface SaveContext {
   dispatch: AppDispatch;

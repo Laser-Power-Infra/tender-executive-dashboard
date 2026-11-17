@@ -78,6 +78,7 @@ The app is a Next.js App Router project. The UI lives under `/v2`, and the root 
 | **Pre-participation** | Tenders accepted for bidding, with costing, BOM and checklist data | `/v2/pre-participation` |
 | **Post-participation** | Bids submitted, reverse auction, result and rank tracking | `/v2/post-participation` |
 | **Not participated** | Rejected tenders with reason codes | `/v2/not-participated` |
+| **Quotation pending** | Live dockets (participated, or undecided with the deadline ahead) with no quotation number yet | `/v2/quotation-pending` |
 | **EMD** | Earnest money deposits (BG and cash), status, reasons and email to bank / party | `/v2/emd` |
 | **Supply history** | Sale bills, quotations, contracts, document ZIP download and certificate generation | `/v2/supply-history` |
 | **Performance certificates** | Upload, split and AI date extraction for certificates of satisfactory performance | `/v2/performance-certificates` |

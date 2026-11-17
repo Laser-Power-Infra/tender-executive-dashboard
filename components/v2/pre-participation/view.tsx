@@ -47,6 +47,7 @@ const TITLES: Record<ParticipationScope, string> = {
   home: "Pre participation",
   postParticipation: "Post participation",
   notParticipated: "Not participated",
+  quotationPending: "Quotation pending",
 };
 
 const POST_SHEET =

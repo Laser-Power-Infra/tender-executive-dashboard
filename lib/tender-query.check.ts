@@ -476,6 +476,14 @@ check("not participated keeps explicit noes regardless of deadline", () => {
   assert.match(t, /t\."deadline" < \$/);
 });
 
+check("quotation pending is live dockets with no quotation number on any row", () => {
+  const t = epc("quotationPending");
+  assert.match(t, /t\."participated" IS TRUE OR/);
+  assert.match(t, /t\."deadline" >= \$/);
+  assert.match(t, /NOT EXISTS \(SELECT 1 FROM "tender_merged" qn WHERE qn\."id" = ANY\(t\."docketIds"\)/);
+  assert.match(t, /qn\."quotationNo", ''\)\) NOT IN \('', '-'\)/);
+});
+
 check("EPC accessors resolve to their real columns", () => {
   const t = epc("home", { columnFilters: { nameOfTheClient: { select: ["NTPC"] } } });
   assert.match(t, /t\."organization"::text IN \(\$/);
