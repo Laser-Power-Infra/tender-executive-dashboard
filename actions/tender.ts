@@ -419,6 +419,38 @@ export async function updateTenderCategory(params: {
   return { ok: true };
 }
 
+/** Pip's edit. Moves a not participated tender to post participation; the remarks are appended, never replace old ones. */
+export async function markTenderParticipated(params: {
+  referenceNo: string;
+  remarks: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUserAction();
+  if (!(ADMIN_ROLES as readonly string[]).includes(user.role ?? "")) {
+    return { ok: false, error: "Only admins can mark a tender as participated." };
+  }
+  const { referenceNo } = params;
+  const remarks = params.remarks.trim();
+  if (!remarks) return { ok: false, error: "Remarks are required." };
+  const tender = await prisma.tenderMerged.findUnique({
+    where: { referenceNo },
+    select: { id: true, participated: true, remarks: true },
+  });
+  if (!tender) return { ok: false, error: `No tender with reference no "${referenceNo}".` };
+  if (tender.participated === true) return { ok: false, error: `${referenceNo} is already in post participation.` };
+  await prisma.tenderMerged.update({
+    where: { id: tender.id },
+    data: { participated: true, remarks: tender.remarks?.trim() ? `${tender.remarks}\n${remarks}` : remarks },
+  });
+  logActivity({
+    action: "UPDATE",
+    tableName: "TenderMerged",
+    recordId: String(tender.id),
+    referenceNo,
+    details: `Moved tender ${referenceNo} from not participated to post participation with remarks "${remarks}" via Pip`,
+  });
+  return { ok: true };
+}
+
 export async function updateTenderMergedStringField(params: {
   tenderMergedId: number;
   field: string;
