@@ -52,6 +52,36 @@ async function publishToQueue(
   }
 }
 
+// notification-service (D:\laser\notification-service) consumes this exchange; envelope per its README.
+const NOTIFICATIONS_EXCHANGE = "notifications";
+
+/** Queues one WhatsApp message. `to` is digits only with country code. */
+export async function publishWhatsAppNotification(to: string, text: string): Promise<boolean> {
+  const ch = await getChannel();
+  if (!ch) {
+    console.warn("[RabbitMQ] No channel — skipping WhatsApp notification");
+    return false;
+  }
+  try {
+    // Same declaration as the notifier's, so this is a no-op once it has run.
+    await ch.assertExchange(NOTIFICATIONS_EXCHANGE, "topic", { durable: true });
+    const envelope = {
+      id: randomUUID(),
+      version: 1,
+      notification_platform: "whatsapp",
+      recipient: { to },
+      text,
+    };
+    return ch.publish(NOTIFICATIONS_EXCHANGE, "whatsapp", Buffer.from(JSON.stringify(envelope)), {
+      persistent: true,
+      contentType: "application/json",
+    });
+  } catch (err) {
+    console.error("[RabbitMQ] Failed to publish WhatsApp notification:", err);
+    return false;
+  }
+}
+
 export async function publishTenderTask(
   payload: TenderTaskPayload,
 ): Promise<boolean> {

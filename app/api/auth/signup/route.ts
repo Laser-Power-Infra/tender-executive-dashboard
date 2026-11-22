@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 import { requireAdminApi } from "@/lib/dal"
+import { MOBILE_ERROR, normalizeMobile } from "@/lib/mobile"
 
 export async function POST(req: Request) {
   // Only admins create accounts; open signup would hand out edit rights.
@@ -9,13 +10,18 @@ export async function POST(req: Request) {
   if (forbidden) return forbidden
 
   try {
-    const { name, email, password } = await req.json()
+    const { name, email, password, mobile: rawMobile } = await req.json()
 
-    if (!email || !password) {
+    if (!email || !password || !rawMobile) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Email, mobile and password are required" },
         { status: 400 }
       )
+    }
+
+    const mobile = normalizeMobile(String(rawMobile))
+    if (!mobile) {
+      return NextResponse.json({ error: MOBILE_ERROR }, { status: 400 })
     }
 
     if (password.length < 6) {
@@ -39,6 +45,7 @@ export async function POST(req: Request) {
       data: {
         name: name || null,
         email,
+        mobile,
         passwordHash,
         role: "user",
       },

@@ -4,11 +4,12 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { KeyRound, Plus, UserCheck, UserX } from "lucide-react";
 import { toast } from "sonner";
-import { createUser, listUsers, resetUserPassword, setUserActive, updateUserRole } from "@/actions/users";
+import { createUser, listUsers, resetUserPassword, setUserActive, updateUserMobile, updateUserRole } from "@/actions/users";
+import { MOBILE_ERROR, normalizeMobile } from "@/lib/mobile";
 import { USER_ROLES } from "@/lib/user-roles";
 import { dateText } from "@/components/v2/data-table/cells";
 import { ClientTablePage } from "@/components/v2/data-table/client-table-page";
-import { SelectEditCell } from "@/components/v2/data-table/edit-cells";
+import { SelectEditCell, TextEditCell } from "@/components/v2/data-table/edit-cells";
 import { selectFilter, type DataTableColumn, type SortState } from "@/components/v2/data-table/types";
 import { Button, IconButton } from "@/components/v2/ui/button";
 import { toastError } from "@/components/v2/ui/errors";
@@ -23,10 +24,12 @@ type User = Awaited<ReturnType<typeof listUsers>>[number];
 interface Draft {
   name: string;
   email: string;
+  mobile: string;
   role: string | null;
 }
 
-const BLANK: Draft = { name: "", email: "", role: "user" };
+const BLANK: Draft = { name: "", email: "", mobile: "", role: "user" };
+const checkMobile = (v: string) => (normalizeMobile(v) ? null : MOBILE_ERROR);
 const ROLE_OPTIONS = USER_ROLES.map((r) => ({ value: r, label: r }));
 const defaultSort: SortState = { column: "name", direction: "asc" };
 const getRowId = (row: User) => row.id;
@@ -103,6 +106,20 @@ export function UsersView() {
     () => [
       { id: "name", header: "Name", width: 220, filter: selectFilter(), text: (r) => r.name ?? "" },
       { id: "email", header: "Email", width: 300, filter: selectFilter() },
+      {
+        id: "mobile",
+        header: "Mobile",
+        width: 170,
+        text: (r) => r.mobile ?? "",
+        cell: (row) => (
+          <TextEditCell
+            label={`Mobile of ${nameOf(row)}`}
+            value={row.mobile ?? ""}
+            validate={checkMobile}
+            onSave={(mobile) => updateUserMobile({ id: row.id, mobile }).then(upsert)}
+          />
+        ),
+      },
       {
         id: "role",
         header: "Role",
@@ -201,8 +218,9 @@ export function UsersView() {
 
   const create = async (draft: Draft) => {
     if (!draft.email.trim()) throw new Error("Email is required");
+    if (!draft.mobile.trim()) throw new Error("Mobile is required");
     if (!draft.role) throw new Error("Role is required");
-    const user = await createUser({ name: draft.name, email: draft.email, role: draft.role });
+    const user = await createUser({ name: draft.name, email: draft.email, mobile: draft.mobile, role: draft.role });
     upsert(user);
     toast.success(say.added(nameOf(user)));
   };
@@ -246,6 +264,15 @@ export function UsersView() {
                 autoComplete="off"
                 value={draft.email}
                 onChange={(e) => set({ email: e.target.value })}
+              />
+            </Field>
+            <Field label="Mobile (WhatsApp)">
+              <Input
+                type="tel"
+                autoComplete="off"
+                placeholder="9876543210"
+                value={draft.mobile}
+                onChange={(e) => set({ mobile: e.target.value })}
               />
             </Field>
             <Field label="Role">

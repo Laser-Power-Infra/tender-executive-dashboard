@@ -58,6 +58,8 @@ model User {
   id           String        @id @default(uuid())
   name         String?
   email        String        @unique
+  /// WhatsApp number, digits only with country code (919876543210). Required on new accounts; null on older ones until set.
+  mobile       String?
   passwordHash String?
   role         String        @default("user")
   /// False blocks sign-in and ends the user's open sessions.
