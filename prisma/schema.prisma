@@ -66,8 +66,39 @@ model User {
   updatedAt    DateTime      @updatedAt
   activityLogs ActivityLog[]
   savedFilters SavedFilter[]
+  oauthGrants  OAuthGrant[]
 
   @@map("users")
+}
+
+/// An MCP agent (Claude, ChatGPT...) that registered itself through /api/oauth/register.
+model OAuthClient {
+  id           String       @id @default(uuid())
+  name         String
+  redirectUris String[]
+  createdAt    DateTime     @default(now())
+  grants       OAuthGrant[]
+
+  @@map("oauth_clients")
+}
+
+/// Authorization codes and tokens issued to MCP agents. Only the sha256 of the secret is stored.
+model OAuthGrant {
+  hash          String   @id
+  kind          String // "code" | "access" | "refresh"
+  clientId      String
+  userId        String
+  /// Code only: checked again when the code is exchanged.
+  redirectUri   String?
+  codeChallenge String?
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("oauth_grants")
 }
 
 model ActivityLog {
@@ -886,7 +917,7 @@ model TenderMerged {
   erpPartyName        String?
   contractNo          String?
   tmNo                String?
-  typetest String?
+  typetest            String?
 
   competitors String?
   agentReport String?

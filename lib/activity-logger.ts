@@ -2,8 +2,8 @@ import "server-only"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
-// Reads are deliberately not logged - only mutations.
-type Action = "CREATE" | "UPDATE" | "DELETE" | "GENERATE_CERTIFICATE_PDF"
+// Reads are deliberately not logged - only mutations, plus MCP tool calls so agent use is traceable.
+type Action = "CREATE" | "UPDATE" | "DELETE" | "GENERATE_CERTIFICATE_PDF" | "MCP_CALL"
 
 export type LogActivityParams = {
   action: Action

@@ -251,8 +251,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Sign-in and account creation have their own frame.
-  if (pathname.startsWith("/auth")) return <>{children}</>;
+  // Sign-in, account creation and the MCP agent consent page have their own frame.
+  if (pathname.startsWith("/auth") || pathname.startsWith("/oauth")) return <>{children}</>;
 
   return (
     <div className="h-dvh">

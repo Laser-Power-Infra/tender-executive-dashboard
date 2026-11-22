@@ -45,6 +45,8 @@ const TABLES = [
   "TenderAssociation",
   "UtilityMapping",
   "User",
+  // Agent tool calls: Record ID is the tool, Reference No the agent (Claude, ChatGPT...).
+  "MCP",
 ];
 
 function formatDateTime(iso: string): string {
