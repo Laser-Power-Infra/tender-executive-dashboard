@@ -75,8 +75,8 @@ Required env var. Values: `v1` or `v2`. It selects the automation queues through
 
 `POST /api/sync/nic` (auth: `EXTERNAL_API_KEY`) reads every distinct `website` from `TenderStatusTable`
 where `type = "NIC"` (or takes an explicit `{ "portals": [...] }` body) and publishes **one job per portal**
-to `automation-v2:sync`, each with a one-element `portals` array. An optional body `days` (positive integer,
-how many days back the worker scrapes) is passed through; omitted = the worker's default:
+to `automation-v2:sync`, each with a one-element `portals` array and `days` (body `days`, positive integer,
+how many days back the worker scrapes; default 1):
 
 ```json
 { "portals": ["<website>"], "days": 1, "client_id": "<TENDER_AUTOMATION_SYNC_CLIENT_ID>" }

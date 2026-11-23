@@ -131,8 +131,8 @@ export async function publishTenderFileParsingTask(
 
 export type NicSyncPayload = {
   portals: string[];
-  /** How many days back the worker scrapes; omitted = the worker's default. */
-  days?: number;
+  /** How many days back the worker scrapes. */
+  days: number;
 };
 
 export async function publishNicSyncTask(payload: NicSyncPayload): Promise<boolean> {
