@@ -18,6 +18,15 @@ function describeStep(p: ToolPart): { icon: LucideIcon; label: string; detail?: 
       const label = !output ? `Updating ${ref}` : output.ok === false ? `Couldn't update ${ref}` : `Updated ${ref}`;
       return { icon: Pencil, label, detail: output?.error };
     }
+    case "tender_participate": {
+      const ref = input.referenceNo ?? "tender";
+      const label = !output
+        ? `Moving ${ref} to post participation`
+        : output.ok === false
+          ? `Couldn't move ${ref}`
+          : `Moved ${ref} to post participation`;
+      return { icon: Pencil, label, detail: output?.error };
+    }
     case "get_table":
       return { icon: TableProperties, label: output ? "Read the table" : "Reading the table" };
     case "list_filter_values":

@@ -6,7 +6,7 @@ import { Button } from "@/components/v2/ui/button";
 import { Field, Input } from "@/components/v2/ui/field";
 import { FormError, PasswordInput } from "./auth-frame";
 
-const EMPTY = { name: "", email: "", password: "" };
+const EMPTY = { name: "", email: "", mobile: "", password: "" };
 
 export function SignupForm() {
   const [values, setValues] = useState(EMPTY);
@@ -59,6 +59,17 @@ export function SignupForm() {
           required
           value={values.email}
           onChange={set("email")}
+          className="h-9"
+        />
+      </Field>
+      <Field label="Mobile (WhatsApp)">
+        <Input
+          type="tel"
+          autoComplete="off"
+          required
+          placeholder="9876543210"
+          value={values.mobile}
+          onChange={set("mobile")}
           className="h-9"
         />
       </Field>

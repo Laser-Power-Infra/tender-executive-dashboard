@@ -8,7 +8,7 @@ import StoreProvider from "@/lib/store-provider";
 import { TooltipProvider } from "@/components/v2/ui/overlay";
 
 // Same storage keys as v1, so the theme follows the user across both shells.
-export const bootScript = `try{var d=document.documentElement;if(localStorage.getItem("theme")==="dark")d.classList.add("dark");if(localStorage.getItem("v2-sidebar")==="collapsed")d.dataset.sidebar="collapsed";if(localStorage.getItem("v2-dev-mode")==="off")d.dataset.dev="off"}catch(e){}`;
+export const bootScript = `try{var d=document.documentElement;if(localStorage.getItem("theme")==="dark"){d.classList.add("dark");document.cookie="theme=dark;path=/;max-age=31536000;samesite=lax"}if(localStorage.getItem("v2-sidebar")==="collapsed")d.dataset.sidebar="collapsed";if(localStorage.getItem("v2-dev-mode")==="off")d.dataset.dev="off"}catch(e){}`;
 
 function subscribeRoot(onChange: () => void) {
   const observer = new MutationObserver(onChange);
@@ -32,6 +32,8 @@ export function setDark(dark: boolean) {
   try {
     localStorage.setItem("theme", dark ? "dark" : "light");
   } catch {}
+  // The server reads this to render the class; localStorage alone is lost when React rebuilds <html>.
+  document.cookie = `theme=${dark ? "dark" : "light"};path=/;max-age=31536000;samesite=lax`;
 }
 
 export function useSidebarCollapsed() {

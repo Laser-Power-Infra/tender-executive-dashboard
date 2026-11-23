@@ -3,6 +3,7 @@
 import { withLog } from "@/lib/activity-logger";
 import { requireAdminAction, requireDeveloperAction } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
+import { MOBILE_ERROR, normalizeMobile } from "@/lib/mobile";
 import { isUserRole } from "@/lib/user-roles";
 import { hashDefaultPassword, resetPasswordToDefault } from "@/lib/users";
 
@@ -11,6 +12,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
+  mobile: true,
   role: true,
   active: true,
   createdAt: true,
@@ -37,10 +39,12 @@ export const listUsers = withLog(
 );
 
 export const createUser = withLog(
-  async (params: { name: string; email: string; role: string }) => {
+  async (params: { name: string; email: string; mobile: string; role: string }) => {
     const me = await requireAdminAction();
     const email = params.email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email");
+    const mobile = normalizeMobile(params.mobile);
+    if (!mobile) throw new Error(MOBILE_ERROR);
     assertCanAssign(me, params.role);
     if (await prisma.user.findUnique({ where: { email } })) {
       throw new Error("A user with this email already exists");
@@ -49,6 +53,7 @@ export const createUser = withLog(
       data: {
         name: params.name.trim() || null,
         email,
+        mobile,
         role: params.role,
         passwordHash: await hashDefaultPassword(),
       },
@@ -86,6 +91,21 @@ export const updateUserRole = withLog(
     tableName: "User",
     recordId: user.id,
     details: `Changed role of ${user.email} to ${user.role}`,
+  }),
+);
+
+export const updateUserMobile = withLog(
+  async (params: { id: string; mobile: string }) => {
+    await requireAdminAction();
+    const mobile = normalizeMobile(params.mobile);
+    if (!mobile) throw new Error(MOBILE_ERROR);
+    return prisma.user.update({ where: { id: params.id }, data: { mobile }, select: USER_SELECT });
+  },
+  (user) => ({
+    action: "UPDATE" as const,
+    tableName: "User",
+    recordId: user.id,
+    details: `Changed mobile of ${user.email} to ${user.mobile}`,
   }),
 );
 

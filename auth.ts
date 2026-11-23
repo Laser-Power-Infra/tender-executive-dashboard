@@ -1,7 +1,15 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import Google from "next-auth/providers/google"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+
+// Google sign-in only opens accounts an admin already created; it never creates one.
+const findByEmail = (email: string) =>
+  prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true, name: true, email: true, role: true, active: true },
+  })
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   providers: [
@@ -33,9 +41,29 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         }
       },
     }),
+    // Needs AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET (OAuth web client, redirect URI <app-url>/api/auth/callback/google).
+    // Without AUTH_GOOGLE_ID the login page hides the Google button.
+    Google,
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async signIn({ account, profile }) {
+      if (account?.provider !== "google") return true
+      if (!profile?.email_verified || !profile.email) return false
+      const user = await findByEmail(profile.email)
+      return !!user?.active
+    },
+    async jwt({ token, user, account }) {
+      if (user && account?.provider === "google") {
+        // Google hands over its own user id; the session must carry ours.
+        const dbUser = await findByEmail(user.email!)
+        if (!dbUser) return null
+        token.id = dbUser.id
+        token.role = dbUser.role
+        // Activity logs read name and email from the session: keep them as the admin entered them.
+        token.name = dbUser.name
+        token.email = dbUser.email
+        return token
+      }
       if (user) {
         token.id = user.id as string
         token.role = (user as any).role
@@ -63,6 +91,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   // Cookies ignore ports, so the default name collides with other Auth.js apps on this host.
   cookies: { sessionToken: { name: "tender-exec.session-token" } },
-  pages: { signIn: "/auth/login" },
+  // A refused Google sign-in comes back to the login page with ?error=AccessDenied.
+  pages: { signIn: "/auth/login", error: "/auth/login" },
   trustHost: true,
 })

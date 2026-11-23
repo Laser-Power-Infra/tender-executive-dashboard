@@ -28,6 +28,11 @@ export async function authenticate(_prev: string | undefined, formData: FormData
   }
 }
 
+export async function googleSignIn(formData: FormData) {
+  // Throws the redirect to Google; Next.js follows it.
+  await signIn("google", { redirectTo: formData.get("redirectTo") as string })
+}
+
 export const changePassword = withLog(
   async (params: { oldPassword: string; newPassword: string }) => {
     const session = await auth()

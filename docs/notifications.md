@@ -1,117 +1,89 @@
-# Tender notifications (removed)
+# Tender WhatsApp notifications
 
-WhatsApp notifications were sent through a self-hosted Evolution API container
-(`evoapicloud/evolution-api`). The integration, the four notification routes and
-their Kestra flows were removed. This page records what was sent, to whom and
-when, so the feature can be rebuilt on another channel.
+WhatsApp messages go through the notification service (`D:\laser\notification-service`):
+the dashboard publishes to the RabbitMQ exchange `notifications` and the service
+delivers through Evolution API, with its own retries and dedup by message `id`.
 
-## How it worked
+## How it works
 
-- Each notification type had its own route: `POST /api/notifications/<type>`.
-  The routes were protected by `requireApiKey` (Kestra external API key) and
-  wrapped with `withLog`.
-- Kestra flows (`kestra/flows/main_scheduler.notification*.yml`) were meant to
-  call each route on a schedule. All flows were already commented out before
-  removal, so nothing was sending in production.
-- Each route queried `TenderMerged`, rendered one Handlebars text message per
-  matching tender and sent it to a single recipient (a phone number or WhatsApp
-  group JID) taken from an env var.
-- After a successful send, the type key was appended to the comma-separated
-  `TenderMerged.notificationStatus` column, so a tender got each type only once.
-  The column still exists in the schema.
-- All types ignored tenders with `deadline <= 2026-07-20T00:00:00Z`
-  (`NOTIFICATION_DEADLINE_START`).
+- A scheduler calls `POST /api/notifications/whatsapp` with the external API key
+  (`requireApiKey`). One call runs every type below.
+- Code: `lib/whatsapp-notifications.ts` (queries and templates),
+  `publishWhatsAppNotification` in `lib/queue/publisher.ts` (envelope
+  `{ id, version: 1, notification_platform: "whatsapp", recipient: { to }, text }`).
+- Uses `RABBITMQ_URL`. It must point at the same broker the notifier consumes.
+- Outside `ENVIRONMENT=PROD` it is a dry run: nothing is published or marked, the
+  response counts what would have gone out.
+- Recipients: the users assigned to the tender (Prep By associations, matched to
+  users by email) who are active and have a mobile number. A tender with no such
+  user is skipped and tried again next run.
+- After every recipient was queued, the type key is appended to the
+  comma-separated `TenderMerged.notificationStatus`, so each tender gets each
+  type once.
+- All types need `apm = "YES"` and no pending delete. Deadline over types ignore
+  tenders whose deadline is before 22 Nov 2026 IST, when this went live.
+
+## Mobile numbers
+
+`users.mobile` holds digits only with country code (`919876543210`); a bare
+10-digit number is taken as Indian. It is required when an admin creates an
+account (signup page or Users > Add user) and editable on the Users page. The
+column is nullable for accounts made before it existed.
 
 ## Notification types
 
-### 1. Result declared
-
-- Key: `deadline_over_result_notification`
-- Recipient env var: `EVOLUTION_RESULT_NOTIFICATION_NUMBER`
-- Trigger: all of
-  - deadline has passed (`deadline <= now`)
-  - `apm = "YES"`
-  - `competitors`, `ourRank`, `ourValue` are all non-empty
-  - type key not yet in `notificationStatus`
-- Message:
-  ```
-  Result Declared
-
-  Tender No: {referenceNo}
-  Tender: {tenderBrief}
-  Organization: {organization}
-  Deadline: {deadline, dd MMM yyyy}
-
-  Rank: {ourRank}
-  Our Value: {ourValue}
-  Competitors: {competitors}
-  ```
-
-### 2. Deadline over, not participated
+### 1. Deadline over, not participated
 
 - Key: `deadline_over_not_participated_notification`
-- Recipient env var: `EVOLUTION_NOT_PARTICIPATED_NOTIFICATION_NUMBER`
-- Trigger: all of
-  - deadline has passed
-  - `apm = "YES"`
-  - `participated = false`
-  - `reason` is non-empty
-  - type key not yet in `notificationStatus`
+- Trigger: deadline has passed, `participated = false`, `reason` is non-empty.
 - Message:
   ```
-  Deadline Over - Not Participated
+  *Deadline Over - Not Participated*
 
   Tender No: {referenceNo}
   Tender: {tenderBrief}
   Organization: {organization}
-  Deadline: {deadline, dd MMM yyyy}
+  Deadline: {deadline}
 
   Reason: {reason}
   ```
 
-### 3. Deadline over, reason not provided
+### 2. Deadline over, reason not provided
 
 - Key: `deadline_over_reason_not_provided_notification`
-- Recipient env var: `EVOLUTION_REASON_NOT_PROVIDED_NOTIFICATION_NUMBER`
-- Trigger: all of
-  - deadline has passed
-  - `apm = "YES"`
-  - `participated` is `false` or `null`
-  - `reason` is `null` or empty
-  - type key not yet in `notificationStatus`
+- Trigger: deadline has passed, `participated` is `false` or `null`, `reason` is
+  `null` or empty.
 - Message:
   ```
-  Deadline Over - Reason Required
+  *Deadline Over - Reason Required*
 
   Tender No: {referenceNo}
   Tender: {tenderBrief}
   Organization: {organization}
-  Deadline: {deadline, dd MMM yyyy}
+  Deadline: {deadline}
 
-  Please provide the reason for not participating.
+  Please add the reason for not participating in the dashboard.
   ```
 
-### 4. Catalogue missing (upcoming deadline)
+### 3. Catalogue missing (upcoming deadline)
 
 - Key: `deadline_over_catalogue_missing_notification`
-- Recipient env var: `EVOLUTION_CATALOGUE_MISSING_NOTIFICATION_NUMBER`
-- Trigger: all of
-  - `tenderType = "GEM"`
-  - `apm = "YES"`
-  - `participated` is `null`
-  - `catalogueDone = "NOT_DECIDED"`
-  - deadline is within the next 7 days (`now <= deadline <= now + 7d`)
-  - type key not yet in `notificationStatus`
-- Note: this route never wrote its key to `notificationStatus`, so a tender
-  would be re-sent on every run until it stopped matching.
-- Message (`daysToDeadline` = days until deadline, rounded up, minimum 1):
+- Trigger: `tenderType = "GEM"`, `participated` is `null`,
+  `catalogueDone = "NOT_DECIDED"`, deadline within the next 7 days.
+- Message (`daysToDeadline` rounded up, minimum 1):
   ```
-  Catalogue Missing
+  *Catalogue Missing*
 
   Tender No: {referenceNo}
   Tender: {tenderBrief}
   Organization: {organization}
-  Deadline: {deadline, dd MMM yyyy} (in {daysToDeadline} days)
+  Deadline: {deadline} (in {daysToDeadline} days)
 
   Please complete the catalogue before the deadline.
   ```
+
+## Not yet rebuilt
+
+Result declared (`deadline_over_result_notification`): deadline passed, `apm =
+"YES"`, `competitors`, `ourRank`, `ourValue` all set. It used to go to one fixed
+number through a self-hosted Evolution API call from this app.
