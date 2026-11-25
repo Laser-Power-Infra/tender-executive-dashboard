@@ -36,6 +36,27 @@ export const getSupplyPartyNames = withLog(async () => {
     .filter((v): v is string => Boolean(v)) as string[];
 }, () => null);
 
+// Utilities requested for the dropdown that may not yet exist on any tender's erpPartyName.
+// TPWODL omitted: already present in ERP as "TP WESTERN ODISHA DISTRIBUTION LTD".
+const EXTRA_UTILITIES = [
+  "MANIPUR STATE POWER DISTRIBUTION COMPANY LIMITED (MSPDCL)",
+  "ASSAM POWER DISTRIBUTION COMPANY LIMITED (APDCL)",
+  "NTPC LIMITED (NTPC)",
+  "BIHAR STATE POWER TRANSMISSION COMPANY LIMITED (BSPTCL)",
+  "JHARKHAND URJA SANCHARAN NIGAM LIMITED (JUSNL)",
+  "CHHATTISGARH STATE POWER DISTRIBUTION COMPANY LIMITED (CSPDCL)",
+  "HIMACHAL PRADESH STATE ELECTRICITY BOARD LIMITED (HPSEBL)",
+  "MADHYANCHAL VIDYUT VITRAN NIGAM LIMITED (MVVNL)",
+  "GUJARAT ENERGY TRANSMISSION CORPORATION LIMITED (GETCO)",
+  "CHAMUNDESHWARI ELECTRICITY SUPPLY CORPORATION LIMITED (CESCOM)",
+  "POWER & ELECTRICITY DEPARTMENT, GOVERNMENT OF MIZORAM (MIZORAM P&E)",
+  "STEEL AUTHORITY OF INDIA LIMITED (SAIL)",
+  "DELHI METRO RAIL CORPORATION LIMITED (DMRC)",
+  "TORRENT POWER LIMITED (TORRENT POWER)",
+  "BHUTAN POWER CORPORATION LIMITED (BPC)",
+  "TATA STEEL LIMITED (TATA STEEL)",
+];
+
 export const getUtilityPartyNames = withLog(async () => {
   const rows = await prisma.tenderMerged.findMany({
     distinct: ["erpPartyName"],
@@ -43,9 +64,10 @@ export const getUtilityPartyNames = withLog(async () => {
     where: { erpPartyName: { not: null }, deleteRequestedAt: null },
     orderBy: { erpPartyName: "asc" },
   });
-  return rows
+  const names = rows
     .map((r) => r.erpPartyName?.trim())
-    .filter((v): v is string => Boolean(v)) as string[];
+    .filter((v): v is string => Boolean(v));
+  return [...new Set([...names, ...EXTRA_UTILITIES])].sort((a, b) => a.localeCompare(b));
 }, () => null);
 
 export const updatePerformanceCertificatePartyName = withLog(
