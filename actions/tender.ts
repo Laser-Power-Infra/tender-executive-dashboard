@@ -424,10 +424,8 @@ export async function markTenderParticipated(params: {
   referenceNo: string;
   remarks: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  const user = await requireUserAction();
-  if (!(ADMIN_ROLES as readonly string[]).includes(user.role ?? "")) {
-    return { ok: false, error: "Only admins can mark a tender as participated." };
-  }
+  // Any user, like the participated toggle in updateTenderDecision.
+  await requireUserAction();
   const { referenceNo } = params;
   const remarks = params.remarks.trim();
   if (!remarks) return { ok: false, error: "Remarks are required." };
